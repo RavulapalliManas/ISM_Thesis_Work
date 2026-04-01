@@ -6,15 +6,18 @@ Created on Tue Nov  9 22:00:57 2021
 @author: dl2820
 """
 
+import numpy as np
+if not hasattr(np, 'bool8'):
+    np.bool8 = np.bool_
+
 import gym
 import gym_minigrid
 import matplotlib.pyplot as plt
 
-from gym_minigrid.wrappers import RGBImgPartialObsWrapper_HD
-
+from gym_minigrid.wrappers import RGBImgPartialObsWrapper
 
 def make_env(env_key):
-    env = RGBImgPartialObsWrapper_HD(gym.make(env_key),tile_size=1)
+    env = RGBImgPartialObsWrapper(gym.make(env_key, render_mode="rgb_array"), tile_size=1)
     #env = gym.make(env_key)
     #env.seed(seed)
     return env
@@ -23,7 +26,7 @@ def make_env(env_key):
 
 def plot_env(env, highlight=True):
     
-    gridView = env.render(highlight=highlight)
+    gridView = env.render()
     
     plt.figure()
     plt.imshow(gridView)
