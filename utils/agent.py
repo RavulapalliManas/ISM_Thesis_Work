@@ -48,22 +48,28 @@ class RandomActionAgent:
             raise ValueError('Reset=False not implemented yet...')
             
         obs = [None for t in range(tsteps+1)]
-        obs[0] = env.reset()
+        obs_reset = env.reset()
+        obs[0] = obs_reset[0] if isinstance(obs_reset, tuple) else obs_reset
         state = {'agent_pos': np.resize(env.agent_pos,(1,2)), 
                  'agent_dir': env.agent_dir
                 }
         if includeRender:
             render = [None for t in range(tsteps+1)]
-            render[0] = env.render(mode=None)
+            render[0] = env.render()
             
         for aa in range(tsteps):
-            obs[aa+1], reward, done, _ = env.step(act[aa])
+            step_res = env.step(act[aa])
+            if len(step_res) == 5:
+                obs[aa+1], reward, terminated, truncated, _ = step_res
+                done = terminated or truncated
+            else:
+                obs[aa+1], reward, done, _ = step_res
             state['agent_pos'] = np.append(state['agent_pos'],
                                            np.resize(env.agent_pos,(1,2)),axis=0)
             state['agent_dir'] = np.append(state['agent_dir'],
                                            env.agent_dir)
             if includeRender:
-                render[aa+1] = env.render(mode=None)
+                render[aa+1] = env.render()
 
         return obs, act, state, render
     
@@ -99,22 +105,28 @@ class RandomHDAgent:
             raise ValueError('Reset=False not implemented yet...')
             
         obs = [None for t in range(tsteps+1)]
-        obs[0] = env.reset()
+        obs_reset = env.reset()
+        obs[0] = obs_reset[0] if isinstance(obs_reset, tuple) else obs_reset
         state = {'agent_pos': np.resize(env.agent_pos,(1,2)), 
                  'agent_dir': env.agent_dir
                 }
         if includeRender:
             render = [None for t in range(tsteps+1)]
-            render[0] = env.render(mode=None)
+            render[0] = env.render()
             
         for aa in range(tsteps):
-            obs[aa+1], reward, done, _ = env.step(act[aa])
+            step_res = env.step(act[aa])
+            if len(step_res) == 5:
+                obs[aa+1], reward, terminated, truncated, _ = step_res
+                done = terminated or truncated
+            else:
+                obs[aa+1], reward, done, _ = step_res
             state['agent_pos'] = np.append(state['agent_pos'],
                                            np.resize(env.agent_pos,(1,2)),axis=0)
             state['agent_dir'] = np.append(state['agent_dir'],
                                            env.agent_dir)
             if includeRender:
-                render[aa+1] = env.render(mode=None)
+                render[aa+1] = env.render()
                 
         act = np.ones_like(act) * self.constantAction
 
