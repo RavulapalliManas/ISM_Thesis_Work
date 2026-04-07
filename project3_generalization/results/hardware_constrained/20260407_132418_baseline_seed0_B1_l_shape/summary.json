@@ -1,0 +1,63 @@
+{
+  "mode": "baseline",
+  "env_id": "B1_l_shape",
+  "seed": 0,
+  "sRSA": 0.06434413414572052,
+  "sr_error": 0.8516244888305664,
+  "training_time_seconds": 411.39361940001254,
+  "memory_usage": {
+    "training_time_seconds": 411.39361940001254,
+    "peak_gpu_memory_allocated_mb": 57.45166015625,
+    "final_gpu_memory": {
+      "memory_allocated_mb": 20.01513671875,
+      "max_memory_allocated_mb": 57.45166015625,
+      "memory_reserved_mb": 84.0,
+      "max_memory_reserved_mb": 84.0
+    },
+    "adaptive_sequence_length": 64,
+    "adaptive_rollout_batch_size": 4,
+    "store_hidden_states": true
+  },
+  "resource_events": [],
+  "checkpoint_path": "project3_generalization\\results\\hardware_constrained\\20260407_132418_baseline_seed0_B1_l_shape\\checkpoints\\B1_l_shape_seed0.pt",
+  "phase_runtime": {
+    "setup": {
+      "runtime_seconds": 0.0001168999879155308,
+      "gpu_memory": {
+        "memory_allocated_mb": 0.0,
+        "max_memory_allocated_mb": 0.0,
+        "memory_reserved_mb": 0.0,
+        "max_memory_reserved_mb": 0.0
+      },
+      "gpu_memory_start": {
+        "memory_allocated_mb": 0.0,
+        "max_memory_allocated_mb": 0.0,
+        "memory_reserved_mb": 0.0,
+        "max_memory_reserved_mb": 0.0
+      }
+    },
+    "training": {
+      "runtime_seconds": 414.7588104000024,
+      "gpu_memory": {
+        "memory_allocated_mb": 20.0048828125,
+        "max_memory_allocated_mb": 57.45166015625,
+        "memory_reserved_mb": 84.0,
+        "max_memory_reserved_mb": 84.0
+      },
+      "gpu_memory_start": {
+        "memory_allocated_mb": 0.0,
+        "max_memory_allocated_mb": 0.0,
+        "memory_reserved_mb": 0.0,
+        "max_memory_reserved_mb": 0.0
+      }
+    }
+  },
+  "gpu_memory": {
+    "memory_allocated_mb": 20.0048828125,
+    "max_memory_allocated_mb": 57.45166015625,
+    "memory_reserved_mb": 84.0,
+    "max_memory_reserved_mb": 84.0
+  },
+  "output_dir": "project3_generalization\\results\\hardware_constrained\\20260407_132418_baseline_seed0_B1_l_shape",
+  "device": "cuda"
+}

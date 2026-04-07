@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 from scipy.linalg import orthogonal_procrustes
-from scipy.spatial.distance import pdist
 from scipy.stats import pearsonr
-from scipy.stats import spearmanr
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -17,6 +15,26 @@ from project3_generalization.evaluation.topology import compute_betti_numbers
 def _match_samples(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     n = min(len(a), len(b))
     return np.asarray(a[:n], dtype=float), np.asarray(b[:n], dtype=float)
+
+
+def _subsample_indices(n_samples: int, max_samples: int | None, seed: int = 0) -> np.ndarray:
+    if max_samples is None or n_samples <= max_samples:
+        return np.arange(n_samples)
+    rng = np.random.default_rng(seed)
+    return np.sort(rng.choice(n_samples, size=max_samples, replace=False))
+
+
+def _subsample_aligned(
+    hidden_states: np.ndarray,
+    positions: np.ndarray,
+    *,
+    max_samples: int | None = None,
+    seed: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    hidden_states = np.asarray(hidden_states, dtype=float)
+    positions = np.asarray(positions, dtype=float)
+    keep = _subsample_indices(min(len(hidden_states), len(positions)), max_samples, seed=seed)
+    return hidden_states[keep], positions[keep]
 
 
 def participation_ratio(hidden_states: np.ndarray) -> float:
@@ -128,10 +146,18 @@ def RG1_sRSA(
     *,
     neural_metric: str = "cosine",
     spatial_metric: str = "euclidean",
+    max_samples: int | None = None,
+    seed: int = 0,
 ) -> float:
+    hidden_states, positions = _subsample_aligned(hidden_states, positions, max_samples=max_samples, seed=seed)
+    spatial_positions = np.asarray(positions, dtype=float)
+    if len(spatial_positions) == len(hidden_states):
+        spatial_positions = np.vstack([spatial_positions, spatial_positions[-1:]])
+    elif len(spatial_positions) > len(hidden_states) + 1:
+        spatial_positions = spatial_positions[: len(hidden_states) + 1]
     wake = {
         "h": np.asarray(hidden_states, dtype=float),
-        "state": {"agent_pos": np.asarray(positions, dtype=float)},
+        "state": {"agent_pos": spatial_positions},
     }
     rsa, _, _, _ = RGA.calculateRSA_space(RGA, wake, metric=neural_metric, spacemetric=spatial_metric)
     return float(rsa[0])
@@ -146,34 +172,37 @@ def RG2_CERA(H_A: np.ndarray, H_B: np.ndarray) -> float:
     return float(np.linalg.norm(aligned - H_B, ord="fro") / (np.linalg.norm(H_B, ord="fro") + 1e-12))
 
 
-def _center_gram(gram: np.ndarray) -> np.ndarray:
-    n = gram.shape[0]
-    unit = np.ones((n, n), dtype=float) / n
-    return gram - unit @ gram - gram @ unit + unit @ gram @ unit
-
-
-def _unbiased_hsic(gram_x: np.ndarray, gram_y: np.ndarray) -> float:
-    n = gram_x.shape[0]
-    if n < 4:
-        return float("nan")
-    gram_x = gram_x.copy()
-    gram_y = gram_y.copy()
-    np.fill_diagonal(gram_x, 0.0)
-    np.fill_diagonal(gram_y, 0.0)
-    term1 = np.trace(gram_x @ gram_y)
-    term2 = gram_x.sum() * gram_y.sum() / ((n - 1) * (n - 2))
-    term3 = 2 * np.sum(gram_x.sum(axis=0) * gram_y.sum(axis=0)) / (n - 2)
-    return float((term1 + term2 - term3) / (n * (n - 3)))
-
-
-def RG3_CKA(H_A: np.ndarray, H_B: np.ndarray) -> float:
+def RG3_CKA(
+    H_A: np.ndarray,
+    H_B: np.ndarray,
+    *,
+    batch_size: int | None = None,
+) -> float:
     H_A, H_B = _match_samples(H_A, H_B)
-    gram_a = _center_gram(H_A @ H_A.T)
-    gram_b = _center_gram(H_B @ H_B.T)
-    hsic_ab = _unbiased_hsic(gram_a, gram_b)
-    hsic_aa = _unbiased_hsic(gram_a, gram_a)
-    hsic_bb = _unbiased_hsic(gram_b, gram_b)
-    return float(hsic_ab / np.sqrt((hsic_aa * hsic_bb) + 1e-12))
+    H_A = np.asarray(H_A, dtype=np.float64)
+    H_B = np.asarray(H_B, dtype=np.float64)
+    H_A = H_A - H_A.mean(axis=0, keepdims=True)
+    H_B = H_B - H_B.mean(axis=0, keepdims=True)
+
+    if batch_size is None or batch_size >= len(H_A):
+        cross = H_A.T @ H_B
+        auto_a = H_A.T @ H_A
+        auto_b = H_B.T @ H_B
+    else:
+        cross = np.zeros((H_A.shape[1], H_B.shape[1]), dtype=np.float64)
+        auto_a = np.zeros((H_A.shape[1], H_A.shape[1]), dtype=np.float64)
+        auto_b = np.zeros((H_B.shape[1], H_B.shape[1]), dtype=np.float64)
+        for start in range(0, len(H_A), batch_size):
+            end = min(start + batch_size, len(H_A))
+            a_batch = H_A[start:end]
+            b_batch = H_B[start:end]
+            cross += a_batch.T @ b_batch
+            auto_a += a_batch.T @ a_batch
+            auto_b += b_batch.T @ b_batch
+
+    numerator = np.sum(cross ** 2)
+    denominator = np.sqrt(np.sum(auto_a ** 2) * np.sum(auto_b ** 2)) + 1e-12
+    return float(numerator / denominator)
 
 
 def RG4_betti_numbers(hidden_states: np.ndarray, **kwargs: Any) -> dict[str, Any]:
@@ -255,6 +284,48 @@ def GG3_topological_remapping_index(
     return float(np.mean(np.diag(similarity)))
 
 
+def estimate_neural_sr(
+    hidden_states: np.ndarray,
+    positions: np.ndarray,
+    *,
+    extent: Sequence[float],
+    grid_size: int = 30,
+) -> np.ndarray:
+    hidden_states = np.asarray(hidden_states, dtype=np.float32)
+    positions = np.asarray(positions, dtype=np.float32)
+    n_states = grid_size * grid_size
+    left, right, bottom, top = extent
+    xs = np.clip(((positions[:, 0] - left) / max(right - left, 1e-6) * grid_size).astype(int), 0, grid_size - 1)
+    ys = np.clip(((positions[:, 1] - bottom) / max(top - bottom, 1e-6) * grid_size).astype(int), 0, grid_size - 1)
+    flat = ys * grid_size + xs
+
+    state_sums = np.zeros((n_states, hidden_states.shape[1]), dtype=np.float32)
+    counts = np.zeros((n_states,), dtype=np.float32)
+    np.add.at(state_sums, flat, hidden_states)
+    np.add.at(counts, flat, 1.0)
+    state_means = state_sums / np.maximum(counts[:, None], 1.0)
+    norms = np.linalg.norm(state_means, axis=1, keepdims=True)
+    state_means = state_means / np.maximum(norms, 1e-6)
+    neural_sr = state_means @ state_means.T
+    neural_sr = np.clip(neural_sr, a_min=0.0, a_max=None)
+    np.fill_diagonal(neural_sr, 1.0)
+    row_sums = neural_sr.sum(axis=1, keepdims=True)
+    neural_sr = neural_sr / np.maximum(row_sums, 1e-6)
+    return neural_sr.astype(np.float32)
+
+
+def current_environment_sr_error(
+    hidden_states: np.ndarray,
+    positions: np.ndarray,
+    true_sr: np.ndarray,
+    *,
+    extent: Sequence[float],
+    grid_size: int = 30,
+) -> float:
+    neural_sr = estimate_neural_sr(hidden_states, positions, extent=extent, grid_size=grid_size)
+    return SG1_SR_error(neural_sr, np.asarray(true_sr, dtype=np.float32))
+
+
 def replay_quality(
     wake_hidden: np.ndarray,
     wake_positions: np.ndarray,
@@ -290,6 +361,8 @@ __all__ = [
     "SG2_transfer_vs_similarity",
     "SG3_eigenspectrum_overlap",
     "compute_tuning_curves",
+    "current_environment_sr_error",
+    "estimate_neural_sr",
     "fraction_spatially_tuned",
     "participation_ratio",
     "replay_quality",

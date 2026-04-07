@@ -1,0 +1,65 @@
+{
+  "output_root": "project3_generalization/results/hardware_constrained",
+  "memory": {
+    "vram_budget_gb": 5.5,
+    "ram_budget_gb": 14.0,
+    "gpu_buffer_gb": 0.5
+  },
+  "execution": {
+    "amp_enabled": true,
+    "amp_dtype": "float16",
+    "gradient_checkpointing": true,
+    "max_workers": 6,
+    "keep_cpu_free": 2,
+    "rollout_batch_size": 4,
+    "min_rollout_batch_size": 1,
+    "slow_batch_threshold_seconds": 8.0
+  },
+  "similarity": {
+    "num_steps": 25000,
+    "grid_size": 30,
+    "gamma": 0.9,
+    "temporal_horizon": 10,
+    "cg_tolerance": 1e-5,
+    "cg_max_iter": 1500,
+    "use_memmap": true
+  },
+  "baseline": {
+    "total_steps": 100000,
+    "sequence_length": 64,
+    "min_sequence_length": 32,
+    "evaluation_interval": 10000,
+    "evaluation_rollout_steps": 2000,
+    "replay_rollout_steps": 400,
+    "hidden_size": 500,
+    "store_hidden_states": true,
+    "hidden_state_sample_limit": 2000
+  },
+  "curriculum": {
+    "steps_per_environment": 50000,
+    "max_environments": 3,
+    "evaluation_interval": 5000,
+    "reexposure_steps": 1000,
+    "rolling_window_size": 3
+  },
+  "metrics": {
+    "srsa_max_samples": 2000,
+    "cka_batch_size": 256,
+    "betti_max_points": 1000,
+    "sr_grid_size": 30
+  },
+  "two_module": {
+    "cortical_hidden_size": 100,
+    "update_every_n_calls": 2
+  },
+  "ablation": {
+    "recurrence_scales": [0.3, 0.7, 1.0, 1.5],
+    "target_env_id": "B1_l_shape"
+  },
+  "three_d": {
+    "enabled_by_default": false,
+    "hidden_size": 600,
+    "max_steps": 150000,
+    "preferred_navigator": "surface"
+  }
+}

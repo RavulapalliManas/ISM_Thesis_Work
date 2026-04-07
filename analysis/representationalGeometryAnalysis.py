@@ -31,6 +31,12 @@ def randSubSample(h, maxN, axis=0):
         h = h[randIDX,:]
     return h, randIDX
 
+
+def _normalize_hist2_columns(hist2):
+    denom = np.sum(hist2, axis=0, keepdims=True)
+    denom[denom == 0] = 1
+    return hist2 / denom
+
 class representationalGeometryAnalysis:
     def __init__(self, predictiveNet, timesteps_wake = 15000,
                  noisemag = 0, noisestd = 0.1, timesteps_sleep = 1000,
@@ -100,7 +106,7 @@ class representationalGeometryAnalysis:
         (hist2,sbins,rbins) = np.histogram2d(dists, actdist, 
                                              bins=[np.linspace(0,goodmax,25),
                                                    np.arange(-0.5,2.5,1)])
-        hist2 = hist2/np.sum(hist2,axis=0)
+        hist2 = _normalize_hist2_columns(hist2)
         #NOTE: DOES THIS NEED TO BE FLATTENED?!?!?!?!? (check that it's the same)
         RSA = spearmanr(dists,actdist)
 
@@ -254,7 +260,7 @@ class representationalGeometryAnalysis:
         (hist2,sbins,rbins) = np.histogram2d(dists, sp_dists, 
                                              bins=[np.linspace(0,goodmax,50),
                                                    np.arange(-0.5,16.5,1)])
-        hist2 = hist2/np.sum(hist2,axis=0)
+        hist2 = _normalize_hist2_columns(hist2)
         #RSA = np.corrcoef(sp_dists,dists)[0,1]
         RSA = spearmanr(dists,sp_dists)
 
@@ -310,7 +316,7 @@ class representationalGeometryAnalysis:
                                                  obs_dists[value], 
                                                  bins=[np.linspace(0,goodmax,50),
                                                        np.arange(-0.01,0.21,0.02)])
-            hist2 = hist2/np.sum(hist2,axis=0)
+            hist2 = _normalize_hist2_columns(hist2)
             RSA = spearmanr(dists[value],obs_dists[value])
             RSA_obs[key] = (RSA, hist2, sbins, rbins)
 
@@ -333,7 +339,7 @@ class representationalGeometryAnalysis:
         hist2,sbins,rbins = np.histogram2d(dists, HD_dists, 
                                             bins=[np.linspace(0,goodmax,50),
                                                   np.arange(-0.5,3.5,1)])
-        hist2 = hist2/np.sum(hist2,axis=0)
+        hist2 = _normalize_hist2_columns(hist2)
         RSA = spearmanr(dists,HD_dists)
 
         return RSA, hist2, sbins, rbins

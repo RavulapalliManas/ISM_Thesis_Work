@@ -11,9 +11,9 @@ from project3_generalization.training.single_env import SingleEnvironmentConfig,
 
 @dataclass
 class AblationConfig:
-    recurrence_scales: tuple[float, ...] = (0.1, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0)
-    seeds: tuple[int, ...] = (0, 1, 2)
-    mode: str = "curriculum"
+    recurrence_scales: tuple[float, ...] = (0.3, 0.7, 1.0, 1.5)
+    seeds: tuple[int, ...] = (0,)
+    mode: str = "single_env"
     curriculum_config: CurriculumConfig = field(default_factory=CurriculumConfig)
     single_env_config: SingleEnvironmentConfig = field(default_factory=SingleEnvironmentConfig)
     target_env_id: str | None = None

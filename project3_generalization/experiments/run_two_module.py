@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 from project3_generalization.environments.similarity import SimilarityConfig, compute_similarity_matrix
 from project3_generalization.environments.suite_2d import build_suite_2d
+from project3_generalization.hardware import gpu_memory_snapshot
 from project3_generalization.training.curriculum import CurriculumConfig, greedy_similarity_order, run_curriculum
 
 
@@ -14,19 +16,21 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--envs", nargs="*", default=None)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--steps-per-environment", type=int, default=50_000)
-    parser.add_argument("--sequence-length", type=int, default=256)
+    parser.add_argument("--sequence-length", type=int, default=64)
     parser.add_argument("--evaluation-interval", type=int, default=5_000)
-    parser.add_argument("--similarity-steps", type=int, default=100_000)
-    parser.add_argument("--similarity-grid", type=int, default=50)
+    parser.add_argument("--similarity-steps", type=int, default=25_000)
+    parser.add_argument("--similarity-grid", type=int, default=30)
     parser.add_argument("--baseline-json", type=str, default=None)
     parser.add_argument("--output-json", type=str, default=None)
     return parser.parse_args()
 
 
 def main() -> None:
+    start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_2d()
-    specs = list(suite.values()) if args.envs is None else [suite[env_id] for env_id in args.envs]
+    default_envs = ["A1_square", "B1_l_shape", "C3_barrier_gap"]
+    specs = [suite[env_id] for env_id in (default_envs if args.envs is None else args.envs)]
     sim_matrix, sim_ids = compute_similarity_matrix(
         specs,
         config=SimilarityConfig(num_steps=args.similarity_steps, grid_size=args.similarity_grid),
@@ -64,6 +68,8 @@ def main() -> None:
             }
             for entry in results["environment_results"]
         ],
+        "runtime_seconds": float(time.perf_counter() - start),
+        "gpu_memory": gpu_memory_snapshot(),
     }
     print(json.dumps(serializable, indent=2))
     if args.output_json is not None:

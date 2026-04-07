@@ -19,16 +19,22 @@ from project3_generalization.training.single_env import (
 @dataclass
 class CurriculumConfig:
     steps_per_environment: int = 50_000
-    sequence_length: int = 256
+    sequence_length: int = 64
+    min_sequence_length: int = 32
+    rollout_batch_size: int = 2
+    min_rollout_batch_size: int = 1
     evaluation_interval: int = 5_000
-    evaluation_rollout_steps: int = 4_000
-    replay_rollout_steps: int = 500
+    evaluation_rollout_steps: int = 2_000
+    replay_rollout_steps: int = 400
     replay_noise_std: float = 0.03
     spatial_information_threshold: float = 0.1
     tuning_grid_size: int = 20
     ewc_lambda: float = 10.0
     ewc_fisher_batches: int = 4
     reexposure_steps: int = 1_000
+    slow_batch_threshold_seconds: float = 8.0
+    rolling_window_size: int = 3
+    store_hidden_states: bool = False
     checkpoint_dir: str | None = None
     model_config: HippocampalConfig = field(default_factory=HippocampalConfig)
     cortical_config: CorticalModuleConfig = field(default_factory=CorticalModuleConfig)
@@ -37,12 +43,19 @@ class CurriculumConfig:
         return SingleEnvironmentConfig(
             total_steps=self.steps_per_environment,
             sequence_length=self.sequence_length,
+            min_sequence_length=self.min_sequence_length,
+            rollout_batch_size=self.rollout_batch_size,
+            min_rollout_batch_size=self.min_rollout_batch_size,
+            rollout_workers=1,
             evaluation_interval=self.evaluation_interval,
             evaluation_rollout_steps=self.evaluation_rollout_steps,
             replay_rollout_steps=self.replay_rollout_steps,
             replay_noise_std=self.replay_noise_std,
             spatial_information_threshold=self.spatial_information_threshold,
             tuning_grid_size=self.tuning_grid_size,
+            slow_batch_threshold_seconds=self.slow_batch_threshold_seconds,
+            rolling_window_size=self.rolling_window_size,
+            store_hidden_states=self.store_hidden_states,
             checkpoint_dir=self.checkpoint_dir,
             model_config=self.model_config,
         )
@@ -96,14 +109,10 @@ class EWCRegularizer:
                 dtype=torch.float32,
                 device=model.device,
             )
-            model.optimizer.zero_grad(set_to_none=True)
-            model._apply_recurrence_scale()
-            try:
-                obs_pred, hidden, obs_target = model.core(observations, actions)
-                total_loss, _ = model.loss_fn(obs_pred, obs_target, hidden)
-                total_loss.backward()
-            finally:
-                model._remove_recurrence_scale()
+            model.zero_grad()
+            model.backward_on_batch(observations, actions)
+            if model._amp_enabled:
+                model.grad_scaler.unscale_(model.optimizer)
             for name, param in model.named_parameters():
                 if param.requires_grad and param.grad is not None:
                     fisher[name] += (param.grad.detach() ** 2) / config.ewc_fisher_batches
@@ -170,6 +179,8 @@ def run_curriculum(
         config = CurriculumConfig()
     spec_lookup = {spec.env_id: spec for spec in specs}
     single_env_config = config.as_single_environment_config()
+    if use_cortical_prior:
+        single_env_config.store_hidden_states = True
 
     model = HippocampalPredictiveRNN(config.model_config)
     regularizer = EWCRegularizer(config.ewc_lambda if use_ewc else 0.0)

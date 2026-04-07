@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
+import numpy as np
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 import utils.Architectures as architectures
+from project3_generalization.hardware import gpu_memory_snapshot
 from utils.lossFuns import predMSE
 
 
@@ -22,9 +26,14 @@ class HippocampalConfig:
     neural_timescale: float = 2.0
     dropout: float = 0.0
     sparsity: float = 0.5
-    truncation: int = 50
+    truncation: int = 64
+    chunk_length: int = 64
     recurrence_scale: float = 1.0
     spontaneous_noise_std: float = 0.03
+    device: str | None = None
+    use_amp: bool = True
+    amp_dtype: str = "float16"
+    gradient_checkpointing: bool = True
 
 
 class HippocampalPredictiveRNN(nn.Module):
@@ -49,7 +58,17 @@ class HippocampalPredictiveRNN(nn.Module):
         self.loss_fn = predMSE()
         self.recurrence_scale = float(self.config.recurrence_scale)
         self._recurrence_scaled = False
+
+        self.to(self._resolve_device())
         self.optimizer = self._build_optimizer()
+        self._amp_enabled = bool(self.config.use_amp and self.device.type == "cuda")
+        self._amp_dtype = torch.float16 if self.config.amp_dtype == "float16" else torch.float32
+        self.grad_scaler = torch.amp.GradScaler(device="cuda", enabled=self._amp_enabled)
+
+    def _resolve_device(self) -> torch.device:
+        if self.config.device is not None:
+            return torch.device(self.config.device)
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _build_optimizer(self) -> torch.optim.Optimizer:
         rootk_h = (1.0 / self.config.hidden_size) ** 0.5
@@ -83,6 +102,14 @@ class HippocampalPredictiveRNN(nn.Module):
     def device(self) -> torch.device:
         return self.core.W.device
 
+    def _autocast_context(self):
+        if not self._amp_enabled:
+            return nullcontext()
+        return torch.autocast(device_type="cuda", dtype=self._amp_dtype)
+
+    def _initial_state(self) -> torch.Tensor:
+        return torch.zeros((1, 1, self.config.hidden_size), dtype=torch.float32, device=self.device)
+
     def set_recurrence_scale(self, scale: float) -> None:
         if self._recurrence_scaled:
             self._remove_recurrence_scale()
@@ -104,7 +131,7 @@ class HippocampalPredictiveRNN(nn.Module):
 
     def _to_tensor(self, value: torch.Tensor | Any) -> torch.Tensor:
         if isinstance(value, torch.Tensor):
-            return value.to(self.device)
+            return value.to(self.device, dtype=torch.float32)
         return torch.as_tensor(value, dtype=torch.float32, device=self.device)
 
     def _ensure_batched_inputs(
@@ -132,6 +159,115 @@ class HippocampalPredictiveRNN(nn.Module):
             return hidden[-1]
         raise ValueError(f"Unknown hidden-state reduction `{reduce}`.")
 
+    def _sequence_layout(
+        self,
+        observations: torch.Tensor,
+        actions: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, np.ndarray]:
+        x_t, obs_target, outmask = self.core.restructure_inputs(observations, actions)
+        if isinstance(outmask, (bool, np.bool_)):
+            mask = np.full(obs_target.shape[1], bool(outmask), dtype=bool)
+        else:
+            mask = np.asarray(outmask, dtype=bool)
+        return x_t, obs_target, mask
+
+    def _run_recurrent_chunk(self, x_chunk: torch.Tensor, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.core.rnn(x_chunk, state=state)
+
+    def _forward_chunk(
+        self,
+        x_chunk: torch.Tensor,
+        state: torch.Tensor,
+        *,
+        training: bool,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        use_checkpoint = bool(training and self.config.gradient_checkpointing)
+        if use_checkpoint:
+            if not x_chunk.requires_grad:
+                x_chunk = x_chunk.detach().requires_grad_(True)
+            return checkpoint(self._run_recurrent_chunk, x_chunk, state, use_reentrant=False)
+        return self._run_recurrent_chunk(x_chunk, state)
+
+    @staticmethod
+    def _apply_output_mask(predictions: torch.Tensor, mask_chunk: np.ndarray) -> torch.Tensor:
+        if mask_chunk.all():
+            return predictions
+        masked = torch.zeros_like(predictions)
+        masked[:, mask_chunk, :] = predictions[:, mask_chunk, :]
+        return masked
+
+    def _compute_sequence_losses(
+        self,
+        observations: torch.Tensor,
+        actions: torch.Tensor,
+        *,
+        ewc_penalty: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        x_t, obs_target, outmask = self._sequence_layout(observations, actions)
+        total_length = max(int(x_t.shape[1]), 1)
+        chunk_length = max(1, min(int(self.config.chunk_length), total_length))
+        state = self._initial_state()
+        weighted_total = torch.zeros((), dtype=torch.float32, device=self.device)
+        weighted_pred = torch.zeros((), dtype=torch.float32, device=self.device)
+
+        self._apply_recurrence_scale()
+        try:
+            for start in range(0, total_length, chunk_length):
+                end = min(start + chunk_length, total_length)
+                x_chunk = x_t[:, start:end, :]
+                target_chunk = obs_target[:, start:end, :]
+                mask_chunk = outmask[start:end]
+                with self._autocast_context():
+                    hidden_chunk, state = self._forward_chunk(x_chunk, state, training=self.training)
+                    pred_chunk = self.core.outlayer(hidden_chunk)
+                    masked_pred = self._apply_output_mask(pred_chunk, mask_chunk)
+                    chunk_total, chunk_pred = self.loss_fn(masked_pred, target_chunk, hidden_chunk)
+                weight = float(end - start) / float(total_length)
+                weighted_total = weighted_total + chunk_total.float() * weight
+                weighted_pred = weighted_pred + chunk_pred.float() * weight
+                if self.training:
+                    state = state.detach()
+            if ewc_penalty is not None:
+                weighted_total = weighted_total + ewc_penalty.float()
+        finally:
+            self._remove_recurrence_scale()
+        return weighted_total, weighted_pred
+
+    def zero_grad(self) -> None:
+        self.optimizer.zero_grad(set_to_none=True)
+
+    def backward_on_batch(
+        self,
+        observations: torch.Tensor | Any,
+        actions: torch.Tensor | Any,
+        *,
+        ewc_penalty: torch.Tensor | None = None,
+        loss_scale: float = 1.0,
+    ) -> dict[str, float]:
+        obs, act = self._ensure_batched_inputs(observations, actions)
+        self.train()
+        total_loss, pred_loss = self._compute_sequence_losses(obs, act, ewc_penalty=ewc_penalty)
+        scaled_total = total_loss * float(loss_scale)
+        if self._amp_enabled:
+            self.grad_scaler.scale(scaled_total).backward()
+        else:
+            scaled_total.backward()
+        return {
+            "loss": float(total_loss.detach().cpu()),
+            "prediction_loss": float(pred_loss.detach().cpu()),
+        }
+
+    def optimizer_step(self, *, gradient_clip: float | None = None) -> None:
+        if gradient_clip is not None:
+            if self._amp_enabled:
+                self.grad_scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_norm_(self.parameters(), gradient_clip)
+        if self._amp_enabled:
+            self.grad_scaler.step(self.optimizer)
+            self.grad_scaler.update()
+        else:
+            self.optimizer.step()
+
     def predict_batch(
         self,
         observations: torch.Tensor | Any,
@@ -143,15 +279,37 @@ class HippocampalPredictiveRNN(nn.Module):
         obs, act = self._ensure_batched_inputs(observations, actions)
         context = torch.no_grad() if no_grad else torch.enable_grad()
         with context:
+            x_t, obs_target, outmask = self._sequence_layout(obs, act)
+            total_length = max(int(x_t.shape[1]), 1)
+            chunk_length = max(1, min(int(self.config.chunk_length), total_length))
+            state = self._initial_state()
+            predictions: list[torch.Tensor] = []
+            targets: list[torch.Tensor] = []
+            hidden_chunks: list[torch.Tensor] = []
+
             self._apply_recurrence_scale()
             try:
-                obs_pred, hidden, obs_target = self.core(obs, act)
+                for start in range(0, total_length, chunk_length):
+                    end = min(start + chunk_length, total_length)
+                    x_chunk = x_t[:, start:end, :]
+                    target_chunk = obs_target[:, start:end, :]
+                    mask_chunk = outmask[start:end]
+                    with self._autocast_context():
+                        hidden_chunk, state = self._run_recurrent_chunk(x_chunk, state)
+                        pred_chunk = self.core.outlayer(hidden_chunk)
+                    predictions.append(self._apply_output_mask(pred_chunk.float(), mask_chunk))
+                    targets.append(target_chunk.float())
+                    hidden_chunks.append(hidden_chunk.float())
+                    state = state.detach()
             finally:
                 self._remove_recurrence_scale()
 
+        pred = torch.cat(predictions, dim=1)
+        target = torch.cat(targets, dim=1)
+        hidden = torch.cat(hidden_chunks, dim=1)
         if reduce_hidden is not None:
             hidden = self.collapse_hidden(hidden, reduce=reduce_hidden)
-        return obs_pred, obs_target, hidden
+        return pred, target, hidden
 
     def train_on_batch(
         self,
@@ -161,26 +319,10 @@ class HippocampalPredictiveRNN(nn.Module):
         ewc_penalty: torch.Tensor | None = None,
         gradient_clip: float | None = None,
     ) -> dict[str, float]:
-        obs, act = self._ensure_batched_inputs(observations, actions)
-        self.train()
-        self.optimizer.zero_grad(set_to_none=True)
-        self._apply_recurrence_scale()
-        try:
-            obs_pred, hidden, obs_target = self.core(obs, act)
-            total_loss, pred_loss = self.loss_fn(obs_pred, obs_target, hidden)
-            if ewc_penalty is not None:
-                total_loss = total_loss + ewc_penalty
-            total_loss.backward()
-            if gradient_clip is not None:
-                torch.nn.utils.clip_grad_norm_(self.parameters(), gradient_clip)
-            self.optimizer.step()
-        finally:
-            self._remove_recurrence_scale()
-
-        return {
-            "loss": float(total_loss.detach().cpu()),
-            "prediction_loss": float(pred_loss.detach().cpu()),
-        }
+        self.zero_grad()
+        metrics = self.backward_on_batch(observations, actions, ewc_penalty=ewc_penalty)
+        self.optimizer_step(gradient_clip=gradient_clip)
+        return metrics
 
     def spontaneous(
         self,
@@ -199,9 +341,12 @@ class HippocampalPredictiveRNN(nn.Module):
         with torch.no_grad():
             self._apply_recurrence_scale()
             try:
-                obs_pred, hidden = self.core.internal(noise_t)
+                with self._autocast_context():
+                    obs_pred, hidden = self.core.internal(noise_t)
             finally:
                 self._remove_recurrence_scale()
+        obs_pred = obs_pred.float()
+        hidden = hidden.float()
         if reduce_hidden is not None:
             hidden = self.collapse_hidden(hidden, reduce=reduce_hidden)
         return obs_pred, hidden
@@ -233,6 +378,9 @@ class HippocampalPredictiveRNN(nn.Module):
     def parameter_snapshot(self) -> dict[str, torch.Tensor]:
         return {name: param.detach().clone() for name, param in self.named_parameters()}
 
+    def memory_stats(self) -> dict[str, float]:
+        return gpu_memory_snapshot(self.device)
+
     def save_checkpoint(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -241,6 +389,7 @@ class HippocampalPredictiveRNN(nn.Module):
                 "config": asdict(self.config),
                 "state_dict": self.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
+                "grad_scaler_state_dict": self.grad_scaler.state_dict() if self._amp_enabled else None,
                 "recurrence_scale": self.recurrence_scale,
             },
             path,
@@ -253,11 +402,14 @@ class HippocampalPredictiveRNN(nn.Module):
         *,
         map_location: str | torch.device = "cpu",
     ) -> "HippocampalPredictiveRNN":
-        checkpoint = torch.load(path, map_location=map_location)
-        model = cls(HippocampalConfig(**checkpoint["config"]))
-        model.load_state_dict(checkpoint["state_dict"])
-        model.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        model.set_recurrence_scale(checkpoint.get("recurrence_scale", 1.0))
+        checkpoint_blob = torch.load(path, map_location=map_location)
+        model = cls(HippocampalConfig(**checkpoint_blob["config"]))
+        model.load_state_dict(checkpoint_blob["state_dict"])
+        model.optimizer.load_state_dict(checkpoint_blob["optimizer_state_dict"])
+        scaler_state = checkpoint_blob.get("grad_scaler_state_dict")
+        if scaler_state is not None and model._amp_enabled:
+            model.grad_scaler.load_state_dict(scaler_state)
+        model.set_recurrence_scale(checkpoint_blob.get("recurrence_scale", 1.0))
         return model
 
 

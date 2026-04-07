@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ from project3_generalization.environments.suite_3d import (
     simulate_navigator_3d,
 )
 from project3_generalization.evaluation.metrics import GG2_field_size_anisotropy
+from project3_generalization.hardware import gpu_memory_snapshot
 
 
 def _parse_args() -> argparse.Namespace:
@@ -28,6 +30,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_3d()
     env = suite[args.env_id]
@@ -59,6 +62,8 @@ def main() -> None:
         "alpha": args.alpha,
         "positions_mean": positions.mean(axis=0).tolist(),
         "field_size_anisotropy": anisotropy,
+        "runtime_seconds": float(time.perf_counter() - start),
+        "gpu_memory": gpu_memory_snapshot(),
     }
     print(json.dumps(result, indent=2))
     if args.output_json is not None:

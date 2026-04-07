@@ -11,9 +11,10 @@ from project3_generalization.models.hippocampal_module import HippocampalPredict
 @dataclass
 class CorticalModuleConfig:
     hippocampal_hidden_size: int = 500
-    cortical_hidden_size: int = 200
+    cortical_hidden_size: int = 100
     decoder_rank: int = 32
     learning_rate: float = 1e-4
+    update_every_n_calls: int = 2
 
 
 class CorticalRNNPrior(nn.Module):
@@ -33,6 +34,7 @@ class CorticalRNNPrior(nn.Module):
         self.activation = nn.Tanh()
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.config.learning_rate)
         self.last_state: torch.Tensor | None = None
+        self.update_calls = 0
 
     @property
     def device(self) -> torch.device:
@@ -77,6 +79,10 @@ class CorticalRNNPrior(nn.Module):
         if hidden_sequence.ndim == 2:
             hidden_sequence = hidden_sequence.unsqueeze(0)
         hidden_sequence = hidden_sequence.to(self.device)
+        self.update_calls += 1
+        if self.config.update_every_n_calls > 1 and (self.update_calls % self.config.update_every_n_calls) != 0:
+            self.update_state_only(hidden_sequence)
+            return {"loss": 0.0, "skipped_optimizer_step": 1.0}
         self.train()
         self.optimizer.zero_grad(set_to_none=True)
         outputs, state = self.rnn(hidden_sequence[:, :-1, :], self.last_state)
