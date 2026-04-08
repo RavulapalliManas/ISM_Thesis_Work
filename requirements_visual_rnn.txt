@@ -1,0 +1,9 @@
+numpy
+scipy
+matplotlib
+scikit-learn
+torch
+tensorboard
+shapely
+ratinabox
+umap-learn

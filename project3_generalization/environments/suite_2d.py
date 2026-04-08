@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
+from project3_generalization.visual_rnn.renderer import TileMap, TileMapConfig, build_tile_map, flatten_patch, get_patch
 
 try:
     from shapely.geometry import LineString, Point, Polygon, box
@@ -102,12 +103,19 @@ class SimulationRollout2D:
     velocities: np.ndarray
     rotational_velocities: np.ndarray
     dt: float
+    observation_mode: str = "bvc_hd"
+    visual_patches: np.ndarray | None = None
+    tile_map_rgb: np.ndarray | None = None
 
 
-def _require_ratinabox() -> None:
-    if Environment is None or Agent is None or BoundaryVectorCells is None or HeadDirectionCells is None:
+def _require_ratinabox(*, require_sensory: bool = False) -> None:
+    if Environment is None or Agent is None:
         raise ImportError(
             "RatInABox is required for the 2D environment suite. Install `ratinabox` first."
+        )
+    if require_sensory and (BoundaryVectorCells is None or HeadDirectionCells is None):
+        raise ImportError(
+            "BoundaryVectorCells and HeadDirectionCells are required for the legacy sensory rollout path."
         )
 
 
@@ -417,6 +425,10 @@ def collect_rollout_2d(
     agent_params: Mapping[str, Any] | None = None,
     vector_cell_params: Mapping[str, Any] | None = None,
     head_direction_params: Mapping[str, Any] | None = None,
+    observation_mode: str = "bvc_hd",
+    tile_map: TileMap | None = None,
+    tile_map_config: TileMapConfig | Mapping[str, Any] | None = None,
+    include_head_direction: bool = True,
 ) -> SimulationRollout2D:
     _require_ratinabox()
     _set_seed(seed)
@@ -427,18 +439,40 @@ def collect_rollout_2d(
     if agent_params:
         params.update(agent_params)
     agent = Agent(env, params=params)
+    visual_patches = None
+    tile_map_rgb = None
 
-    bvc_params = dict(DEFAULT_VECTOR_CELL_PARAMS)
-    if vector_cell_params:
-        bvc_params.update(vector_cell_params)
-    hd_params = dict(DEFAULT_HEAD_DIRECTION_PARAMS)
-    if head_direction_params:
-        hd_params.update(head_direction_params)
+    if observation_mode == "visual":
+        tile_map = tile_map or build_tile_map(spec, tile_map_config)
+        head_direction_size = 2 if include_head_direction else 0
+        observations = np.zeros((n_steps + 1, tile_map.visual_vector_size + head_direction_size), dtype=np.float32)
+        visual_patches = np.zeros(
+            (
+                n_steps + 1,
+                tile_map.config.patch_size,
+                tile_map.config.patch_size,
+                tile_map.config.channels,
+            ),
+            dtype=np.float32,
+        )
+        tile_map_rgb = tile_map.as_image()
+        bvcs = None
+        hdc = None
+    elif observation_mode == "bvc_hd":
+        _require_ratinabox(require_sensory=True)
+        bvc_params = dict(DEFAULT_VECTOR_CELL_PARAMS)
+        if vector_cell_params:
+            bvc_params.update(vector_cell_params)
+        hd_params = dict(DEFAULT_HEAD_DIRECTION_PARAMS)
+        if head_direction_params:
+            hd_params.update(head_direction_params)
 
-    bvcs = BoundaryVectorCells(agent, params=bvc_params)
-    hdc = HeadDirectionCells(agent, params=hd_params)
+        bvcs = BoundaryVectorCells(agent, params=bvc_params)
+        hdc = HeadDirectionCells(agent, params=hd_params)
+        observations = np.zeros((n_steps + 1, bvcs.n + hdc.n), dtype=np.float32)
+    else:
+        raise ValueError(f"Unsupported observation mode `{observation_mode}`.")
 
-    observations = np.zeros((n_steps + 1, bvcs.n + hdc.n), dtype=np.float32)
     actions = np.zeros((n_steps, 3), dtype=np.float32)
     positions = np.zeros((n_steps + 1, 2), dtype=np.float32)
     head_directions = np.zeros((n_steps + 1, 2), dtype=np.float32)
@@ -446,10 +480,17 @@ def collect_rollout_2d(
     rotational_velocities = np.zeros((n_steps,), dtype=np.float32)
 
     for step in range(n_steps + 1):
-        bvcs.update()
-        hdc.update()
-        observations[step, : bvcs.n] = bvcs.firingrate.astype(np.float32)
-        observations[step, bvcs.n :] = hdc.firingrate.astype(np.float32)
+        if observation_mode == "visual":
+            patch = get_patch(agent, tile_map)
+            visual_patches[step] = patch
+            observations[step, : tile_map.visual_vector_size] = flatten_patch(patch)
+            if include_head_direction:
+                observations[step, tile_map.visual_vector_size :] = agent.head_direction.astype(np.float32)
+        else:
+            bvcs.update()
+            hdc.update()
+            observations[step, : bvcs.n] = bvcs.firingrate.astype(np.float32)
+            observations[step, bvcs.n :] = hdc.firingrate.astype(np.float32)
         positions[step] = agent.pos.astype(np.float32)
         head_directions[step] = agent.head_direction.astype(np.float32)
 
@@ -470,6 +511,9 @@ def collect_rollout_2d(
         velocities=velocities,
         rotational_velocities=rotational_velocities,
         dt=dt,
+        observation_mode=observation_mode,
+        visual_patches=visual_patches,
+        tile_map_rgb=tile_map_rgb,
     )
 
 
@@ -488,7 +532,7 @@ def validate_environment_2d(
     seed: int = 0,
     grid_size: int = 50,
 ) -> dict[str, Any]:
-    _require_ratinabox()
+    _require_ratinabox(require_sensory=True)
     env, agent, positions, _, _ = simulate_random_walk_2d(spec, n_steps=n_steps, seed=seed)
     inside = np.array([env.check_if_position_is_in_environment(pos) for pos in positions], dtype=bool)
 

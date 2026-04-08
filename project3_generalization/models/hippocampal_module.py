@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
@@ -34,10 +35,159 @@ class HippocampalConfig:
     use_amp: bool = True
     amp_dtype: str = "float16"
     gradient_checkpointing: bool = True
+    encoder_type: str = "identity"
+    encoder_hidden_size: int = 256
+    encoder_output_size: int | None = None
+    visual_patch_size: int = 147
+    visual_patch_width: int = 7
+    visual_channels: int = 3
+    head_direction_size: int = 0
+    rollout_steps: int = 1
+    rollout_loss_weight: float = 0.0
+    latent_loss_weight: float = 0.0
+    rollout_mode: str = "autoregressive"
+
+
+class _ObservationAdapter(nn.Module):
+    def __init__(self, input_size: int, output_size: int, visual_size: int, aux_size: int):
+        super().__init__()
+        self.input_size = int(input_size)
+        self.output_size = int(output_size)
+        self.visual_size = int(max(visual_size, 0))
+        self.aux_size = int(max(aux_size, 0))
+
+    def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+    def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
+    def decoder_parameters(self):
+        return []
+
+    def _reshape_flat(self, value: torch.Tensor) -> tuple[torch.Tensor, tuple[int, ...]]:
+        shape = value.shape[:-1]
+        return value.reshape(-1, value.shape[-1]), shape
+
+    def _restore_shape(self, value: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
+        return value.reshape(*shape, value.shape[-1])
+
+    def _constrain_output(self, decoded: torch.Tensor) -> torch.Tensor:
+        if self.visual_size <= 0:
+            return decoded
+        visual = torch.sigmoid(decoded[:, : self.visual_size])
+        if self.aux_size > 0:
+            aux = torch.tanh(decoded[:, self.visual_size : self.visual_size + self.aux_size])
+            return torch.cat([visual, aux], dim=-1)
+        return visual
+
+
+class _IdentityObservationAdapter(_ObservationAdapter):
+    def __init__(self, input_size: int):
+        super().__init__(input_size=input_size, output_size=input_size, visual_size=input_size, aux_size=0)
+
+    def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        return observations
+
+    def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        return latent
+
+
+class _MLPObservationAdapter(_ObservationAdapter):
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        hidden_size: int,
+        visual_size: int,
+        aux_size: int,
+    ):
+        super().__init__(input_size=input_size, output_size=output_size, visual_size=visual_size, aux_size=aux_size)
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(output_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, input_size),
+        )
+
+    def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        flat, shape = self._reshape_flat(observations)
+        encoded = self.encoder(flat)
+        return self._restore_shape(encoded, shape)
+
+    def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        flat, shape = self._reshape_flat(latent)
+        decoded = self.decoder(flat)
+        return self._restore_shape(self._constrain_output(decoded), shape)
+
+    def decoder_parameters(self):
+        return self.decoder.parameters()
+
+
+class _CNNObservationAdapter(_ObservationAdapter):
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        hidden_size: int,
+        visual_size: int,
+        aux_size: int,
+        patch_width: int,
+        channels: int,
+    ):
+        if visual_size != patch_width * patch_width * channels:
+            raise ValueError(
+                "CNN encoder expects the visual observation to match patch_width * patch_width * channels."
+            )
+        super().__init__(input_size=input_size, output_size=output_size, visual_size=visual_size, aux_size=aux_size)
+        self.patch_width = int(patch_width)
+        self.channels = int(channels)
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        conv_size = 32 * self.patch_width * self.patch_width
+        self.encoder_head = nn.Sequential(
+            nn.Linear(conv_size + self.aux_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(output_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, input_size),
+        )
+
+    def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        flat, shape = self._reshape_flat(observations)
+        visual = flat[:, : self.visual_size].reshape(-1, self.channels, self.patch_width, self.patch_width)
+        conv_features = self.conv(visual)
+        if self.aux_size > 0:
+            aux = flat[:, self.visual_size : self.visual_size + self.aux_size]
+            conv_features = torch.cat([conv_features, aux], dim=-1)
+        encoded = self.encoder_head(conv_features)
+        return self._restore_shape(encoded, shape)
+
+    def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        flat, shape = self._reshape_flat(latent)
+        decoded = self.decoder(flat)
+        return self._restore_shape(self._constrain_output(decoded), shape)
+
+    def decoder_parameters(self):
+        return self.decoder.parameters()
 
 
 class HippocampalPredictiveRNN(nn.Module):
-    """Thin wrapper around the Levenstein predictive-RNN architectures."""
+    """Predictive RNN wrapper with optional visual encoders and rollout loss."""
 
     def __init__(self, config: HippocampalConfig | None = None):
         super().__init__()
@@ -45,9 +195,14 @@ class HippocampalPredictiveRNN(nn.Module):
         if not hasattr(architectures, self.config.pRNNtype):
             raise ValueError(f"Unknown predictive architecture `{self.config.pRNNtype}`.")
 
+        self.visual_obs_size = int(min(self.config.visual_patch_size, max(self.config.obs_size - self.config.head_direction_size, 0)))
+        self.aux_obs_size = int(max(self.config.obs_size - self.visual_obs_size, 0))
+        self.observation_adapter = self._build_observation_adapter()
+        self.encoded_obs_size = int(self.observation_adapter.output_size)
+
         architecture_cls = getattr(architectures, self.config.pRNNtype)
         self.core = architecture_cls(
-            self.config.obs_size,
+            self.encoded_obs_size,
             self.config.action_size,
             hidden_size=self.config.hidden_size,
             trunc=self.config.truncation,
@@ -65,6 +220,31 @@ class HippocampalPredictiveRNN(nn.Module):
         self._amp_dtype = torch.float16 if self.config.amp_dtype == "float16" else torch.float32
         self.grad_scaler = torch.amp.GradScaler(device="cuda", enabled=self._amp_enabled)
 
+    def _build_observation_adapter(self) -> _ObservationAdapter:
+        encoder_type = self.config.encoder_type.lower()
+        output_size = int(self.config.encoder_output_size or max(self.config.encoder_hidden_size // 2, 64))
+        if encoder_type == "identity":
+            return _IdentityObservationAdapter(self.config.obs_size)
+        if encoder_type == "mlp":
+            return _MLPObservationAdapter(
+                input_size=self.config.obs_size,
+                output_size=output_size,
+                hidden_size=self.config.encoder_hidden_size,
+                visual_size=self.visual_obs_size,
+                aux_size=self.aux_obs_size,
+            )
+        if encoder_type == "cnn":
+            return _CNNObservationAdapter(
+                input_size=self.config.obs_size,
+                output_size=output_size,
+                hidden_size=self.config.encoder_hidden_size,
+                visual_size=self.visual_obs_size,
+                aux_size=self.aux_obs_size,
+                patch_width=self.config.visual_patch_width,
+                channels=self.config.visual_channels,
+            )
+        raise ValueError(f"Unsupported encoder type `{self.config.encoder_type}`.")
+
     def _resolve_device(self) -> torch.device:
         if self.config.device is not None:
             return torch.device(self.config.device)
@@ -73,30 +253,38 @@ class HippocampalPredictiveRNN(nn.Module):
     def _build_optimizer(self) -> torch.optim.Optimizer:
         rootk_h = (1.0 / self.config.hidden_size) ** 0.5
         rootk_i = (1.0 / self.core.rnn.cell.input_size) ** 0.5
-        return torch.optim.RMSprop(
-            [
+        parameter_groups = [
+            {
+                "params": self.core.W,
+                "name": "recurrent",
+                "lr": self.config.learning_rate * rootk_h,
+                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
+            },
+            {
+                "params": self.core.W_out,
+                "name": "readout",
+                "lr": self.config.learning_rate * rootk_h,
+                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
+            },
+            {
+                "params": self.core.W_in,
+                "name": "input",
+                "lr": self.config.learning_rate * rootk_i,
+                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_i,
+            },
+        ]
+        core_params = {id(self.core.W), id(self.core.W_out), id(self.core.W_in)}
+        extra_params = [param for param in self.parameters() if param.requires_grad and id(param) not in core_params]
+        if extra_params:
+            parameter_groups.append(
                 {
-                    "params": self.core.W,
-                    "name": "recurrent",
-                    "lr": self.config.learning_rate * rootk_h,
-                    "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
-                },
-                {
-                    "params": self.core.W_out,
-                    "name": "readout",
-                    "lr": self.config.learning_rate * rootk_h,
-                    "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
-                },
-                {
-                    "params": self.core.W_in,
-                    "name": "input",
-                    "lr": self.config.learning_rate * rootk_i,
-                    "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_i,
-                },
-            ],
-            alpha=0.95,
-            eps=1e-7,
-        )
+                    "params": extra_params,
+                    "name": "adapter",
+                    "lr": self.config.learning_rate,
+                    "weight_decay": self.config.weight_decay * self.config.learning_rate,
+                }
+            )
+        return torch.optim.RMSprop(parameter_groups, alpha=0.95, eps=1e-7)
 
     @property
     def device(self) -> torch.device:
@@ -159,17 +347,35 @@ class HippocampalPredictiveRNN(nn.Module):
             return hidden[-1]
         raise ValueError(f"Unknown hidden-state reduction `{reduce}`.")
 
+    def _mask_from_layout(self, outmask: Any, length: int) -> np.ndarray:
+        if isinstance(outmask, (bool, np.bool_)):
+            return np.full(length, bool(outmask), dtype=bool)
+        return np.asarray(outmask, dtype=bool)
+
+    def _apply_output_mask(self, predictions: torch.Tensor, mask_chunk: np.ndarray) -> torch.Tensor:
+        if mask_chunk.all():
+            return predictions
+        masked = torch.zeros_like(predictions)
+        masked[:, mask_chunk, :] = predictions[:, mask_chunk, :]
+        return masked
+
+    def _align_raw_targets(self, observations: torch.Tensor, actions: torch.Tensor, mask: np.ndarray) -> torch.Tensor:
+        action_inputs = self.core.actpad(actions)
+        raw_target = observations[:, self.core.predOffset :, :]
+        minsize = min(observations.size(1), action_inputs.size(1), raw_target.size(1))
+        raw_target = raw_target[:, :minsize, :]
+        return self._apply_output_mask(raw_target, mask[:minsize])
+
     def _sequence_layout(
         self,
         observations: torch.Tensor,
         actions: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, np.ndarray]:
-        x_t, obs_target, outmask = self.core.restructure_inputs(observations, actions)
-        if isinstance(outmask, (bool, np.bool_)):
-            mask = np.full(obs_target.shape[1], bool(outmask), dtype=bool)
-        else:
-            mask = np.asarray(outmask, dtype=bool)
-        return x_t, obs_target, mask
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray, torch.Tensor]:
+        encoded_observations = self.observation_adapter.encode(observations)
+        x_t, encoded_target, outmask = self.core.restructure_inputs(encoded_observations, actions)
+        mask = self._mask_from_layout(outmask, encoded_target.shape[1])
+        raw_target = self._align_raw_targets(observations, actions, mask)
+        return x_t, encoded_target, raw_target, mask, encoded_observations
 
     def _run_recurrent_chunk(self, x_chunk: torch.Tensor, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.core.rnn(x_chunk, state=state)
@@ -188,13 +394,86 @@ class HippocampalPredictiveRNN(nn.Module):
             return checkpoint(self._run_recurrent_chunk, x_chunk, state, use_reentrant=False)
         return self._run_recurrent_chunk(x_chunk, state)
 
-    @staticmethod
-    def _apply_output_mask(predictions: torch.Tensor, mask_chunk: np.ndarray) -> torch.Tensor:
-        if mask_chunk.all():
-            return predictions
-        masked = torch.zeros_like(predictions)
-        masked[:, mask_chunk, :] = predictions[:, mask_chunk, :]
-        return masked
+    def _forward_teacher_forced(
+        self,
+        observations: torch.Tensor,
+        actions: torch.Tensor,
+        *,
+        training: bool,
+    ) -> dict[str, torch.Tensor | np.ndarray]:
+        x_t, encoded_target, raw_target, outmask, encoded_observations = self._sequence_layout(observations, actions)
+        total_length = max(int(x_t.shape[1]), 1)
+        chunk_length = max(1, min(int(self.config.chunk_length), total_length))
+        state = self._initial_state()
+        latent_predictions: list[torch.Tensor] = []
+        decoded_predictions: list[torch.Tensor] = []
+        hidden_chunks: list[torch.Tensor] = []
+
+        self._apply_recurrence_scale()
+        try:
+            for start in range(0, total_length, chunk_length):
+                end = min(start + chunk_length, total_length)
+                x_chunk = x_t[:, start:end, :]
+                mask_chunk = outmask[start:end]
+                with self._autocast_context():
+                    hidden_chunk, state = self._forward_chunk(x_chunk, state, training=training)
+                    latent_chunk = self.core.outlayer(hidden_chunk)
+                    decoded_chunk = self.observation_adapter.decode(latent_chunk)
+                latent_predictions.append(self._apply_output_mask(latent_chunk.float(), mask_chunk))
+                decoded_predictions.append(self._apply_output_mask(decoded_chunk.float(), mask_chunk))
+                hidden_chunks.append(hidden_chunk.float())
+                if training:
+                    state = state.detach()
+        finally:
+            self._remove_recurrence_scale()
+
+        return {
+            "latent_predictions": torch.cat(latent_predictions, dim=1),
+            "decoded_predictions": torch.cat(decoded_predictions, dim=1),
+            "encoded_targets": encoded_target.float(),
+            "raw_targets": raw_target.float(),
+            "hidden": torch.cat(hidden_chunks, dim=1),
+            "mask": outmask,
+            "encoded_observations": encoded_observations.float(),
+        }
+
+    def _compute_rollout_loss(
+        self,
+        observations: torch.Tensor,
+        actions: torch.Tensor,
+        teacher_outputs: dict[str, torch.Tensor | np.ndarray],
+    ) -> torch.Tensor:
+        if self.config.rollout_loss_weight <= 0.0 or self.config.rollout_steps <= 1:
+            return torch.zeros((), dtype=torch.float32, device=self.device)
+
+        teacher_hidden = teacher_outputs["hidden"]
+        teacher_latent = teacher_outputs["latent_predictions"]
+        if not isinstance(teacher_hidden, torch.Tensor) or not isinstance(teacher_latent, torch.Tensor):
+            return torch.zeros((), dtype=torch.float32, device=self.device)
+
+        rollout_terms: list[torch.Tensor] = []
+        base_offset = max(int(getattr(self.core, "predOffset", 0)), 1)
+        horizon = int(self.config.rollout_steps)
+        max_start = max(int(actions.shape[1]) - horizon + 1, 0)
+        for start in range(max_start):
+            state = teacher_hidden[:, start : start + 1, :].detach()
+            latent_pred = teacher_latent[:, start : start + 1, :]
+            for step_ahead in range(2, horizon + 1):
+                action_index = start + step_ahead - 1
+                target_index = start + base_offset + step_ahead - 1
+                if action_index >= actions.shape[1] or target_index >= observations.shape[1]:
+                    break
+                obs_input = torch.zeros_like(latent_pred) if self.config.rollout_mode == "masked" else latent_pred
+                x_input = torch.cat([obs_input, actions[:, action_index : action_index + 1, :]], dim=-1)
+                with self._autocast_context():
+                    hidden_roll, state = self._run_recurrent_chunk(x_input, state)
+                    latent_pred = self.core.outlayer(hidden_roll)
+                    decoded_pred = self.observation_adapter.decode(latent_pred)
+                target = observations[:, target_index : target_index + 1, :]
+                rollout_terms.append(F.mse_loss(decoded_pred.float(), target.float()))
+        if not rollout_terms:
+            return torch.zeros((), dtype=torch.float32, device=self.device)
+        return torch.stack(rollout_terms).mean()
 
     def _compute_sequence_losses(
         self,
@@ -202,36 +481,32 @@ class HippocampalPredictiveRNN(nn.Module):
         actions: torch.Tensor,
         *,
         ewc_penalty: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        x_t, obs_target, outmask = self._sequence_layout(observations, actions)
-        total_length = max(int(x_t.shape[1]), 1)
-        chunk_length = max(1, min(int(self.config.chunk_length), total_length))
-        state = self._initial_state()
-        weighted_total = torch.zeros((), dtype=torch.float32, device=self.device)
-        weighted_pred = torch.zeros((), dtype=torch.float32, device=self.device)
+    ) -> dict[str, torch.Tensor]:
+        teacher_outputs = self._forward_teacher_forced(observations, actions, training=self.training)
+        decoded_predictions = teacher_outputs["decoded_predictions"]
+        raw_targets = teacher_outputs["raw_targets"]
+        hidden = teacher_outputs["hidden"]
+        encoded_predictions = teacher_outputs["latent_predictions"]
+        encoded_targets = teacher_outputs["encoded_targets"]
+        if not all(isinstance(item, torch.Tensor) for item in (decoded_predictions, raw_targets, hidden, encoded_predictions, encoded_targets)):
+            raise RuntimeError("Teacher-forced pass did not return tensor outputs.")
 
-        self._apply_recurrence_scale()
-        try:
-            for start in range(0, total_length, chunk_length):
-                end = min(start + chunk_length, total_length)
-                x_chunk = x_t[:, start:end, :]
-                target_chunk = obs_target[:, start:end, :]
-                mask_chunk = outmask[start:end]
-                with self._autocast_context():
-                    hidden_chunk, state = self._forward_chunk(x_chunk, state, training=self.training)
-                    pred_chunk = self.core.outlayer(hidden_chunk)
-                    masked_pred = self._apply_output_mask(pred_chunk, mask_chunk)
-                    chunk_total, chunk_pred = self.loss_fn(masked_pred, target_chunk, hidden_chunk)
-                weight = float(end - start) / float(total_length)
-                weighted_total = weighted_total + chunk_total.float() * weight
-                weighted_pred = weighted_pred + chunk_pred.float() * weight
-                if self.training:
-                    state = state.detach()
-            if ewc_penalty is not None:
-                weighted_total = weighted_total + ewc_penalty.float()
-        finally:
-            self._remove_recurrence_scale()
-        return weighted_total, weighted_pred
+        pred_total, pred_loss = self.loss_fn(decoded_predictions, raw_targets, hidden)
+        latent_loss = torch.zeros((), dtype=torch.float32, device=self.device)
+        if self.config.latent_loss_weight > 0.0:
+            latent_loss = F.mse_loss(encoded_predictions, encoded_targets)
+        rollout_loss = self._compute_rollout_loss(observations, actions, teacher_outputs)
+        total = pred_total.float()
+        total = total + float(self.config.latent_loss_weight) * latent_loss.float()
+        total = total + float(self.config.rollout_loss_weight) * rollout_loss.float()
+        if ewc_penalty is not None:
+            total = total + ewc_penalty.float()
+        return {
+            "loss": total.float(),
+            "prediction_loss": pred_loss.float(),
+            "rollout_loss": rollout_loss.float(),
+            "latent_loss": latent_loss.float(),
+        }
 
     def zero_grad(self) -> None:
         self.optimizer.zero_grad(set_to_none=True)
@@ -246,16 +521,13 @@ class HippocampalPredictiveRNN(nn.Module):
     ) -> dict[str, float]:
         obs, act = self._ensure_batched_inputs(observations, actions)
         self.train()
-        total_loss, pred_loss = self._compute_sequence_losses(obs, act, ewc_penalty=ewc_penalty)
-        scaled_total = total_loss * float(loss_scale)
+        losses = self._compute_sequence_losses(obs, act, ewc_penalty=ewc_penalty)
+        scaled_total = losses["loss"] * float(loss_scale)
         if self._amp_enabled:
             self.grad_scaler.scale(scaled_total).backward()
         else:
             scaled_total.backward()
-        return {
-            "loss": float(total_loss.detach().cpu()),
-            "prediction_loss": float(pred_loss.detach().cpu()),
-        }
+        return {key: float(value.detach().cpu()) for key, value in losses.items()}
 
     def optimizer_step(self, *, gradient_clip: float | None = None) -> None:
         if gradient_clip is not None:
@@ -268,6 +540,17 @@ class HippocampalPredictiveRNN(nn.Module):
         else:
             self.optimizer.step()
 
+    def evaluate_on_batch(
+        self,
+        observations: torch.Tensor | Any,
+        actions: torch.Tensor | Any,
+    ) -> dict[str, float]:
+        obs, act = self._ensure_batched_inputs(observations, actions)
+        self.eval()
+        with torch.no_grad():
+            losses = self._compute_sequence_losses(obs, act)
+        return {key: float(value.detach().cpu()) for key, value in losses.items()}
+
     def predict_batch(
         self,
         observations: torch.Tensor | Any,
@@ -279,34 +562,12 @@ class HippocampalPredictiveRNN(nn.Module):
         obs, act = self._ensure_batched_inputs(observations, actions)
         context = torch.no_grad() if no_grad else torch.enable_grad()
         with context:
-            x_t, obs_target, outmask = self._sequence_layout(obs, act)
-            total_length = max(int(x_t.shape[1]), 1)
-            chunk_length = max(1, min(int(self.config.chunk_length), total_length))
-            state = self._initial_state()
-            predictions: list[torch.Tensor] = []
-            targets: list[torch.Tensor] = []
-            hidden_chunks: list[torch.Tensor] = []
-
-            self._apply_recurrence_scale()
-            try:
-                for start in range(0, total_length, chunk_length):
-                    end = min(start + chunk_length, total_length)
-                    x_chunk = x_t[:, start:end, :]
-                    target_chunk = obs_target[:, start:end, :]
-                    mask_chunk = outmask[start:end]
-                    with self._autocast_context():
-                        hidden_chunk, state = self._run_recurrent_chunk(x_chunk, state)
-                        pred_chunk = self.core.outlayer(hidden_chunk)
-                    predictions.append(self._apply_output_mask(pred_chunk.float(), mask_chunk))
-                    targets.append(target_chunk.float())
-                    hidden_chunks.append(hidden_chunk.float())
-                    state = state.detach()
-            finally:
-                self._remove_recurrence_scale()
-
-        pred = torch.cat(predictions, dim=1)
-        target = torch.cat(targets, dim=1)
-        hidden = torch.cat(hidden_chunks, dim=1)
+            outputs = self._forward_teacher_forced(obs, act, training=False)
+        pred = outputs["decoded_predictions"]
+        target = outputs["raw_targets"]
+        hidden = outputs["hidden"]
+        if not all(isinstance(item, torch.Tensor) for item in (pred, target, hidden)):
+            raise RuntimeError("Predict batch expected tensor outputs.")
         if reduce_hidden is not None:
             hidden = self.collapse_hidden(hidden, reduce=reduce_hidden)
         return pred, target, hidden
@@ -342,7 +603,8 @@ class HippocampalPredictiveRNN(nn.Module):
             self._apply_recurrence_scale()
             try:
                 with self._autocast_context():
-                    obs_pred, hidden = self.core.internal(noise_t)
+                    encoded_pred, hidden = self.core.internal(noise_t)
+                    obs_pred = self.observation_adapter.decode(encoded_pred)
             finally:
                 self._remove_recurrence_scale()
         obs_pred = obs_pred.float()
@@ -362,11 +624,11 @@ class HippocampalPredictiveRNN(nn.Module):
         self.core.W.requires_grad_(False)
 
     def freeze_all_but_readout(self) -> None:
-        self.core.W.requires_grad_(False)
-        self.core.W_in.requires_grad_(False)
+        for param in self.parameters():
+            param.requires_grad_(False)
         self.core.W_out.requires_grad_(True)
-        if hasattr(self.core, "bias"):
-            self.core.bias.requires_grad_(False)
+        for param in self.observation_adapter.decoder_parameters():
+            param.requires_grad_(True)
 
     def unfreeze_all(self) -> None:
         for param in self.parameters():

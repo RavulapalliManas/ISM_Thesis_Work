@@ -1,0 +1,53 @@
+{
+  "run_name": "visual_predictive_rnn",
+  "output_root": "results",
+  "env_id": "B1_l_shape",
+  "seed": 7,
+  "epochs": 20,
+  "sequence_length": 64,
+  "train_sequences_per_epoch": 24,
+  "val_sequences_per_epoch": 6,
+  "batch_size": 4,
+  "eval_rollout_steps": 768,
+  "replay_steps": 256,
+  "gradient_clip": 1.0,
+  "checkpoint_every_n_epochs": 5,
+  "early_stopping_patience": 8,
+  "observation_mode": "visual",
+  "include_head_direction": true,
+  "dashboard": {
+    "enabled": true,
+    "backend": "tensorboard",
+    "update_every_n_steps": 5,
+    "project": "predictive-rnn-visual"
+  },
+  "tile_map": {
+    "tile_size": 0.05,
+    "patch_size": 7,
+    "landmark_radius_tiles": 2,
+    "seed": 7
+  },
+  "model": {
+    "obs_size": 149,
+    "action_size": 3,
+    "hidden_size": 384,
+    "pRNNtype": "vRNN_0win",
+    "learning_rate": 0.0005,
+    "dropout": 0.05,
+    "truncation": 64,
+    "chunk_length": 64,
+    "use_amp": true,
+    "amp_dtype": "float16",
+    "gradient_checkpointing": true,
+    "encoder_type": "cnn",
+    "encoder_hidden_size": 256,
+    "encoder_output_size": 128,
+    "visual_patch_size": 147,
+    "visual_patch_width": 7,
+    "visual_channels": 3,
+    "head_direction_size": 2,
+    "rollout_steps": 3,
+    "rollout_loss_weight": 0.5,
+    "latent_loss_weight": 0.1
+  }
+}
