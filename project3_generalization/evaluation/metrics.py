@@ -1,3 +1,17 @@
+"""
+File: project3_generalization/evaluation/metrics.py
+
+Description:
+Project 3 evaluation metrics spanning spatial tuning, representational
+geometry, transfer, successor-representation alignment, and simple geometric or
+topological summaries.
+
+Role in system:
+This module is the shared measurement layer used by baseline, curriculum,
+ablation, 3-D, and visual-input experiments. Most experiment summaries are
+assembled from functions defined here.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Sequence
@@ -13,11 +27,13 @@ from project3_generalization.evaluation.topology import compute_betti_numbers
 
 
 def _match_samples(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Trim two arrays to the same leading sample count."""
     n = min(len(a), len(b))
     return np.asarray(a[:n], dtype=float), np.asarray(b[:n], dtype=float)
 
 
 def _subsample_indices(n_samples: int, max_samples: int | None, seed: int = 0) -> np.ndarray:
+    """Choose sorted sample indices for deterministic downsampling."""
     if max_samples is None or n_samples <= max_samples:
         return np.arange(n_samples)
     rng = np.random.default_rng(seed)
@@ -31,6 +47,7 @@ def _subsample_aligned(
     max_samples: int | None = None,
     seed: int = 0,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Subsample hidden states and positions with a shared index set."""
     hidden_states = np.asarray(hidden_states, dtype=float)
     positions = np.asarray(positions, dtype=float)
     keep = _subsample_indices(min(len(hidden_states), len(positions)), max_samples, seed=seed)
@@ -38,6 +55,7 @@ def _subsample_aligned(
 
 
 def participation_ratio(hidden_states: np.ndarray) -> float:
+    """Estimate the effective dimensionality of neural activity via covariance eigenvalues."""
     centered = np.asarray(hidden_states, dtype=float) - np.mean(hidden_states, axis=0, keepdims=True)
     covariance = np.cov(centered, rowvar=False)
     eigenvalues = np.clip(np.linalg.eigvalsh(covariance), a_min=0.0, a_max=None)
@@ -52,6 +70,7 @@ def compute_tuning_curves(
     *,
     grid_size: int = 20,
 ) -> dict[str, np.ndarray]:
+    """Bin hidden activity by position and compute occupancy-normalized tuning curves."""
     hidden_states = np.asarray(hidden_states, dtype=float)
     positions = np.asarray(positions, dtype=float)
     n_units = hidden_states.shape[1]
@@ -91,6 +110,7 @@ def fraction_spatially_tuned(
     grid_size: int = 20,
     spatial_information_threshold: float = 0.1,
 ) -> dict[str, Any]:
+    """Compute the fraction of units whose spatial information exceeds a threshold."""
     tuning = compute_tuning_curves(hidden_states, positions, grid_size=grid_size)
     tuned = tuning["spatial_information"] > spatial_information_threshold
     return {
@@ -110,6 +130,7 @@ def BG1_trials_to_criterion(
     criterion: float = 0.9,
     curve: Sequence[float] | None = None,
 ) -> float:
+    """Return the first trial index whose performance reaches a fraction of asymptote."""
     if curve is None:
         curve = getattr(model, "training_curve", None)
     if curve is None and env is not None:
@@ -130,6 +151,7 @@ def BG2_zero_shot_accuracy(
     predicted_sr: np.ndarray | None = None,
     true_sr: np.ndarray | None = None,
 ) -> float:
+    """Score zero-shot generalization via normalized successor-representation error."""
     if predicted_sr is None or true_sr is None:
         if model is None or env is None or not hasattr(model, "predict_successor_representation"):
             raise ValueError("Provide predicted_sr and true_sr, or a model with predict_successor_representation().")
@@ -149,6 +171,7 @@ def RG1_sRSA(
     max_samples: int | None = None,
     seed: int = 0,
 ) -> float:
+    """Compute spatial RSA by delegating to the legacy representational-geometry code."""
     hidden_states, positions = _subsample_aligned(hidden_states, positions, max_samples=max_samples, seed=seed)
     spatial_positions = np.asarray(positions, dtype=float)
     if len(spatial_positions) == len(hidden_states):
@@ -164,6 +187,7 @@ def RG1_sRSA(
 
 
 def RG2_CERA(H_A: np.ndarray, H_B: np.ndarray) -> float:
+    """Compute a Procrustes-style alignment error between two neural state spaces."""
     H_A, H_B = _match_samples(H_A, H_B)
     H_A = H_A - H_A.mean(axis=0, keepdims=True)
     H_B = H_B - H_B.mean(axis=0, keepdims=True)
@@ -178,6 +202,7 @@ def RG3_CKA(
     *,
     batch_size: int | None = None,
 ) -> float:
+    """Compute linear CKA between two hidden-state matrices."""
     H_A, H_B = _match_samples(H_A, H_B)
     H_A = np.asarray(H_A, dtype=np.float64)
     H_B = np.asarray(H_B, dtype=np.float64)
@@ -206,10 +231,12 @@ def RG3_CKA(
 
 
 def RG4_betti_numbers(hidden_states: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+    """Estimate Betti numbers for a hidden-state cloud."""
     return compute_betti_numbers(hidden_states, **kwargs)
 
 
 def SG1_SR_error(M_hat_B: np.ndarray, M_true_B: np.ndarray) -> float:
+    """Compute normalized Frobenius error between estimated and target SR matrices."""
     return float(np.linalg.norm(M_hat_B - M_true_B, ord="fro") / (np.linalg.norm(M_true_B, ord="fro") + 1e-12))
 
 
@@ -217,6 +244,7 @@ def SG2_transfer_vs_similarity(
     transfer_efficiency_matrix: np.ndarray,
     sim_matrix: np.ndarray,
 ) -> dict[str, float]:
+    """Correlate transfer efficiency with structural similarity across environment pairs."""
     triu = np.triu_indices_from(sim_matrix, k=1)
     transfer = np.asarray(transfer_efficiency_matrix)[triu]
     sim = np.asarray(sim_matrix)[triu]
@@ -228,6 +256,7 @@ def SG2_transfer_vs_similarity(
 
 
 def SG3_eigenspectrum_overlap(M_A: np.ndarray, M_B: np.ndarray, k: int = 10) -> float:
+    """Measure overlap between the leading eigenvectors of two matrices."""
     eigvals_a, eigvecs_a = np.linalg.eig(M_A)
     eigvals_b, eigvecs_b = np.linalg.eig(M_B)
     order_a = np.argsort(np.abs(eigvals_a))[::-1][:k]
@@ -241,6 +270,7 @@ def SG3_eigenspectrum_overlap(M_A: np.ndarray, M_B: np.ndarray, k: int = 10) -> 
 
 
 def GG1_elongation_index(hidden_states: np.ndarray, positions: np.ndarray | None = None) -> float:
+    """Estimate elongation of a neural manifold from the leading two PCA directions."""
     embedding = PCA(n_components=2).fit_transform(np.asarray(hidden_states, dtype=float))
     singular_values = PCA(n_components=2).fit(embedding).singular_values_
     return float(singular_values[0] / (singular_values[1] + 1e-12))
@@ -250,6 +280,7 @@ def GG2_field_size_anisotropy(
     tuning_maps_3d: np.ndarray,
     alpha_motion: float | None = None,
 ) -> dict[str, float]:
+    """Summarize anisotropy of 3-D tuning fields by horizontal/vertical spread ratio."""
     tuning_maps_3d = np.asarray(tuning_maps_3d, dtype=float)
     x = np.arange(tuning_maps_3d.shape[1], dtype=float)
     y = np.arange(tuning_maps_3d.shape[2], dtype=float)
@@ -279,6 +310,7 @@ def GG3_topological_remapping_index(
     H_B: np.ndarray,
     positions: np.ndarray | None = None,
 ) -> float:
+    """Compute mean cosine similarity between paired hidden-state samples."""
     H_A, H_B = _match_samples(H_A, H_B)
     similarity = cosine_similarity(H_A, H_B)
     return float(np.mean(np.diag(similarity)))
@@ -291,6 +323,7 @@ def estimate_neural_sr(
     extent: Sequence[float],
     grid_size: int = 30,
 ) -> np.ndarray:
+    """Build a coarse neural successor representation from binned hidden states."""
     hidden_states = np.asarray(hidden_states, dtype=np.float32)
     positions = np.asarray(positions, dtype=np.float32)
     n_states = grid_size * grid_size
@@ -304,6 +337,7 @@ def estimate_neural_sr(
     np.add.at(state_sums, flat, hidden_states)
     np.add.at(counts, flat, 1.0)
     state_means = state_sums / np.maximum(counts[:, None], 1.0)
+    # Cosine similarity between grid-bin activity centroids serves as a simple neural SR proxy.
     norms = np.linalg.norm(state_means, axis=1, keepdims=True)
     state_means = state_means / np.maximum(norms, 1e-6)
     neural_sr = state_means @ state_means.T
@@ -322,6 +356,7 @@ def current_environment_sr_error(
     extent: Sequence[float],
     grid_size: int = 30,
 ) -> float:
+    """Compare the neural SR proxy against the environment's true SR."""
     neural_sr = estimate_neural_sr(hidden_states, positions, extent=extent, grid_size=grid_size)
     return SG1_SR_error(neural_sr, np.asarray(true_sr, dtype=np.float32))
 
@@ -333,6 +368,7 @@ def replay_quality(
     *,
     extent: Sequence[float] | None = None,
 ) -> float:
+    """Estimate replay smoothness by decoding spontaneous states back into position space."""
     from sklearn.neighbors import KNeighborsRegressor
 
     decoder = KNeighborsRegressor(n_neighbors=5, weights="distance")

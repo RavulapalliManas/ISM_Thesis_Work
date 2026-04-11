@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/training/curriculum.py
+
+Description:
+Curriculum-learning loop for sequential training across multiple environments.
+
+Role in system:
+Builds on the single-environment trainer by reusing one model across a sequence
+of arenas, optionally adding EWC-based anti-forgetting regularization or a
+cortical prior for transfer experiments.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,6 +30,8 @@ from project3_generalization.training.single_env import (
 
 @dataclass
 class CurriculumConfig:
+    """Configuration for sequential multi-environment training."""
+
     steps_per_environment: int = 50_000
     sequence_length: int = 64
     min_sequence_length: int = 32
@@ -40,6 +54,7 @@ class CurriculumConfig:
     cortical_config: CorticalModuleConfig = field(default_factory=CorticalModuleConfig)
 
     def as_single_environment_config(self) -> SingleEnvironmentConfig:
+        """Project curriculum settings into the single-environment training API."""
         return SingleEnvironmentConfig(
             total_steps=self.steps_per_environment,
             sequence_length=self.sequence_length,
@@ -63,16 +78,22 @@ class CurriculumConfig:
 
 @dataclass
 class EWCState:
+    """Stored Fisher information and parameter snapshot for one completed task."""
+
     fisher: dict[str, torch.Tensor]
     reference: dict[str, torch.Tensor]
 
 
 class EWCRegularizer:
+    """Elastic weight consolidation penalty accumulated across environments."""
+
     def __init__(self, lambda_: float = 0.0):
+        """Initialize an empty EWC regularizer with a given penalty strength."""
         self.lambda_ = float(lambda_)
         self.tasks: list[EWCState] = []
 
     def penalty(self, model: HippocampalPredictiveRNN) -> torch.Tensor | None:
+        """Compute the current quadratic EWC penalty for a model."""
         if self.lambda_ <= 0.0 or not self.tasks:
             return None
         named_parameters = dict(model.named_parameters())
@@ -91,6 +112,7 @@ class EWCRegularizer:
         *,
         seed: int,
     ) -> None:
+        """Estimate Fisher information after a task and store it for future penalties."""
         fisher: dict[str, torch.Tensor] = {
             name: torch.zeros_like(param, device=model.device)
             for name, param in model.named_parameters()
@@ -130,6 +152,7 @@ def greedy_similarity_order(
     *,
     start_env: str | None = None,
 ) -> list[str]:
+    """Choose a curriculum by repeatedly moving to the most similar remaining environment."""
     remaining = list(env_ids)
     order: list[str] = []
     if start_env is None:
@@ -148,11 +171,13 @@ def greedy_similarity_order(
 
 
 def random_curriculum_order(env_ids: Sequence[str], *, seed: int = 0) -> list[str]:
+    """Return a random curriculum order for a reproducible seed."""
     rng = np.random.default_rng(seed)
     return list(rng.permutation(env_ids))
 
 
 def _population_overlap_index(initial: Mapping[str, Any], final: Mapping[str, Any]) -> float:
+    """Measure how many originally tuned units preserve their peak bin after training."""
     initial_mask = np.asarray(initial["tuned_mask"], dtype=bool)
     final_mask = np.asarray(final["tuned_mask"], dtype=bool)
     shared = initial_mask & final_mask
@@ -175,6 +200,7 @@ def run_curriculum(
     frozen_readout_only: bool = False,
     use_cortical_prior: bool = False,
 ) -> dict[str, Any]:
+    """Train one model sequentially across a curriculum of environments."""
     if config is None:
         config = CurriculumConfig()
     spec_lookup = {spec.env_id: spec for spec in specs}
@@ -199,6 +225,7 @@ def run_curriculum(
         if cortical_model is not None and idx > 0:
             cortical_model.initialize_hippocampus(model)
 
+        # Evaluate transfer before training on the next environment.
         zero_shot = evaluate_model_in_environment(model, spec, single_env_config, seed=seed + idx + 50_000)
         result = train_single_environment(
             spec,
@@ -247,6 +274,7 @@ def run_curriculum(
     if first_env_reference is not None:
         population_overlap = _population_overlap_index(first_env_reference, pre_reexposure)
 
+    # Re-expose the network to the first environment to quantify recovery after interference.
     reexposure_config = config.as_single_environment_config()
     reexposure_config.total_steps = config.reexposure_steps
     reexposure_config.evaluation_interval = config.reexposure_steps

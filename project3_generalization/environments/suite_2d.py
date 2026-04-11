@@ -1,3 +1,17 @@
+"""
+File: project3_generalization/environments/suite_2d.py
+
+Description:
+Defines the 2-D environment library used throughout Project 3, along with
+rollout generation and optional visual-observation rendering.
+
+Role in system:
+This module is the main task-definition layer for the new codebase. Training
+loops consume `EnvironmentSpec2D` instances from here, evaluation code uses the
+same geometry for metrics, and the visual-input pipeline uses the tile-map
+renderer imported here.
+"""
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -51,6 +65,8 @@ DEFAULT_HEAD_DIRECTION_PARAMS: dict[str, Any] = {
 
 @dataclass(frozen=True)
 class RewardZone:
+    """Circular reward annotation attached to an environment specification."""
+
     center: tuple[float, float]
     radius: float
     value: float = 1.0
@@ -59,6 +75,8 @@ class RewardZone:
 
 @dataclass(frozen=True)
 class EnvironmentSpec2D:
+    """Immutable description of one 2-D arena and its annotated geometry."""
+
     env_id: str
     name: str
     category: str
@@ -72,6 +90,7 @@ class EnvironmentSpec2D:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def to_ratinabox_params(self) -> dict[str, Any]:
+        """Convert the arena specification into RatInABox constructor parameters."""
         params = {
             "boundary": [list(point) for point in self.boundary],
             "holes": [[list(point) for point in hole] for hole in self.holes],
@@ -82,10 +101,12 @@ class EnvironmentSpec2D:
         return params
 
     def build_environment(self) -> Environment:
+        """Instantiate a RatInABox environment from the stored geometry."""
         _require_ratinabox()
         return Environment(params=self.to_ratinabox_params())
 
     def create_agent(self, agent_params: Mapping[str, Any] | None = None) -> Agent:
+        """Instantiate a default RatInABox agent for this environment."""
         _require_ratinabox()
         params = dict(DEFAULT_AGENT_PARAMS)
         if agent_params:
@@ -95,6 +116,8 @@ class EnvironmentSpec2D:
 
 @dataclass
 class SimulationRollout2D:
+    """Container for one sampled trajectory and its associated observations."""
+
     env_id: str
     observations: np.ndarray
     actions: np.ndarray
@@ -109,6 +132,7 @@ class SimulationRollout2D:
 
 
 def _require_ratinabox(*, require_sensory: bool = False) -> None:
+    """Validate that the RatInABox dependency stack is available."""
     if Environment is None or Agent is None:
         raise ImportError(
             "RatInABox is required for the 2D environment suite. Install `ratinabox` first."
@@ -120,6 +144,7 @@ def _require_ratinabox(*, require_sensory: bool = False) -> None:
 
 
 def _set_seed(seed: int | None) -> None:
+    """Set NumPy's random seed when deterministic rollouts are requested."""
     if seed is not None:
         np.random.seed(seed)
 
@@ -127,6 +152,7 @@ def _set_seed(seed: int | None) -> None:
 def _to_spec_geometry(
     geom: Polygon,
 ) -> tuple[tuple[tuple[float, float], ...], tuple[tuple[tuple[float, float], ...], ...]]:
+    """Convert a Shapely polygon into serializable boundary and hole tuples."""
     cleaned = geom.buffer(0)
     if cleaned.geom_type != "Polygon":
         raise ValueError(f"Expected a Polygon, received {cleaned.geom_type}.")
@@ -151,6 +177,7 @@ def _make_spec(
     notes: str = "",
     metadata: Mapping[str, Any] | None = None,
 ) -> EnvironmentSpec2D:
+    """Helper for constructing an `EnvironmentSpec2D` from a Shapely geometry."""
     boundary, holes = _to_spec_geometry(geom)
     return EnvironmentSpec2D(
         env_id=env_id,
@@ -168,14 +195,17 @@ def _make_spec(
 
 
 def _square(side: float) -> Polygon:
+    """Construct a square polygon anchored at the origin."""
     return box(0.0, 0.0, side, side)
 
 
 def _rectangle(width: float, height: float) -> Polygon:
+    """Construct an axis-aligned rectangular polygon."""
     return box(0.0, 0.0, width, height)
 
 
 def _circle(radius: float, center: tuple[float, float] = (0.0, 0.0), resolution: int = 128) -> Polygon:
+    """Construct a circular polygon approximation."""
     return Point(*center).buffer(radius, resolution=resolution)
 
 
@@ -186,6 +216,7 @@ def _superellipse(
     n_points: int = 256,
     center: tuple[float, float] = (0.0, 0.0),
 ) -> Polygon:
+    """Construct a superellipse used for square-to-circle morph environments."""
     theta = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
@@ -195,12 +226,14 @@ def _superellipse(
 
 
 def _l_shape() -> Polygon:
+    """Construct the canonical L-shaped arena used as a key baseline."""
     full = box(0.0, 0.0, 0.75, 0.75)
     cutout = box(0.375, 0.375, 0.75, 0.75)
     return full.difference(cutout)
 
 
 def _t_maze(arm_length: float = 0.5, corridor_width: float = 0.15) -> Polygon:
+    """Construct a simple T-maze polygon from a stem and crossbar."""
     stem_x0 = arm_length
     stem = box(stem_x0, 0.0, stem_x0 + corridor_width, arm_length + corridor_width)
     bar = box(0.0, arm_length, (2 * arm_length) + corridor_width, arm_length + corridor_width)
@@ -208,6 +241,7 @@ def _t_maze(arm_length: float = 0.5, corridor_width: float = 0.15) -> Polygon:
 
 
 def _hairpin_maze(corridor_length: float = 0.7, corridor_width: float = 0.1, n_corridors: int = 5) -> Polygon:
+    """Construct a zig-zag hairpin maze as a buffered polyline."""
     y_levels = corridor_width / 2 + corridor_width * np.arange(n_corridors)
     x_left = corridor_width / 2
     x_right = corridor_length - corridor_width / 2
@@ -226,6 +260,7 @@ def _barrier_gap_walls(
     gap_center_x: float = 0.25,
     gap_width: float = 0.05,
 ) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    """Create interior wall segments that leave a narrow gap for passage."""
     left_end = gap_center_x - gap_width / 2
     right_start = gap_center_x + gap_width / 2
     return (
@@ -238,6 +273,7 @@ def _compartment_walls(
     side: float = 0.6,
     doorway_width: float = 0.15,
 ) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    """Create cross-shaped interior walls forming four compartments with doorways."""
     half = side / 2
     gap_half = doorway_width / 2
     return (
@@ -249,8 +285,10 @@ def _compartment_walls(
 
 
 def build_suite_2d(include_morph_series: bool = True) -> OrderedDict[str, EnvironmentSpec2D]:
+    """Build the predefined 2-D arena library used by Project 3 experiments."""
     suite: OrderedDict[str, EnvironmentSpec2D] = OrderedDict()
 
+    # Category A: simple convex baselines.
     suite["A1_square"] = _make_spec(
         "A1_square",
         "Unit Square",
@@ -282,6 +320,7 @@ def build_suite_2d(include_morph_series: bool = True) -> OrderedDict[str, Enviro
         metadata={"width": 1.0, "height": 0.5, "aspect_ratio": 2.0},
     )
 
+    # Category B: non-convex and compartmentalized layouts.
     suite["B1_l_shape"] = _make_spec(
         "B1_l_shape",
         "L-Shape",
@@ -312,6 +351,7 @@ def build_suite_2d(include_morph_series: bool = True) -> OrderedDict[str, Enviro
         notes="Four rooms connected by narrow doorways.",
     )
 
+    # Category C: functionally annotated and morphing environments.
     suite["C1_center_reward"] = _make_spec(
         "C1_center_reward",
         "Square + Single Central Reward Zone",
@@ -358,6 +398,7 @@ def build_suite_2d(include_morph_series: bool = True) -> OrderedDict[str, Enviro
                 metadata={"morph": morph_value, "superellipse_exponent": exponent},
             )
 
+    # Category D: topologically non-trivial environments with one or more holes.
     outer_annulus = _circle(0.45, center=(0.45, 0.45))
     inner_annulus = _circle(0.15, center=(0.45, 0.45))
     suite["D1_annulus"] = _make_spec(
@@ -391,6 +432,7 @@ def simulate_random_walk_2d(
     agent_params: Mapping[str, Any] | None = None,
     dt: float = DEFAULT_DT,
 ) -> tuple[Environment, Agent, np.ndarray, np.ndarray, np.ndarray]:
+    """Simulate a random walk and return the environment, agent, and sampled states."""
     _require_ratinabox()
     _set_seed(seed)
 
@@ -430,6 +472,7 @@ def collect_rollout_2d(
     tile_map_config: TileMapConfig | Mapping[str, Any] | None = None,
     include_head_direction: bool = True,
 ) -> SimulationRollout2D:
+    """Collect one 2-D rollout using either sensory or visual observations."""
     _require_ratinabox()
     _set_seed(seed)
 
@@ -481,6 +524,7 @@ def collect_rollout_2d(
 
     for step in range(n_steps + 1):
         if observation_mode == "visual":
+            # Visual mode samples an egocentric RGB patch aligned to the agent heading.
             patch = get_patch(agent, tile_map)
             visual_patches[step] = patch
             observations[step, : tile_map.visual_vector_size] = flatten_patch(patch)
@@ -518,6 +562,7 @@ def collect_rollout_2d(
 
 
 def _grid_centers(extent: Sequence[float], grid_size: int) -> np.ndarray:
+    """Enumerate evenly spaced grid-cell centers covering the environment extent."""
     left, right, bottom, top = extent
     xs = np.linspace(left, right, grid_size, endpoint=False) + (right - left) / (2 * grid_size)
     ys = np.linspace(bottom, top, grid_size, endpoint=False) + (top - bottom) / (2 * grid_size)
@@ -532,6 +577,7 @@ def validate_environment_2d(
     seed: int = 0,
     grid_size: int = 50,
 ) -> dict[str, Any]:
+    """Run a lightweight sanity check on environment accessibility and coverage."""
     _require_ratinabox(require_sensory=True)
     env, agent, positions, _, _ = simulate_random_walk_2d(spec, n_steps=n_steps, seed=seed)
     inside = np.array([env.check_if_position_is_in_environment(pos) for pos in positions], dtype=bool)

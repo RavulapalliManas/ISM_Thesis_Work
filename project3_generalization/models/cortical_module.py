@@ -1,3 +1,16 @@
+"""
+File: project3_generalization/models/cortical_module.py
+
+Description:
+Defines a slow-learning cortical prior that summarizes hippocampal hidden-state
+trajectories and can reinitialize recurrent dynamics for transfer experiments.
+
+Role in system:
+This module is only used in the two-module curriculum path. It augments the
+core hippocampal predictive RNN with a compact dynamical prior that is updated
+more slowly across environments.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,6 +23,8 @@ from project3_generalization.models.hippocampal_module import HippocampalPredict
 
 @dataclass
 class CorticalModuleConfig:
+    """Hyperparameters controlling the cortical prior's size and update schedule."""
+
     hippocampal_hidden_size: int = 500
     cortical_hidden_size: int = 100
     decoder_rank: int = 32
@@ -18,9 +33,10 @@ class CorticalModuleConfig:
 
 
 class CorticalRNNPrior(nn.Module):
-    """Slow-learning cortical module that builds a transferable prior over hippocampal dynamics."""
+    """Slow-learning recurrent prior over hippocampal hidden-state dynamics."""
 
     def __init__(self, config: CorticalModuleConfig | None = None):
+        """Initialize the cortical module and its low-rank recurrent decoder."""
         super().__init__()
         self.config = config or CorticalModuleConfig()
         hidden_size = self.config.hippocampal_hidden_size
@@ -38,6 +54,7 @@ class CorticalRNNPrior(nn.Module):
 
     @property
     def device(self) -> torch.device:
+        """Return the device currently hosting the cortical module parameters."""
         return next(self.parameters()).device
 
     def encode_sequence(
@@ -46,12 +63,14 @@ class CorticalRNNPrior(nn.Module):
         *,
         initial_state: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode a hippocampal hidden-state sequence into cortical latent states."""
         if hidden_sequence.ndim == 2:
             hidden_sequence = hidden_sequence.unsqueeze(0)
         outputs, state = self.rnn(hidden_sequence.to(self.device), initial_state)
         return outputs, state
 
     def infer_recurrent_matrix(self, cortical_state: torch.Tensor) -> torch.Tensor:
+        """Decode a low-rank approximation of a hippocampal recurrent matrix."""
         if cortical_state.ndim == 3:
             cortical_state = cortical_state[-1]
         cortical_state = cortical_state.reshape(cortical_state.shape[0], -1)
@@ -68,6 +87,7 @@ class CorticalRNNPrior(nn.Module):
         *,
         blend: float = 1.0,
     ) -> None:
+        """Blend the decoded cortical prior into a hippocampal recurrent matrix."""
         if self.last_state is None:
             return
         decoded = self.infer_recurrent_matrix(self.last_state)
@@ -76,6 +96,7 @@ class CorticalRNNPrior(nn.Module):
         hippocampal_module.apply_recurrent_matrix(blended)
 
     def train_on_hidden_sequence(self, hidden_sequence: torch.Tensor) -> dict[str, float]:
+        """Update the cortical module to predict the next hippocampal hidden state."""
         if hidden_sequence.ndim == 2:
             hidden_sequence = hidden_sequence.unsqueeze(0)
         hidden_sequence = hidden_sequence.to(self.device)
@@ -95,6 +116,7 @@ class CorticalRNNPrior(nn.Module):
         return {"loss": float(loss.detach().cpu())}
 
     def update_state_only(self, hidden_sequence: torch.Tensor) -> None:
+        """Advance the cortical latent state without taking an optimizer step."""
         if hidden_sequence.ndim == 2:
             hidden_sequence = hidden_sequence.unsqueeze(0)
         _, state = self.rnn(hidden_sequence.to(self.device), self.last_state)

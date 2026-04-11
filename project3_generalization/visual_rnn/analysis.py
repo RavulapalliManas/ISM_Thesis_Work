@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/visual_rnn/analysis.py
+
+Description:
+Post-run visualization helpers for the visual predictive-RNN pipeline.
+
+Role in system:
+These functions convert the raw outputs of a completed visual-input run into a
+compact analysis bundle containing plots, saved snapshots, and a human-readable
+summary.
+"""
+
 from __future__ import annotations
 
 import json
@@ -9,11 +21,13 @@ import numpy as np
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    """Serialize a JSON payload, creating parent directories when needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2))
 
 
 def plot_loss_curves(history: Sequence[Mapping[str, float]]) -> tuple[plt.Figure, plt.Axes]:
+    """Plot training and validation losses over epochs."""
     fig, ax = plt.subplots(figsize=(7, 4))
     epochs = [entry["epoch"] for entry in history]
     ax.plot(epochs, [entry["train_prediction_loss"] for entry in history], label="Train Prediction", linewidth=2)
@@ -28,6 +42,7 @@ def plot_loss_curves(history: Sequence[Mapping[str, float]]) -> tuple[plt.Figure
 
 
 def plot_decoding_error(history: Sequence[Mapping[str, float]]) -> tuple[plt.Figure, plt.Axes]:
+    """Plot position-decoding error over epochs."""
     fig, ax = plt.subplots(figsize=(7, 4))
     epochs = [entry["epoch"] for entry in history]
     ax.plot(epochs, [entry["decoder_normalized_rmse"] for entry in history], color="tab:red", linewidth=2)
@@ -39,6 +54,7 @@ def plot_decoding_error(history: Sequence[Mapping[str, float]]) -> tuple[plt.Fig
 
 
 def plot_visual_prediction(true_patch: np.ndarray, pred_patch: np.ndarray) -> tuple[plt.Figure, np.ndarray]:
+    """Show a target visual patch, its prediction, and the absolute error image."""
     fig, axes = plt.subplots(1, 3, figsize=(8, 3))
     error_patch = np.abs(pred_patch - true_patch)
     axes[0].imshow(true_patch)
@@ -59,6 +75,7 @@ def plot_trajectory_reconstruction(
     decoded_positions: np.ndarray,
     replay_positions: np.ndarray,
 ) -> tuple[plt.Figure, np.ndarray]:
+    """Plot decoded wake trajectories and replay trajectories in physical space."""
     fig, axes = plt.subplots(1, 2, figsize=(9, 4))
     axes[0].plot(true_positions[:, 0], true_positions[:, 1], color="black", linewidth=2, label="True")
     axes[0].plot(decoded_positions[:, 0], decoded_positions[:, 1], color="tab:blue", linewidth=2, alpha=0.85, label="Decoded")
@@ -81,6 +98,7 @@ def plot_hidden_embedding(
     *,
     method: str,
 ) -> tuple[plt.Figure, plt.Axes]:
+    """Scatter a two-dimensional embedding of hidden states."""
     fig, ax = plt.subplots(figsize=(5.5, 5))
     colors = np.linspace(0.0, 1.0, len(embedding))
     ax.scatter(embedding[:, 0], embedding[:, 1], c=colors, cmap="viridis", s=10, alpha=0.8)
@@ -97,6 +115,7 @@ def plot_sample_tuning_curves(
     *,
     max_units: int = 6,
 ) -> tuple[plt.Figure, np.ndarray]:
+    """Display the most spatially informative tuning curves from a run."""
     n_units = min(max_units, tuning_curves.shape[0])
     ranked = np.argsort(spatial_information)[::-1][:n_units]
     cols = 3
@@ -114,6 +133,7 @@ def plot_sample_tuning_curves(
 
 
 def summarize_run(history: Sequence[Mapping[str, float]], final_metrics: Mapping[str, Any]) -> dict[str, Any]:
+    """Produce a compact summary dictionary for a completed visual-input run."""
     last_entry = history[-1]
     stability_notes: list[str] = []
     if last_entry["val_prediction_loss"] > 1.25 * last_entry["train_prediction_loss"]:
@@ -144,7 +164,7 @@ def generate_post_run_analysis(
     history: Sequence[Mapping[str, float]],
     evaluation: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Generate plots and a summary for a completed visual-input experiment."""
+    """Generate plots, cached arrays, and a summary for a completed run."""
 
     run_path = Path(run_dir)
     plots_dir = run_path / "plots"

@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/experiments/run_curriculum.py
+
+Description:
+CLI entry point for multi-environment curriculum experiments.
+
+Role in system:
+Builds environment lists, computes structural similarity when needed, chooses a
+curriculum order, and delegates the actual optimization to the reusable
+curriculum training loop.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -17,6 +29,7 @@ from project3_generalization.training.curriculum import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the curriculum runner."""
     parser = argparse.ArgumentParser(description="Run Project 3 curriculum training.")
     parser.add_argument("--envs", nargs="*", default=None)
     parser.add_argument("--ordering", choices=["similarity", "random"], default="similarity")
@@ -35,12 +48,14 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_baseline_summary(path: str | None) -> dict | None:
+    """Load a baseline summary used as a scratch-learning reference."""
     if path is None:
         return None
     return json.loads(Path(path).read_text())
 
 
 def main() -> None:
+    """Run curriculum training and serialize a compact experiment summary."""
     start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_2d()

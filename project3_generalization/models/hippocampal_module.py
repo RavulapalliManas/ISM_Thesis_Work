@@ -1,3 +1,17 @@
+"""
+File: project3_generalization/models/hippocampal_module.py
+
+Description:
+Wraps the legacy predictive-RNN architectures in a Project 3-friendly module
+that supports configurable observation encoders, rollout losses, checkpointing,
+and hardware-aware training.
+
+Role in system:
+This is the central model abstraction for the new codebase. Training loops use
+it instead of directly touching the older `utils.Architectures` classes, which
+makes experiment code easier to configure and reason about.
+"""
+
 from __future__ import annotations
 
 from contextlib import nullcontext
@@ -18,6 +32,8 @@ from utils.lossFuns import predMSE
 
 @dataclass
 class HippocampalConfig:
+    """Hyperparameters for the hippocampal predictive-RNN wrapper."""
+
     obs_size: int = 76
     action_size: int = 3
     hidden_size: int = 500
@@ -49,7 +65,10 @@ class HippocampalConfig:
 
 
 class _ObservationAdapter(nn.Module):
+    """Base class for observation encoders/decoders wrapped around the recurrent core."""
+
     def __init__(self, input_size: int, output_size: int, visual_size: int, aux_size: int):
+        """Store input/output dimensionality for a concrete observation adapter."""
         super().__init__()
         self.input_size = int(input_size)
         self.output_size = int(output_size)
@@ -57,22 +76,28 @@ class _ObservationAdapter(nn.Module):
         self.aux_size = int(max(aux_size, 0))
 
     def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        """Encode raw observations into the latent space consumed by the recurrent core."""
         raise NotImplementedError
 
     def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode latent predictions back into the original observation space."""
         raise NotImplementedError
 
     def decoder_parameters(self):
+        """Return decoder parameters that should remain trainable in readout-only mode."""
         return []
 
     def _reshape_flat(self, value: torch.Tensor) -> tuple[torch.Tensor, tuple[int, ...]]:
+        """Flatten leading dimensions so adapters can process batches and sequences uniformly."""
         shape = value.shape[:-1]
         return value.reshape(-1, value.shape[-1]), shape
 
     def _restore_shape(self, value: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
+        """Restore a flattened tensor back to its original leading dimensions."""
         return value.reshape(*shape, value.shape[-1])
 
     def _constrain_output(self, decoded: torch.Tensor) -> torch.Tensor:
+        """Apply modality-appropriate output nonlinearities after decoding."""
         if self.visual_size <= 0:
             return decoded
         visual = torch.sigmoid(decoded[:, : self.visual_size])
@@ -83,17 +108,24 @@ class _ObservationAdapter(nn.Module):
 
 
 class _IdentityObservationAdapter(_ObservationAdapter):
+    """Adapter that leaves observations unchanged."""
+
     def __init__(self, input_size: int):
+        """Configure an identity mapping for already-suitable observation vectors."""
         super().__init__(input_size=input_size, output_size=input_size, visual_size=input_size, aux_size=0)
 
     def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        """Return the input observation tensor unchanged."""
         return observations
 
     def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        """Return the latent tensor unchanged."""
         return latent
 
 
 class _MLPObservationAdapter(_ObservationAdapter):
+    """Multi-layer perceptron adapter for vector observations."""
+
     def __init__(
         self,
         input_size: int,
@@ -102,6 +134,7 @@ class _MLPObservationAdapter(_ObservationAdapter):
         visual_size: int,
         aux_size: int,
     ):
+        """Build an MLP encoder/decoder pair around the recurrent core."""
         super().__init__(input_size=input_size, output_size=output_size, visual_size=visual_size, aux_size=aux_size)
         self.encoder = nn.Sequential(
             nn.Linear(input_size, hidden_size),
@@ -116,20 +149,25 @@ class _MLPObservationAdapter(_ObservationAdapter):
         )
 
     def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        """Encode raw observations with a feedforward MLP."""
         flat, shape = self._reshape_flat(observations)
         encoded = self.encoder(flat)
         return self._restore_shape(encoded, shape)
 
     def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode latent predictions with the MLP decoder."""
         flat, shape = self._reshape_flat(latent)
         decoded = self.decoder(flat)
         return self._restore_shape(self._constrain_output(decoded), shape)
 
     def decoder_parameters(self):
+        """Expose decoder parameters for readout-only fine-tuning."""
         return self.decoder.parameters()
 
 
 class _CNNObservationAdapter(_ObservationAdapter):
+    """Convolutional adapter for egocentric RGB patch observations."""
+
     def __init__(
         self,
         input_size: int,
@@ -140,6 +178,7 @@ class _CNNObservationAdapter(_ObservationAdapter):
         patch_width: int,
         channels: int,
     ):
+        """Build a CNN encoder/MLP decoder pair for flattened image-like observations."""
         if visual_size != patch_width * patch_width * channels:
             raise ValueError(
                 "CNN encoder expects the visual observation to match patch_width * patch_width * channels."
@@ -168,6 +207,7 @@ class _CNNObservationAdapter(_ObservationAdapter):
         )
 
     def encode(self, observations: torch.Tensor) -> torch.Tensor:
+        """Encode a flattened visual patch and optional auxiliary channels."""
         flat, shape = self._reshape_flat(observations)
         visual = flat[:, : self.visual_size].reshape(-1, self.channels, self.patch_width, self.patch_width)
         conv_features = self.conv(visual)
@@ -178,18 +218,21 @@ class _CNNObservationAdapter(_ObservationAdapter):
         return self._restore_shape(encoded, shape)
 
     def decode(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode latent predictions back into flattened visual observations."""
         flat, shape = self._reshape_flat(latent)
         decoded = self.decoder(flat)
         return self._restore_shape(self._constrain_output(decoded), shape)
 
     def decoder_parameters(self):
+        """Expose decoder parameters for readout-only fine-tuning."""
         return self.decoder.parameters()
 
 
 class HippocampalPredictiveRNN(nn.Module):
-    """Predictive RNN wrapper with optional visual encoders and rollout loss."""
+    """Predictive RNN wrapper with optional encoders, rollout loss, and checkpointing."""
 
     def __init__(self, config: HippocampalConfig | None = None):
+        """Initialize the wrapped predictive RNN and its optimizer state."""
         super().__init__()
         self.config = config or HippocampalConfig()
         if not hasattr(architectures, self.config.pRNNtype):
@@ -221,6 +264,7 @@ class HippocampalPredictiveRNN(nn.Module):
         self.grad_scaler = torch.amp.GradScaler(device="cuda", enabled=self._amp_enabled)
 
     def _build_observation_adapter(self) -> _ObservationAdapter:
+        """Instantiate the observation adapter selected by the configuration."""
         encoder_type = self.config.encoder_type.lower()
         output_size = int(self.config.encoder_output_size or max(self.config.encoder_hidden_size // 2, 64))
         if encoder_type == "identity":
@@ -246,11 +290,13 @@ class HippocampalPredictiveRNN(nn.Module):
         raise ValueError(f"Unsupported encoder type `{self.config.encoder_type}`.")
 
     def _resolve_device(self) -> torch.device:
+        """Choose the explicit device from config or fall back to CUDA when available."""
         if self.config.device is not None:
             return torch.device(self.config.device)
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     def _build_optimizer(self) -> torch.optim.Optimizer:
+        """Construct the optimizer with legacy-style layerwise learning-rate scaling."""
         rootk_h = (1.0 / self.config.hidden_size) ** 0.5
         rootk_i = (1.0 / self.core.rnn.cell.input_size) ** 0.5
         parameter_groups = [
@@ -288,22 +334,27 @@ class HippocampalPredictiveRNN(nn.Module):
 
     @property
     def device(self) -> torch.device:
+        """Return the device on which the recurrent core currently lives."""
         return self.core.W.device
 
     def _autocast_context(self):
+        """Return an AMP autocast context when mixed precision is enabled."""
         if not self._amp_enabled:
             return nullcontext()
         return torch.autocast(device_type="cuda", dtype=self._amp_dtype)
 
     def _initial_state(self) -> torch.Tensor:
+        """Create a zero recurrent state with the configured hidden width."""
         return torch.zeros((1, 1, self.config.hidden_size), dtype=torch.float32, device=self.device)
 
     def set_recurrence_scale(self, scale: float) -> None:
+        """Update the multiplicative scale applied to the recurrent matrix during forward passes."""
         if self._recurrence_scaled:
             self._remove_recurrence_scale()
         self.recurrence_scale = float(scale)
 
     def _apply_recurrence_scale(self) -> None:
+        """Temporarily scale recurrent weights for ablation experiments."""
         if self.recurrence_scale == 1.0 or self._recurrence_scaled:
             return
         with torch.no_grad():
@@ -311,6 +362,7 @@ class HippocampalPredictiveRNN(nn.Module):
         self._recurrence_scaled = True
 
     def _remove_recurrence_scale(self) -> None:
+        """Undo a temporary recurrent-weight scaling after a forward pass."""
         if self.recurrence_scale == 1.0 or not self._recurrence_scaled:
             return
         with torch.no_grad():
@@ -318,6 +370,7 @@ class HippocampalPredictiveRNN(nn.Module):
         self._recurrence_scaled = False
 
     def _to_tensor(self, value: torch.Tensor | Any) -> torch.Tensor:
+        """Convert arbitrary array-like input into a float tensor on the model device."""
         if isinstance(value, torch.Tensor):
             return value.to(self.device, dtype=torch.float32)
         return torch.as_tensor(value, dtype=torch.float32, device=self.device)
@@ -327,6 +380,7 @@ class HippocampalPredictiveRNN(nn.Module):
         observations: torch.Tensor | Any,
         actions: torch.Tensor | Any,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Ensure observations and actions have an explicit batch dimension."""
         obs = self._to_tensor(observations)
         act = self._to_tensor(actions)
         if obs.ndim == 2:
@@ -337,6 +391,7 @@ class HippocampalPredictiveRNN(nn.Module):
 
     @staticmethod
     def collapse_hidden(hidden: torch.Tensor, reduce: str = "mean") -> torch.Tensor:
+        """Reduce a theta/batch dimension in hidden states for downstream analyses."""
         if hidden.ndim == 2:
             return hidden
         if hidden.ndim != 3:
@@ -348,11 +403,13 @@ class HippocampalPredictiveRNN(nn.Module):
         raise ValueError(f"Unknown hidden-state reduction `{reduce}`.")
 
     def _mask_from_layout(self, outmask: Any, length: int) -> np.ndarray:
+        """Normalize the architecture-specific output mask into a boolean array."""
         if isinstance(outmask, (bool, np.bool_)):
             return np.full(length, bool(outmask), dtype=bool)
         return np.asarray(outmask, dtype=bool)
 
     def _apply_output_mask(self, predictions: torch.Tensor, mask_chunk: np.ndarray) -> torch.Tensor:
+        """Zero out time steps that should not contribute predictions or losses."""
         if mask_chunk.all():
             return predictions
         masked = torch.zeros_like(predictions)
@@ -360,6 +417,7 @@ class HippocampalPredictiveRNN(nn.Module):
         return masked
 
     def _align_raw_targets(self, observations: torch.Tensor, actions: torch.Tensor, mask: np.ndarray) -> torch.Tensor:
+        """Align raw observation targets with the legacy architecture's temporal offsets."""
         action_inputs = self.core.actpad(actions)
         raw_target = observations[:, self.core.predOffset :, :]
         minsize = min(observations.size(1), action_inputs.size(1), raw_target.size(1))
@@ -371,6 +429,7 @@ class HippocampalPredictiveRNN(nn.Module):
         observations: torch.Tensor,
         actions: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray, torch.Tensor]:
+        """Prepare encoded inputs, encoded targets, raw targets, and masks for one sequence."""
         encoded_observations = self.observation_adapter.encode(observations)
         x_t, encoded_target, outmask = self.core.restructure_inputs(encoded_observations, actions)
         mask = self._mask_from_layout(outmask, encoded_target.shape[1])
@@ -378,6 +437,7 @@ class HippocampalPredictiveRNN(nn.Module):
         return x_t, encoded_target, raw_target, mask, encoded_observations
 
     def _run_recurrent_chunk(self, x_chunk: torch.Tensor, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward one chunk through the recurrent core."""
         return self.core.rnn(x_chunk, state=state)
 
     def _forward_chunk(
@@ -387,6 +447,7 @@ class HippocampalPredictiveRNN(nn.Module):
         *,
         training: bool,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Optionally checkpoint one recurrent chunk to trade compute for memory."""
         use_checkpoint = bool(training and self.config.gradient_checkpointing)
         if use_checkpoint:
             if not x_chunk.requires_grad:
@@ -401,6 +462,7 @@ class HippocampalPredictiveRNN(nn.Module):
         *,
         training: bool,
     ) -> dict[str, torch.Tensor | np.ndarray]:
+        """Run teacher-forced prediction over a sequence and collect intermediate tensors."""
         x_t, encoded_target, raw_target, outmask, encoded_observations = self._sequence_layout(observations, actions)
         total_length = max(int(x_t.shape[1]), 1)
         chunk_length = max(1, min(int(self.config.chunk_length), total_length))
@@ -443,6 +505,7 @@ class HippocampalPredictiveRNN(nn.Module):
         actions: torch.Tensor,
         teacher_outputs: dict[str, torch.Tensor | np.ndarray],
     ) -> torch.Tensor:
+        """Compute multi-step rollout loss beyond the teacher-forced one-step objective."""
         if self.config.rollout_loss_weight <= 0.0 or self.config.rollout_steps <= 1:
             return torch.zeros((), dtype=torch.float32, device=self.device)
 
@@ -463,6 +526,7 @@ class HippocampalPredictiveRNN(nn.Module):
                 target_index = start + base_offset + step_ahead - 1
                 if action_index >= actions.shape[1] or target_index >= observations.shape[1]:
                     break
+                # In masked mode the rollout must rely purely on internal dynamics and actions.
                 obs_input = torch.zeros_like(latent_pred) if self.config.rollout_mode == "masked" else latent_pred
                 x_input = torch.cat([obs_input, actions[:, action_index : action_index + 1, :]], dim=-1)
                 with self._autocast_context():
@@ -482,6 +546,7 @@ class HippocampalPredictiveRNN(nn.Module):
         *,
         ewc_penalty: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
+        """Assemble prediction, rollout, latent-alignment, and optional EWC losses."""
         teacher_outputs = self._forward_teacher_forced(observations, actions, training=self.training)
         decoded_predictions = teacher_outputs["decoded_predictions"]
         raw_targets = teacher_outputs["raw_targets"]
@@ -509,6 +574,7 @@ class HippocampalPredictiveRNN(nn.Module):
         }
 
     def zero_grad(self) -> None:
+        """Clear optimizer gradients using PyTorch's set-to-none convention."""
         self.optimizer.zero_grad(set_to_none=True)
 
     def backward_on_batch(
@@ -519,6 +585,7 @@ class HippocampalPredictiveRNN(nn.Module):
         ewc_penalty: torch.Tensor | None = None,
         loss_scale: float = 1.0,
     ) -> dict[str, float]:
+        """Backpropagate sequence losses for one batch without stepping the optimizer."""
         obs, act = self._ensure_batched_inputs(observations, actions)
         self.train()
         losses = self._compute_sequence_losses(obs, act, ewc_penalty=ewc_penalty)
@@ -530,6 +597,7 @@ class HippocampalPredictiveRNN(nn.Module):
         return {key: float(value.detach().cpu()) for key, value in losses.items()}
 
     def optimizer_step(self, *, gradient_clip: float | None = None) -> None:
+        """Apply one optimizer step, including optional gradient clipping and AMP handling."""
         if gradient_clip is not None:
             if self._amp_enabled:
                 self.grad_scaler.unscale_(self.optimizer)
@@ -545,6 +613,7 @@ class HippocampalPredictiveRNN(nn.Module):
         observations: torch.Tensor | Any,
         actions: torch.Tensor | Any,
     ) -> dict[str, float]:
+        """Evaluate loss terms for one batch without updating parameters."""
         obs, act = self._ensure_batched_inputs(observations, actions)
         self.eval()
         with torch.no_grad():
@@ -559,6 +628,7 @@ class HippocampalPredictiveRNN(nn.Module):
         reduce_hidden: str | None = None,
         no_grad: bool = True,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return decoded predictions, aligned targets, and hidden states for one batch."""
         obs, act = self._ensure_batched_inputs(observations, actions)
         context = torch.no_grad() if no_grad else torch.enable_grad()
         with context:
@@ -580,6 +650,7 @@ class HippocampalPredictiveRNN(nn.Module):
         ewc_penalty: torch.Tensor | None = None,
         gradient_clip: float | None = None,
     ) -> dict[str, float]:
+        """Run a full train step for one batch and return scalar loss components."""
         self.zero_grad()
         metrics = self.backward_on_batch(observations, actions, ewc_penalty=ewc_penalty)
         self.optimizer_step(gradient_clip=gradient_clip)
@@ -593,6 +664,7 @@ class HippocampalPredictiveRNN(nn.Module):
         noise_mean: float = 0.0,
         reduce_hidden: str | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Generate spontaneous activity by driving the recurrent core with internal noise."""
         noise_std = self.config.spontaneous_noise_std if noise_std is None else noise_std
         noise_t = noise_mean + noise_std * torch.randn(
             (1, timesteps, self.config.hidden_size),
@@ -614,16 +686,20 @@ class HippocampalPredictiveRNN(nn.Module):
         return obs_pred, hidden
 
     def recurrent_matrix(self) -> torch.Tensor:
+        """Return a detached copy of the recurrent weight matrix."""
         return self.core.W.detach().clone()
 
     def apply_recurrent_matrix(self, matrix: torch.Tensor | Any) -> None:
+        """Overwrite the recurrent matrix with externally supplied weights."""
         with torch.no_grad():
             self.core.W.copy_(torch.as_tensor(matrix, dtype=self.core.W.dtype, device=self.device))
 
     def freeze_recurrent_weights(self) -> None:
+        """Freeze only the recurrent matrix parameters."""
         self.core.W.requires_grad_(False)
 
     def freeze_all_but_readout(self) -> None:
+        """Freeze the model except for readout and observation-decoder parameters."""
         for param in self.parameters():
             param.requires_grad_(False)
         self.core.W_out.requires_grad_(True)
@@ -631,19 +707,24 @@ class HippocampalPredictiveRNN(nn.Module):
             param.requires_grad_(True)
 
     def unfreeze_all(self) -> None:
+        """Mark all parameters as trainable again."""
         for param in self.parameters():
             param.requires_grad_(True)
 
     def named_regularizable_parameters(self) -> list[tuple[str, nn.Parameter]]:
+        """Return trainable parameters eligible for regularization terms such as EWC."""
         return [(name, param) for name, param in self.named_parameters() if param.requires_grad]
 
     def parameter_snapshot(self) -> dict[str, torch.Tensor]:
+        """Capture a detached clone of every parameter tensor."""
         return {name: param.detach().clone() for name, param in self.named_parameters()}
 
     def memory_stats(self) -> dict[str, float]:
+        """Return current CUDA memory statistics for the model device."""
         return gpu_memory_snapshot(self.device)
 
     def save_checkpoint(self, path: str | Path) -> None:
+        """Serialize the model, optimizer, scaler, and recurrence settings to disk."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
@@ -664,6 +745,7 @@ class HippocampalPredictiveRNN(nn.Module):
         *,
         map_location: str | torch.device = "cpu",
     ) -> "HippocampalPredictiveRNN":
+        """Load a checkpoint and reconstruct a configured model instance."""
         checkpoint_blob = torch.load(path, map_location=map_location)
         model = cls(HippocampalConfig(**checkpoint_blob["config"]))
         model.load_state_dict(checkpoint_blob["state_dict"])

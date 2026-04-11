@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/experiments/run_hardware_constrained.py
+
+Description:
+CLI entry point for hardware-budgeted Project 3 runs.
+
+Role in system:
+This is the most operational experiment launcher in the package. It loads a
+hardware-aware config, builds baseline or curriculum settings, logs phase
+timings, and writes reproducible JSON summaries for constrained workstations.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -23,6 +35,7 @@ from project3_generalization.training.single_env import SingleEnvironmentConfig,
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the hardware-constrained runner."""
     parser = argparse.ArgumentParser(description="Run one hardware-constrained Project 3 experiment.")
     parser.add_argument("--mode", choices=["baseline", "curriculum"], default="baseline")
     parser.add_argument("--envs", nargs="*", default=None)
@@ -35,12 +48,14 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _default_envs(mode: str) -> list[str]:
+    """Return the default environment subset for a given run mode."""
     if mode == "curriculum":
         return ["A1_square", "B1_l_shape", "C3_barrier_gap"]
     return ["B1_l_shape"]
 
 
 def _build_model_config(hardware_config, *, sequence_length: int, hidden_size: int) -> HippocampalConfig:
+    """Project hardware-budget settings into a hippocampal model configuration."""
     return HippocampalConfig(
         hidden_size=hidden_size,
         truncation=sequence_length,
@@ -52,6 +67,7 @@ def _build_model_config(hardware_config, *, sequence_length: int, hidden_size: i
 
 
 def main() -> None:
+    """Execute a baseline or curriculum run under explicit hardware constraints."""
     args = _parse_args()
     hardware_config = load_hardware_config(args.hardware_config)
     suite = build_suite_2d()

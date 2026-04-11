@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/experiments/run_baselines.py
+
+Description:
+CLI entry point for single-environment baseline experiments.
+
+Role in system:
+Thin orchestration layer that turns command-line arguments into a baseline
+training configuration, executes the shared training loop, and emits a compact
+JSON summary.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +27,7 @@ from project3_generalization.training.single_env import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the baseline runner."""
     parser = argparse.ArgumentParser(description="Run single-environment baselines for Project 3.")
     parser.add_argument("--envs", nargs="*", default=None, help="Optional subset of environment ids.")
     parser.add_argument("--total-steps", type=int, default=100_000)
@@ -27,6 +40,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run the baseline experiment suite and optionally save a JSON summary."""
     start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_2d()

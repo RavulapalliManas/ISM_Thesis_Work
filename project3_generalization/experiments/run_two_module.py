@@ -1,3 +1,14 @@
+"""
+File: project3_generalization/experiments/run_two_module.py
+
+Description:
+CLI entry point for the cortical-plus-hippocampal curriculum experiment.
+
+Role in system:
+This script mirrors the standard curriculum runner but enables the slow
+cortical prior defined in `models/cortical_module.py`.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -12,6 +23,7 @@ from project3_generalization.training.curriculum import CurriculumConfig, greedy
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the two-module runner."""
     parser = argparse.ArgumentParser(description="Run the two-module cortical+hippocampal curriculum.")
     parser.add_argument("--envs", nargs="*", default=None)
     parser.add_argument("--seed", type=int, default=0)
@@ -26,6 +38,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Run the two-module curriculum experiment and print/save its summary."""
     start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_2d()

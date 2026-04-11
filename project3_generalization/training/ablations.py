@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/training/ablations.py
+
+Description:
+Implements recurrence-strength ablations for Project 3.
+
+Role in system:
+Wraps the baseline and curriculum training loops so the same experiment can be
+rerun under different recurrent-weight scaling factors without duplicating
+training code.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,6 +23,8 @@ from project3_generalization.training.single_env import SingleEnvironmentConfig,
 
 @dataclass
 class AblationConfig:
+    """Configuration for sweeping recurrent scaling factors across one or more seeds."""
+
     recurrence_scales: tuple[float, ...] = (0.3, 0.7, 1.0, 1.5)
     seeds: tuple[int, ...] = (0,)
     mode: str = "single_env"
@@ -26,6 +40,7 @@ def run_recurrence_ablation(
     curriculum_order: Sequence[str] | None = None,
     scratch_reference: Mapping[str, Mapping[str, float]] | None = None,
 ) -> dict[float, list[dict[str, Any]]]:
+    """Run a recurrence-scale sweep in either single-environment or curriculum mode."""
     if config is None:
         config = AblationConfig()
     spec_lookup = {spec.env_id: spec for spec in specs}

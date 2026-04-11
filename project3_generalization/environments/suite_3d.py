@@ -1,3 +1,16 @@
+"""
+File: project3_generalization/environments/suite_3d.py
+
+Description:
+Lightweight 3-D environment and navigator scaffolding for exploratory Project 3
+experiments.
+
+Role in system:
+This module does not yet implement the full 3-D predictive-RNN training stack.
+Instead, it provides simple environment specifications, motion models, and
+handcrafted sensory populations so 3-D analyses can be prototyped cheaply.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,6 +21,8 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Obstacle3D:
+    """Axis-aligned obstacle specification for simple 3-D arenas."""
+
     kind: str
     center: tuple[float, float, float]
     size: tuple[float, float, float]
@@ -15,6 +30,8 @@ class Obstacle3D:
 
 @dataclass(frozen=True)
 class EnvironmentSpec3D:
+    """Geometric description of a 3-D environment and its movement constraints."""
+
     env_id: str
     name: str
     bounds: tuple[float, float, float]
@@ -26,10 +43,12 @@ class EnvironmentSpec3D:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def clip(self, position: np.ndarray) -> np.ndarray:
+        """Clamp a position to the environment bounds and project it onto the valid surface."""
         clipped = np.clip(np.asarray(position, dtype=float), a_min=0.0, a_max=np.asarray(self.bounds, dtype=float))
         return self.project_to_surface(clipped)
 
     def contains(self, position: np.ndarray) -> bool:
+        """Return whether a position lies inside the accessible portion of the environment."""
         position = np.asarray(position, dtype=float)
         if np.any(position < 0.0) or np.any(position > np.asarray(self.bounds, dtype=float)):
             return False
@@ -39,6 +58,7 @@ class EnvironmentSpec3D:
         return True
 
     def project_to_surface(self, position: np.ndarray) -> np.ndarray:
+        """Project a point onto the environment's allowed movement manifold."""
         position = np.asarray(position, dtype=float)
         if self.surface_type == "volume":
             return position
@@ -68,6 +88,7 @@ class EnvironmentSpec3D:
 
 
 def _inside_obstacle(position: np.ndarray, obstacle: Obstacle3D) -> bool:
+    """Check whether a 3-D point lies inside a simple obstacle primitive."""
     center = np.asarray(obstacle.center, dtype=float)
     size = np.asarray(obstacle.size, dtype=float)
     delta = position - center
@@ -82,6 +103,7 @@ def _inside_obstacle(position: np.ndarray, obstacle: Obstacle3D) -> bool:
 
 
 def _rotation_matrix_z(theta: float) -> np.ndarray:
+    """Construct a 3-D rotation matrix around the vertical axis."""
     return np.array(
         [
             [np.cos(theta), -np.sin(theta), 0.0],
@@ -92,6 +114,8 @@ def _rotation_matrix_z(theta: float) -> np.ndarray:
 
 
 class BaseNavigator3D:
+    """Base class for stochastic 3-D navigation policies."""
+
     def __init__(
         self,
         environment: EnvironmentSpec3D,
@@ -101,6 +125,7 @@ class BaseNavigator3D:
         sigma: float = 0.15,
         seed: int | None = None,
     ):
+        """Initialize a navigator with Ornstein-Uhlenbeck velocity dynamics."""
         self.environment = environment
         self.dt = dt
         self.tau = tau
@@ -110,16 +135,20 @@ class BaseNavigator3D:
         self.velocity = np.zeros(3, dtype=float)
 
     def _ou_step(self, velocity: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+        """Advance a velocity vector by one Ornstein-Uhlenbeck step."""
         noise = self.rng.normal(size=3)
         drift = -(velocity / max(self.tau, 1e-9))
         diffusion = sigma * np.sqrt(2.0 / max(self.tau, 1e-9)) * noise
         return velocity + self.dt * drift + np.sqrt(self.dt) * diffusion
 
     def step(self) -> tuple[np.ndarray, np.ndarray]:
+        """Advance the navigator by one time step and return position and velocity."""
         raise NotImplementedError
 
 
 class SurfaceNavigator3D(BaseNavigator3D):
+    """Navigator with reduced vertical movement to mimic surface-constrained travel."""
+
     def __init__(
         self,
         environment: EnvironmentSpec3D,
@@ -129,12 +158,14 @@ class SurfaceNavigator3D(BaseNavigator3D):
         sigma_z: float | None = None,
         **kwargs: Any,
     ):
+        """Configure anisotropic motion with weaker movement along the vertical axis."""
         super().__init__(environment, sigma=sigma_xy, **kwargs)
         self.alpha = alpha
         self.sigma_xy = sigma_xy
         self.sigma_z = sigma_xy * alpha if sigma_z is None else sigma_z
 
     def step(self) -> tuple[np.ndarray, np.ndarray]:
+        """Advance one step while damping vertical velocity relative to horizontal motion."""
         sigma = np.array([self.sigma_xy, self.sigma_xy, self.sigma_z], dtype=float)
         self.velocity = self._ou_step(self.velocity, sigma)
         self.velocity[2] = self.alpha * self.velocity[2]
@@ -143,7 +174,10 @@ class SurfaceNavigator3D(BaseNavigator3D):
 
 
 class VolumetricNavigator3D(BaseNavigator3D):
+    """Navigator that moves isotropically throughout a volumetric arena."""
+
     def step(self) -> tuple[np.ndarray, np.ndarray]:
+        """Advance one step and reflect weakly when a proposal leaves valid space."""
         sigma = np.array([self.sigma, self.sigma, self.sigma], dtype=float)
         self.velocity = self._ou_step(self.velocity, sigma)
         proposed = self.position + self.velocity * self.dt
@@ -156,6 +190,8 @@ class VolumetricNavigator3D(BaseNavigator3D):
 
 
 class PlaceCells3D:
+    """Simple Gaussian place-cell population for 3-D positions."""
+
     def __init__(
         self,
         environment: EnvironmentSpec3D,
@@ -165,6 +201,7 @@ class PlaceCells3D:
         alpha: float = 1.0,
         seed: int = 0,
     ):
+        """Sample place-field centers and configure isotropic or anisotropic width."""
         self.environment = environment
         self.n = n
         self.sigma = sigma
@@ -173,6 +210,7 @@ class PlaceCells3D:
         self.centers = rng.uniform(low=0.0, high=np.asarray(environment.bounds), size=(n, 3))
 
     def get_state(self, positions: np.ndarray) -> np.ndarray:
+        """Evaluate the place-cell population at one or more 3-D positions."""
         positions = np.asarray(positions, dtype=float).reshape(-1, 3)
         delta = positions[:, None, :] - self.centers[None, :, :]
         delta[..., 2] = delta[..., 2] / max(self.alpha, 1e-9)
@@ -181,17 +219,21 @@ class PlaceCells3D:
 
 
 class HeadDirectionCells3D:
+    """Head-direction tuning over the sphere using evenly spread preferred axes."""
+
     def __init__(
         self,
         *,
         n: int = 36,
         angular_sigma: float = np.deg2rad(30),
     ):
+        """Create a spherical head-direction code with Gaussian angular tuning."""
         self.n = n
         self.angular_sigma = angular_sigma
         self.preferred_directions = _fibonacci_sphere(n)
 
     def get_state(self, head_vectors: np.ndarray) -> np.ndarray:
+        """Evaluate head-direction firing rates for normalized 3-D heading vectors."""
         head_vectors = np.asarray(head_vectors, dtype=float).reshape(-1, 3)
         head_vectors = head_vectors / (np.linalg.norm(head_vectors, axis=1, keepdims=True) + 1e-12)
         cos_angle = np.clip(head_vectors @ self.preferred_directions.T, -1.0, 1.0)
@@ -200,6 +242,8 @@ class HeadDirectionCells3D:
 
 
 class BoundaryVectorCells3D:
+    """Boundary-vector cell approximation based on the nearest enclosing surface."""
+
     def __init__(
         self,
         environment: EnvironmentSpec3D,
@@ -209,6 +253,7 @@ class BoundaryVectorCells3D:
         sigma_angle: float = np.deg2rad(45),
         seed: int = 0,
     ):
+        """Initialize preferred distances and directions for the BVC population."""
         self.environment = environment
         self.n = n
         self.sigma_distance = sigma_distance
@@ -218,6 +263,7 @@ class BoundaryVectorCells3D:
         self.preferred_directions = _fibonacci_sphere(n)
 
     def _nearest_boundary(self, positions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return the distance and outward normal of the nearest axis-aligned wall."""
         bounds = np.asarray(self.environment.bounds, dtype=float)
         distances = np.stack(
             [
@@ -246,6 +292,7 @@ class BoundaryVectorCells3D:
         return nearest_dist, nearest_dir
 
     def get_state(self, positions: np.ndarray) -> np.ndarray:
+        """Evaluate boundary-vector responses at one or more positions."""
         positions = np.asarray(positions, dtype=float).reshape(-1, 3)
         nearest_dist, nearest_dir = self._nearest_boundary(positions)
         nearest_dir = nearest_dir / (np.linalg.norm(nearest_dir, axis=1, keepdims=True) + 1e-12)
@@ -257,6 +304,7 @@ class BoundaryVectorCells3D:
 
 
 def _fibonacci_sphere(n: int) -> np.ndarray:
+    """Generate approximately uniform directions on the unit sphere."""
     indices = np.arange(n, dtype=float) + 0.5
     phi = np.arccos(1 - 2 * indices / n)
     theta = np.pi * (1 + 5**0.5) * indices
@@ -274,6 +322,7 @@ def simulate_navigator_3d(
     seed: int = 0,
     **navigator_kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Simulate a navigator through an environment and record positions and velocities."""
     navigator = navigator_cls(environment, seed=seed, **navigator_kwargs)
     positions = np.zeros((n_steps + 1, 3), dtype=float)
     velocities = np.zeros((n_steps, 3), dtype=float)
@@ -295,6 +344,7 @@ def collect_rollout_3d(
     place_alpha: float = 1.0,
     **navigator_kwargs: Any,
 ) -> dict[str, np.ndarray]:
+    """Generate a rollout with simple 3-D place, head-direction, and boundary codes."""
     positions, velocities = simulate_navigator_3d(environment, navigator_cls, n_steps, seed=seed, **navigator_kwargs)
     place_cells = PlaceCells3D(environment, n=n_place, alpha=place_alpha, seed=seed)
     head_cells = HeadDirectionCells3D(n=n_hd)
@@ -319,6 +369,7 @@ def collect_rollout_3d(
 
 
 def build_suite_3d() -> dict[str, EnvironmentSpec3D]:
+    """Return the predefined set of exploratory 3-D environments."""
     return {
         "3D_1_cubic_lattice": EnvironmentSpec3D(
             env_id="3D_1_cubic_lattice",

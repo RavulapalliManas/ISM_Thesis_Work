@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/evaluation/topology.py
+
+Description:
+Persistent-homology helpers for characterizing the topology of neural state
+clouds.
+
+Role in system:
+Used by Project 3 evaluation code to estimate Betti numbers and related
+topological summaries from sampled hidden-state embeddings.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -16,6 +28,7 @@ def subsample_point_cloud(
     *,
     seed: int = 0,
 ) -> np.ndarray:
+    """Randomly downsample a point cloud before topology computation."""
     if points.shape[0] <= max_points:
         return points
     rng = np.random.default_rng(seed)
@@ -30,6 +43,7 @@ def persistent_homology(
     max_points: int = 1_000,
     seed: int = 0,
 ) -> dict[str, Any]:
+    """Run `ripser` on a sampled hidden-state cloud and return the raw diagrams."""
     if ripser is None:
         raise ImportError("ripser is required for persistent homology metrics.")
     cloud = subsample_point_cloud(np.asarray(hidden_states, dtype=float), max_points=max_points, seed=seed)
@@ -41,6 +55,7 @@ def betti_numbers_from_diagrams(
     *,
     persistence_fraction_threshold: float = 0.1,
 ) -> dict[str, Any]:
+    """Convert persistence diagrams into coarse Betti-number estimates."""
     betti: dict[str, Any] = {}
     for dim, diagram in enumerate(diagrams):
         if diagram.size == 0:
@@ -65,6 +80,7 @@ def compute_betti_numbers(
     seed: int = 0,
     persistence_fraction_threshold: float = 0.1,
 ) -> dict[str, Any]:
+    """Compute persistent homology and package derived Betti-number summaries."""
     result = persistent_homology(
         hidden_states,
         maxdim=maxdim,

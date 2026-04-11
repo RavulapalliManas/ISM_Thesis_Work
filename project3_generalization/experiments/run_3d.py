@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/experiments/run_3d.py
+
+Description:
+CLI entry point for lightweight 3-D navigation simulations and simple field
+anisotropy analysis.
+
+Role in system:
+Provides a low-cost exploratory runner for the 3-D scaffold without invoking
+the full predictive-RNN training stack.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -19,6 +31,7 @@ from project3_generalization.hardware import gpu_memory_snapshot
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the 3-D simulation runner."""
     parser = argparse.ArgumentParser(description="Run lightweight 3D environment simulations.")
     parser.add_argument("--env-id", type=str, default="3D_2_volumetric_room")
     parser.add_argument("--navigator", choices=["surface", "volume"], default="volume")
@@ -30,6 +43,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Simulate a 3-D navigator, compute place-cell anisotropy, and save the result."""
     start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_3d()

@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/visual_rnn/model.py
+
+Description:
+Convenience builder for a `HippocampalConfig` tuned to the visual-input
+pipeline.
+
+Role in system:
+Keeps the visual experiment defaults in one place so the training script and
+JSON configs can stay concise.
+"""
+
 from __future__ import annotations
 
 from project3_generalization.models.hippocampal_module import HippocampalConfig, HippocampalPredictiveRNN
@@ -19,7 +31,7 @@ def build_visual_model_config(
     amp_dtype: str = "float16",
     gradient_checkpointing: bool = True,
 ) -> HippocampalConfig:
-    """Build a visual-input config for the predictive RNN."""
+    """Build a model configuration tailored to egocentric RGB patch inputs."""
 
     head_direction_size = 2 if include_head_direction else 0
     return HippocampalConfig(

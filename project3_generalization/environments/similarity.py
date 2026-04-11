@@ -1,3 +1,16 @@
+"""
+File: project3_generalization/environments/similarity.py
+
+Description:
+Structural-similarity utilities for comparing 2-D environments through sampled
+transition dynamics and successor representations.
+
+Role in system:
+This module is the bridge between environment geometry and curriculum design.
+It estimates how similar two arenas are in terms of navigational structure and
+feeds those similarities to curriculum ordering and transfer analysis.
+"""
+
 from __future__ import annotations
 
 import multiprocessing as mp
@@ -19,12 +32,15 @@ from project3_generalization.environments.suite_2d import (
 
 
 def _default_num_workers() -> int:
+    """Choose a conservative default number of worker processes."""
     cpu_count = os.cpu_count() or 1
     return max(1, min(6, cpu_count - 2))
 
 
 @dataclass(frozen=True)
 class SimilarityConfig:
+    """Numerical settings for transition and successor-representation estimation."""
+
     num_steps: int = 25_000
     grid_size: int = 30
     gamma: float = 0.9
@@ -39,6 +55,8 @@ class SimilarityConfig:
 
 @dataclass
 class TransitionEstimate:
+    """Container for one environment's sampled transition structure and SR."""
+
     env_id: str
     transition_matrix: sparse.csr_matrix
     successor_representation: np.ndarray | None
@@ -47,6 +65,7 @@ class TransitionEstimate:
     successor_representation_path: str | None = None
 
     def load_successor_representation(self) -> np.ndarray:
+        """Load the successor representation, whether stored in memory or on disk."""
         if self.successor_representation is not None:
             return np.asarray(self.successor_representation)
         if self.successor_representation_path is None:
@@ -59,6 +78,7 @@ def _positions_to_grid_indices(
     extent: Sequence[float],
     grid_size: int,
 ) -> np.ndarray:
+    """Map continuous 2-D positions onto flattened grid-state indices."""
     left, right, bottom, top = extent
     width = max(right - left, 1e-9)
     height = max(top - bottom, 1e-9)
@@ -77,6 +97,7 @@ def estimate_transition_matrix(
     seed: int | None = None,
     dt: float = DEFAULT_DT,
 ) -> tuple[sparse.csr_matrix, np.ndarray, np.ndarray]:
+    """Estimate a discounted multi-step transition matrix from sampled trajectories."""
     env, _, positions, _, _ = simulate_random_walk_2d(
         spec,
         n_steps=num_steps,
@@ -90,6 +111,7 @@ def estimate_transition_matrix(
     counts = sparse.lil_matrix((n_states, n_states), dtype=np.float32)
     max_lag = max(1, temporal_horizon)
     for lag in range(1, max_lag + 1):
+        # Later transitions contribute less, approximating a finite-horizon SR kernel.
         weight = float(gamma ** (lag - 1))
         sources = flat_indices[:-lag]
         targets = flat_indices[lag:]
@@ -116,6 +138,7 @@ def _cg_solve(
     tolerance: float,
     max_iter: int,
 ) -> np.ndarray:
+    """Solve a sparse linear system with a slightly more permissive fallback."""
     try:
         solution, info = sparse_linalg.cg(matrix, rhs, rtol=tolerance, atol=0.0, maxiter=max_iter)
     except TypeError:
@@ -136,6 +159,7 @@ def compute_successor_representation(
     max_iter: int = 1_500,
     output_path: str | Path | None = None,
 ) -> np.ndarray:
+    """Solve for the grid-level successor representation from a transition matrix."""
     n_states = transition_matrix.shape[0]
     system = sparse.eye(n_states, format="csr", dtype=np.float32) - (gamma * transition_matrix).tocsr().astype(np.float32)
     normal_matrix = (system.T @ system).tocsr() + sparse.eye(n_states, format="csr", dtype=np.float32) * 1e-5
@@ -148,6 +172,7 @@ def compute_successor_representation(
         sr = np.lib.format.open_memmap(output_path, mode="w+", dtype=np.float32, shape=(n_states, n_states))
 
     for state_idx in range(n_states):
+        # Each column corresponds to the discounted future occupancy starting from one state.
         rhs = np.asarray(system.getrow(state_idx).toarray()).ravel()
         sr[:, state_idx] = _cg_solve(normal_matrix, rhs, tolerance=tolerance, max_iter=max_iter)
 
@@ -162,6 +187,7 @@ def estimate_environment_structure(
     *,
     seed: int | None = None,
 ) -> TransitionEstimate:
+    """Estimate both transition and successor-representation structure for one arena."""
     transition, occupancy, extent = estimate_transition_matrix(
         spec,
         num_steps=config.num_steps,
@@ -194,11 +220,13 @@ def estimate_environment_structure(
 def _estimate_environment_structure_worker(
     payload: tuple[EnvironmentSpec2D, dict, int],
 ) -> TransitionEstimate:
+    """Worker wrapper so environment structure can be estimated in parallel."""
     spec, config_dict, seed = payload
     return estimate_environment_structure(spec, SimilarityConfig(**config_dict), seed=seed)
 
 
 def compute_structural_similarity(sr_a: np.ndarray | Path | str, sr_b: np.ndarray | Path | str) -> float:
+    """Compare two successor representations with a normalized Frobenius metric."""
     matrix_a = np.load(sr_a, mmap_mode="r") if isinstance(sr_a, (str, Path)) else np.asarray(sr_a)
     matrix_b = np.load(sr_b, mmap_mode="r") if isinstance(sr_b, (str, Path)) else np.asarray(sr_b)
     numerator = np.linalg.norm(matrix_a - matrix_b, ord="fro")
@@ -214,6 +242,7 @@ def compute_similarity_matrix(
     output_path: str | Path | None = None,
     return_estimates: bool = False,
 ) -> tuple[np.ndarray, list[str], dict[str, TransitionEstimate]] | tuple[np.ndarray, list[str]]:
+    """Compute the pairwise structural-similarity matrix for a set of environments."""
     if specs is None:
         specs = list(build_suite_2d().values())
     if config is None:

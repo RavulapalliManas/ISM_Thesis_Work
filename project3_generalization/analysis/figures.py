@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/analysis/figures.py
+
+Description:
+Lightweight plotting helpers for Project 3 summary figures.
+
+Role in system:
+These utilities are used after training and evaluation to visualize structural
+similarity matrices, transfer trends, and learning curves without coupling
+plotting code to the experiment runners.
+"""
+
 from __future__ import annotations
 
 from typing import Sequence
@@ -7,6 +19,7 @@ import numpy as np
 
 
 def plot_similarity_matrix(similarity: np.ndarray, env_ids: Sequence[str]) -> tuple[plt.Figure, plt.Axes]:
+    """Render a heat map of pairwise structural similarity across environments."""
     fig, ax = plt.subplots(figsize=(8, 7))
     im = ax.imshow(similarity, cmap="viridis", vmin=np.nanmin(similarity), vmax=np.nanmax(similarity))
     ax.set_xticks(range(len(env_ids)))
@@ -25,6 +38,7 @@ def plot_transfer_vs_similarity(
     *,
     title: str = "Transfer Efficiency vs Structural Similarity",
 ) -> tuple[plt.Figure, plt.Axes]:
+    """Scatter transfer efficiency against structural similarity with a linear trend line."""
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.scatter(similarity_values, transfer_values, color="black", alpha=0.8)
     if len(similarity_values) >= 2:
@@ -39,6 +53,7 @@ def plot_transfer_vs_similarity(
 
 
 def plot_learning_curve(history: Sequence[dict]) -> tuple[plt.Figure, plt.Axes]:
+    """Plot sRSA as a function of cumulative training steps for one run."""
     fig, ax = plt.subplots(figsize=(6, 4))
     steps = [entry["trained_steps"] for entry in history]
     srsa = [entry["sRSA"] for entry in history]

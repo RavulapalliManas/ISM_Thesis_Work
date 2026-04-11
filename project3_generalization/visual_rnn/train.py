@@ -1,3 +1,15 @@
+"""
+File: project3_generalization/visual_rnn/train.py
+
+Description:
+Single-run training pipeline for visual-input predictive-RNN experiments.
+
+Role in system:
+This is the highest-level implementation of the visual branch. It glues
+together environment rollouts, tile-map rendering, model training, dashboard
+logging, checkpointing, and post-run analysis into one reproducible run.
+"""
+
 from __future__ import annotations
 
 import csv
@@ -31,11 +43,13 @@ from project3_generalization.visual_rnn.renderer import TileMapConfig, build_til
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    """Write a JSON payload to disk, creating parent directories when needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2))
 
 
 def _maybe_tensorboard_writer(log_dir: Path):
+    """Create a TensorBoard writer when the dependency is available."""
     try:
         from torch.utils.tensorboard import SummaryWriter
     except ImportError:
@@ -47,6 +61,7 @@ class DashboardLogger:
     """Small wrapper for live TensorBoard or W&B logging."""
 
     def __init__(self, config: "DashboardConfig", run_dir: Path, run_id: str):
+        """Initialize optional dashboard backends for one training run."""
         self.backend = config.backend
         self.enabled = bool(config.enabled)
         self.update_every_n_steps = max(int(config.update_every_n_steps), 1)
@@ -77,6 +92,7 @@ class DashboardLogger:
             raise ValueError(f"Unsupported dashboard backend `{self.backend}`.")
 
     def log_scalars(self, metrics: Mapping[str, float], step: int) -> None:
+        """Log scalar metrics to the configured backend, if enabled."""
         if not self.enabled:
             return
         if self.writer is not None:
@@ -87,6 +103,7 @@ class DashboardLogger:
             self._wandb.log({key: float(value) for key, value in metrics.items()}, step=step)
 
     def log_figure(self, tag: str, figure: plt.Figure, step: int) -> None:
+        """Log a Matplotlib figure and ensure it is closed afterward."""
         if not self.enabled:
             plt.close(figure)
             return
@@ -98,6 +115,7 @@ class DashboardLogger:
         plt.close(figure)
 
     def close(self) -> None:
+        """Close any open dashboard resources."""
         if self.writer is not None:
             self.writer.close()
         if self._wandb is not None:
@@ -106,6 +124,8 @@ class DashboardLogger:
 
 @dataclass
 class DashboardConfig:
+    """Configuration for optional experiment dashboards such as TensorBoard or W&B."""
+
     enabled: bool = True
     backend: str = "tensorboard"
     update_every_n_steps: int = 5
@@ -115,11 +135,14 @@ class DashboardConfig:
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any] | None) -> "DashboardConfig":
+        """Construct a dashboard config from a decoded mapping."""
         return cls(**dict(mapping or {}))
 
 
 @dataclass
 class ExperimentConfig:
+    """Configuration for one visual-input predictive-RNN run."""
+
     run_name: str = "visual_predictive_rnn"
     output_root: str = "results"
     env_id: str = "B1_l_shape"
@@ -143,6 +166,7 @@ class ExperimentConfig:
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any] | None = None) -> "ExperimentConfig":
+        """Build an experiment config from a JSON-like mapping."""
         mapping = dict(mapping or {})
         include_head_direction = bool(mapping.get("include_head_direction", True))
         default_model = asdict(build_visual_model_config(include_head_direction=include_head_direction))
@@ -172,11 +196,14 @@ class ExperimentConfig:
 
     @classmethod
     def from_json(cls, path: str | Path) -> "ExperimentConfig":
+        """Load an experiment config from a JSON file on disk."""
         return cls.from_mapping(json.loads(Path(path).read_text()))
 
 
 @dataclass
 class RunResult:
+    """Summary object returned after a complete visual-input run."""
+
     run_id: str
     run_dir: str
     best_checkpoint: str
@@ -198,6 +225,7 @@ def set_global_seeds(seed: int) -> None:
 
 
 def _make_run_dir(config: ExperimentConfig) -> tuple[str, Path]:
+    """Create the run directory structure and return its identifier."""
     run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{config.run_name}_{config.env_id}_seed{config.seed}"
     run_dir = Path(config.output_root) / run_id
     (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
@@ -207,17 +235,20 @@ def _make_run_dir(config: ExperimentConfig) -> tuple[str, Path]:
 
 
 def _rollout_to_tensors(rollout, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Convert one rollout into batched tensors on the target device."""
     obs = torch.as_tensor(rollout.observations[None, ...], dtype=torch.float32, device=device)
     act = torch.as_tensor(rollout.actions[None, ...], dtype=torch.float32, device=device)
     return obs, act
 
 
 def _mean_metrics(metrics: list[dict[str, float]]) -> dict[str, float]:
+    """Average a list of per-batch metric dictionaries."""
     keys = metrics[0].keys()
     return {key: float(np.mean([entry[key] for entry in metrics])) for key in keys}
 
 
 def _trajectory_smoothness(hidden_states: np.ndarray) -> float:
+    """Score hidden trajectories by penalizing large second-order temporal differences."""
     if len(hidden_states) < 3:
         return 1.0
     step_delta = np.diff(hidden_states, axis=0)
@@ -226,6 +257,7 @@ def _trajectory_smoothness(hidden_states: np.ndarray) -> float:
 
 
 def _position_decoder(hidden_states: np.ndarray, positions: np.ndarray) -> tuple[Ridge, dict[str, float], np.ndarray]:
+    """Fit a simple linear decoder from hidden states to 2-D position."""
     split = max(int(0.7 * len(hidden_states)), 4)
     split = min(split, len(hidden_states) - 1)
     decoder = Ridge(alpha=1.0)
@@ -241,6 +273,7 @@ def _position_decoder(hidden_states: np.ndarray, positions: np.ndarray) -> tuple
 
 
 def _hidden_embedding(hidden_states: np.ndarray, seed: int) -> tuple[np.ndarray, str, float]:
+    """Compute a 2-D embedding for visualization, preferring UMAP when available."""
     sample_limit = min(len(hidden_states), 1500)
     if len(hidden_states) > sample_limit:
         rng = np.random.default_rng(seed)
@@ -266,6 +299,7 @@ def _evaluate_epoch(
     *,
     epoch: int,
 ) -> tuple[dict[str, float], dict[str, Any]]:
+    """Run validation and produce both scalar metrics and plotting artifacts."""
     val_batches: list[dict[str, float]] = []
     for seq_idx in range(config.val_sequences_per_epoch):
         val_rollout = collect_rollout_2d(
@@ -342,6 +376,7 @@ def _evaluate_epoch(
 
 
 def _append_history_row(csv_path: Path, row: Mapping[str, float], *, write_header: bool) -> None:
+    """Append one metrics row to the CSV training log."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     with csv_path.open("a", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(row.keys()))
@@ -409,6 +444,7 @@ def run_single_experiment(
                 )
                 batch_count += 1
                 if batch_count == config.batch_size or seq_idx == config.train_sequences_per_epoch - 1:
+                    # Gradients are accumulated over multiple short rollouts to emulate batch training.
                     model.optimizer_step(gradient_clip=config.gradient_clip)
                     optimizer_metrics = _mean_metrics(batch_metrics)
                     train_metrics.append(optimizer_metrics)

@@ -1,3 +1,16 @@
+"""
+File: project3_generalization/hardware.py
+
+Description:
+Defines resource-budget dataclasses and helper utilities for hardware-aware
+Project 3 experiments.
+
+Role in system:
+Centralizes decisions about GPU/CPU limits, sequence lengths, worker counts,
+and output directories so experiment launchers can derive consistent runtime
+configurations from a single config file.
+"""
+
 from __future__ import annotations
 
 import json
@@ -13,12 +26,15 @@ import torch
 
 
 def _default_max_workers() -> int:
+    """Choose a conservative default worker count that leaves some CPUs free."""
     cpu_count = os.cpu_count() or 1
     return max(1, min(6, cpu_count - 2))
 
 
 @dataclass
 class MemoryBudget:
+    """Memory limits used to keep experiments within workstation constraints."""
+
     vram_budget_gb: float = 5.5
     ram_budget_gb: float = 14.0
     gpu_buffer_gb: float = 0.5
@@ -26,6 +42,8 @@ class MemoryBudget:
 
 @dataclass
 class ExecutionBudget:
+    """Execution-time controls such as AMP, checkpointing, and rollout parallelism."""
+
     amp_enabled: bool = True
     amp_dtype: str = "float16"
     gradient_checkpointing: bool = True
@@ -38,6 +56,8 @@ class ExecutionBudget:
 
 @dataclass
 class SimilarityBudget:
+    """Numerical settings for structural-similarity estimation."""
+
     num_steps: int = 25_000
     grid_size: int = 30
     gamma: float = 0.9
@@ -49,6 +69,8 @@ class SimilarityBudget:
 
 @dataclass
 class BaselineBudget:
+    """Training/evaluation settings for single-environment baselines."""
+
     total_steps: int = 100_000
     sequence_length: int = 64
     min_sequence_length: int = 32
@@ -62,6 +84,8 @@ class BaselineBudget:
 
 @dataclass
 class CurriculumBudget:
+    """Settings for multi-environment curriculum experiments."""
+
     steps_per_environment: int = 50_000
     max_environments: int = 3
     evaluation_interval: int = 5_000
@@ -71,6 +95,8 @@ class CurriculumBudget:
 
 @dataclass
 class MetricBudget:
+    """Sampling limits for expensive evaluation metrics."""
+
     srsa_max_samples: int = 2_000
     cka_batch_size: int = 256
     betti_max_points: int = 1_000
@@ -79,18 +105,24 @@ class MetricBudget:
 
 @dataclass
 class TwoModuleBudget:
+    """Hyperparameters specific to the cortical-prior experiments."""
+
     cortical_hidden_size: int = 100
     update_every_n_calls: int = 2
 
 
 @dataclass
 class AblationBudget:
+    """Default recurrence scales and target environment for ablation sweeps."""
+
     recurrence_scales: tuple[float, ...] = (0.3, 0.7, 1.0, 1.5)
     target_env_id: str = "B1_l_shape"
 
 
 @dataclass
 class ThreeDBudget:
+    """Budget settings for lightweight 3-D exploratory runs."""
+
     enabled_by_default: bool = False
     hidden_size: int = 600
     max_steps: int = 150_000
@@ -99,6 +131,8 @@ class ThreeDBudget:
 
 @dataclass
 class HardwareConfig:
+    """Top-level hardware-aware experiment configuration."""
+
     output_root: str = "project3_generalization/results/hardware_constrained"
     memory: MemoryBudget = field(default_factory=MemoryBudget)
     execution: ExecutionBudget = field(default_factory=ExecutionBudget)
@@ -112,6 +146,7 @@ class HardwareConfig:
 
     @classmethod
     def from_mapping(cls, mapping: Mapping[str, Any]) -> "HardwareConfig":
+        """Construct a `HardwareConfig` from a decoded JSON/YAML mapping."""
         return cls(
             output_root=str(mapping.get("output_root", cls.output_root)),
             memory=MemoryBudget(**mapping.get("memory", {})),
@@ -130,11 +165,13 @@ class HardwareConfig:
 
 
 def load_hardware_config(path: str | Path) -> HardwareConfig:
+    """Load a hardware configuration file from disk."""
     raw = json.loads(Path(path).read_text())
     return HardwareConfig.from_mapping(raw)
 
 
 def gpu_memory_snapshot(device: torch.device | None = None) -> dict[str, float]:
+    """Return current and peak CUDA memory usage in megabytes."""
     if not torch.cuda.is_available():
         return {
             "memory_allocated_mb": 0.0,
@@ -154,12 +191,16 @@ def gpu_memory_snapshot(device: torch.device | None = None) -> dict[str, float]:
 
 
 class PhaseLogger:
+    """Measure runtime and GPU usage for named experiment phases."""
+
     def __init__(self, device: torch.device | None = None):
+        """Initialize an empty phase logger for a specific device."""
         self.device = device
         self.records: dict[str, dict[str, Any]] = {}
 
     @contextmanager
     def phase(self, name: str) -> Iterator[None]:
+        """Context manager that records runtime and memory before/after a block."""
         start = time.perf_counter()
         start_memory = gpu_memory_snapshot(self.device)
         try:
@@ -180,6 +221,7 @@ def make_output_directory(
     env_ids: list[str],
     seed: int,
 ) -> Path:
+    """Create a timestamped output directory for one experiment run."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     stem = "_".join(env_ids[:3]) if env_ids else "no_env"
     output_dir = Path(root) / f"{timestamp}_{mode}_seed{seed}_{stem}"
@@ -188,6 +230,7 @@ def make_output_directory(
 
 
 def write_json(path: str | Path, payload: Mapping[str, Any]) -> None:
+    """Write a JSON payload to disk, creating parent directories as needed."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2))

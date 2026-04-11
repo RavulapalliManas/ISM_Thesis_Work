@@ -1,3 +1,16 @@
+"""
+File: project3_generalization/visual_rnn/renderer.py
+
+Description:
+Tile-based renderer that turns a 2-D environment specification into a discrete
+RGB map and egocentric visual patches.
+
+Role in system:
+This module underlies the visual-input branch of Project 3. It converts
+geometry into image-like observations that can be consumed by the CNN-equipped
+hippocampal model.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,7 +41,7 @@ _DEFAULT_WALL_COLOR = (0.12, 0.12, 0.14)
 
 @dataclass(frozen=True)
 class TileMapConfig:
-    """Configuration for the tile-based visual renderer."""
+    """Configuration for discretizing a 2-D arena into an RGB tile map."""
 
     tile_size: float = 0.05
     patch_size: int = 7
@@ -43,7 +56,7 @@ class TileMapConfig:
 
 @dataclass
 class TileMap:
-    """Discrete RGB environment overlay used for egocentric patch rendering."""
+    """Discrete RGB overlay from which egocentric patches are sampled."""
 
     env_id: str
     extent: tuple[float, float, float, float]
@@ -56,21 +69,26 @@ class TileMap:
 
     @property
     def height(self) -> int:
+        """Return the grid height in tiles."""
         return int(self.rgb_grid.shape[0])
 
     @property
     def width(self) -> int:
+        """Return the grid width in tiles."""
         return int(self.rgb_grid.shape[1])
 
     @property
     def wall_color(self) -> np.ndarray:
+        """Return the wall color as a float32 RGB vector."""
         return np.asarray(self.config.wall_color, dtype=np.float32)
 
     @property
     def visual_vector_size(self) -> int:
+        """Return the flattened size of one egocentric patch."""
         return int(self.config.patch_size * self.config.patch_size * self.config.channels)
 
     def world_to_index(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Map world coordinates to tile indices and flag whether they land inside the grid."""
         pts = np.asarray(points, dtype=np.float32)
         left, right, bottom, top = self.extent
         width = max(right - left, 1e-9)
@@ -88,6 +106,7 @@ class TileMap:
         return x_idx, y_idx, inside
 
     def sample(self, points: np.ndarray) -> np.ndarray:
+        """Sample RGB values at world coordinates, using wall color outside the map."""
         x_idx, y_idx, inside = self.world_to_index(points)
         colors = np.repeat(self.wall_color[None, :], len(points), axis=0)
         if np.any(inside):
@@ -95,10 +114,12 @@ class TileMap:
         return colors.astype(np.float32, copy=False)
 
     def as_image(self) -> np.ndarray:
+        """Return the full tile map in display-ready image coordinates."""
         return np.flipud(self.rgb_grid).astype(np.float32, copy=False)
 
 
 def _spec_to_polygon(spec: EnvironmentSpec2D) -> Polygon:
+    """Convert an environment specification into a cleaned Shapely polygon."""
     polygon = Polygon(spec.boundary, holes=spec.holes).buffer(0)
     if polygon.geom_type != "Polygon":
         raise ValueError(f"Expected polygonal environment for `{spec.env_id}`, got {polygon.geom_type}.")
@@ -106,6 +127,7 @@ def _spec_to_polygon(spec: EnvironmentSpec2D) -> Polygon:
 
 
 def _valid_candidate_points(spec: EnvironmentSpec2D, polygon: Polygon) -> list[tuple[float, float]]:
+    """Choose landmark candidate locations that are well-spaced and inside the arena."""
     candidates: list[tuple[float, float]] = []
     candidates.extend(tuple(map(float, obj)) for obj in spec.objects)
     candidates.extend(tuple(map(float, zone.center)) for zone in spec.reward_zones)
@@ -139,6 +161,7 @@ def _valid_candidate_points(spec: EnvironmentSpec2D, polygon: Polygon) -> list[t
 
 
 def _base_floor_color(ix: int, iy: int, width: int, height: int, config: TileMapConfig) -> np.ndarray:
+    """Generate a deterministic textured floor color for one tile."""
     palette = np.asarray(config.floor_palette, dtype=np.float32)
     accents = np.asarray(config.accent_palette, dtype=np.float32)
     macro_zone = ((ix // max(width // 3, 1)) + 2 * (iy // max(height // 3, 1))) % len(palette)
@@ -163,6 +186,7 @@ def _apply_landmark_pattern(
     pattern_id: int,
     config: TileMapConfig,
 ) -> None:
+    """Stamp a colored landmark motif around one landmark center."""
     accents = np.asarray(config.accent_palette, dtype=np.float32)
     radius = int(max(config.landmark_radius_tiles, 1))
     primary = accents[pattern_id % len(accents)]
@@ -200,7 +224,7 @@ def build_tile_map(
     spec: EnvironmentSpec2D,
     config: TileMapConfig | Mapping[str, Any] | None = None,
 ) -> TileMap:
-    """Create a discrete RGB overlay for a 2-D RatInABox environment."""
+    """Create a tile map that visually encodes the arena boundary, walls, and landmarks."""
 
     config = TileMapConfig(**dict(config)) if isinstance(config, dict) else (config or TileMapConfig())
     polygon = _spec_to_polygon(spec)
@@ -261,6 +285,7 @@ def build_tile_map(
 
 
 def _normalize_heading(head_direction: Sequence[float] | np.ndarray) -> np.ndarray:
+    """Normalize a 2-D heading vector and fall back to +x when ill-defined."""
     heading = np.asarray(head_direction, dtype=np.float32)
     if heading.shape != (2,):
         raise ValueError(f"Expected 2-D head direction, got shape {heading.shape}.")
@@ -275,7 +300,7 @@ def get_patch_from_state(
     head_direction: Sequence[float] | np.ndarray,
     tile_map: TileMap,
 ) -> np.ndarray:
-    """Render a bottom-middle-aligned egocentric patch from position and heading."""
+    """Render an egocentric RGB patch from position and heading."""
 
     position_xy = np.asarray(position, dtype=np.float32)
     if position_xy.shape != (2,):
@@ -285,6 +310,7 @@ def get_patch_from_state(
     right = np.asarray([heading[1], -heading[0]], dtype=np.float32)
 
     half_width = tile_map.config.patch_size // 2
+    # The bottom-middle pixel corresponds to the agent's current location and heading.
     row_offsets = np.arange(tile_map.config.patch_size - 1, -1, -1, dtype=np.float32)
     col_offsets = np.arange(-half_width, half_width + 1, dtype=np.float32)
     lateral, forward = np.meshgrid(col_offsets, row_offsets, indexing="xy")
@@ -298,7 +324,7 @@ def get_patch_from_state(
 
 
 def get_patch(agent: Any, tile_map: TileMap) -> np.ndarray:
-    """Render a 7x7x3 egocentric patch from a RatInABox agent instance."""
+    """Render an egocentric patch from a RatInABox agent-like object."""
 
     if not hasattr(agent, "pos") or not hasattr(agent, "head_direction"):
         raise AttributeError("Agent must expose `pos` and `head_direction` fields.")
@@ -306,7 +332,7 @@ def get_patch(agent: Any, tile_map: TileMap) -> np.ndarray:
 
 
 def flatten_patch(patch: np.ndarray) -> np.ndarray:
-    """Flatten a 7x7x3 patch into a 147-D vector."""
+    """Flatten a patch into the vector format consumed by the model."""
 
     return np.asarray(patch, dtype=np.float32).reshape(-1)
 

@@ -1,3 +1,14 @@
+"""
+File: project3_generalization/experiments/run_ablation.py
+
+Description:
+CLI entry point for recurrence-strength ablation experiments.
+
+Role in system:
+Converts command-line options into an `AblationConfig`, optionally computes a
+curriculum order, and then reuses the shared ablation harness.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -14,6 +25,7 @@ from project3_generalization.training.single_env import SingleEnvironmentConfig
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for recurrence ablations."""
     parser = argparse.ArgumentParser(description="Run recurrence-strength ablations.")
     parser.add_argument("--mode", choices=["curriculum", "single_env"], default="single_env")
     parser.add_argument("--envs", nargs="*", default=None)
@@ -27,6 +39,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Execute the ablation sweep and serialize a summary keyed by recurrence scale."""
     start = time.perf_counter()
     args = _parse_args()
     suite = build_suite_2d()
