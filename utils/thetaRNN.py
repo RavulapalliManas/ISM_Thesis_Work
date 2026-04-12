@@ -48,13 +48,70 @@ class thetaRNNLayer(nn.Module):
         if theta is None:
             theta = self.theta
         
+        if theta == 0:
+            return self._forward_batched(input=input, internal=internal, state=state)
+        return self._forward_theta(input=input, internal=internal, state=state, theta=theta)
+
+    def _forward_batched(
+        self,
+        input: Tensor = torch.tensor([]),
+        internal: Tensor = torch.tensor([]),
+        state: Tensor = torch.tensor([]),
+    ) -> Tuple[Tensor, Tensor]:
+        """Run the recurrent layer with true batch semantics when theta=0."""
+
+        if input.size(0) == 0:
+            input = torch.zeros(
+                internal.size(0),
+                internal.size(1),
+                self.cell.input_size,
+                device=self.cell.weight_hh.device,
+            )
+        if state.size(0) == 0:
+            state = torch.zeros(
+                1,
+                input.size(0),
+                self.cell.hidden_size,
+                device=self.cell.weight_hh.device,
+            )
+        if internal.size(0) == 0:
+            internal = torch.zeros(
+                input.size(0),
+                input.size(1),
+                self.cell.hidden_size,
+                device=self.cell.weight_hh.device,
+            )
+
+        inputs = input.unbind(1)
+        internals = internal.unbind(1)
+        state_tuple = (torch.squeeze(state, 0), 0)
+        outputs = []
+
+        for i in range(len(inputs)):
+            if np.mod(i, self.trunc) == 0 and i > 0:
+                state_tuple = tuple(component.detach() if torch.is_tensor(component) else component for component in state_tuple)
+            out, state_tuple = self.cell(inputs[i], internals[i], state_tuple)
+            outputs.append(out)
+
+        state_out = torch.unsqueeze(state_tuple[0], 0)
+        return torch.stack(outputs, 1), state_out
+
+    def _forward_theta(
+        self,
+        input: Tensor = torch.tensor([]),
+        internal: Tensor = torch.tensor([]),
+        state: Tensor = torch.tensor([]),
+        theta: int = 0,
+    ) -> Tuple[Tensor, Tensor]:
+        """Run the legacy theta rollout path used by the original architecture family."""
+
         if input.size(0)==0:
             input = torch.zeros(internal.size(0),internal.size(1),self.cell.input_size,
                                 device=self.cell.weight_hh.device)
         if state.size(0)==0:
-            state = torch.zeros(1,1,self.cell.hidden_size, #1 beacuse no batches...
+            state = torch.zeros(1,1,self.cell.hidden_size,
                                 device=self.cell.weight_hh.device)
-        if internal.size(0)==0: # TODO: check this
+        if internal.size(0)==0:
             internal = torch.zeros(theta+1,input.size(1),self.cell.hidden_size,
                                    device=self.cell.weight_hh.device)
         
@@ -62,37 +119,33 @@ class thetaRNNLayer(nn.Module):
             input = nn.functional.pad(input=input, pad=(0,0,0,0,0,theta), 
                                     mode='constant', value=0)   
         
-        #Consider unbind twice, rather than indexing later...
         inputs = input.unbind(1)
         internals = internal.unbind(1)
-        state = (torch.squeeze(state,0),0) #To match RNN builtin
-        #outputs = torch.jit.annotate(List[Tensor], [])
+        state_tuple = (torch.squeeze(state,0),0)
         outputs = []
         
         for i in range(len(inputs)):
             if np.mod(i,self.trunc)==0 and i>0:
-                #state = (state[0].detach(),) #Truncated BPTT
-                state = [i.detach() for i in state]
+                state_tuple = tuple(component.detach() if torch.is_tensor(component) else component for component in state_tuple)
                 
-            out, state = self.cell(torch.unsqueeze(inputs[i][0,:],0), 
-                                   internals[i][0,:], state)
+            out, state_tuple = self.cell(torch.unsqueeze(inputs[i][0,:],0), 
+                                         internals[i][0,:], state_tuple)
                 
-            state_th = state
+            state_th = state_tuple
             out = [out]
             for th in range(theta):
                 out_th, state_th = self.cell(torch.unsqueeze(inputs[i][th+1,:],0), 
                                              internals[i][th+1,:], state_th)
                 out += [out_th]
-            #out = torch.concatenate(out,0)
             out = torch.cat(out,0)
             
             if hasattr(self,'continuousTheta') and self.continuousTheta:
-                state = state_th
+                state_tuple = state_th
                 
             outputs += [out]
         
-        state = torch.unsqueeze(state[0],0) #To match RNN builtin
-        return torch.stack(outputs,1), state
+        state_out = torch.unsqueeze(state_tuple[0],0)
+        return torch.stack(outputs,1), state_out
         
         
         

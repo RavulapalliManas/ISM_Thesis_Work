@@ -1,0 +1,2 @@
+env_name,T_topology,T_geometry,gap,complexity_index,geo_euclidean_discrepancy,aliasing_score,coverage_map_shape
+annulus_approx,,,,1.8,81.06117248535156,0.0,"(24, 24)"

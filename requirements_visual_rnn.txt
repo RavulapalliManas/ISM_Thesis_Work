@@ -7,3 +7,7 @@ tensorboard
 shapely
 ratinabox
 umap-learn
+networkx
+pandas
+ripser
+PyYAML

@@ -1,0 +1,30 @@
+{
+  "hidden_dim": 64,
+  "rollout_k": 2,
+  "seq_duration": 10,
+  "n_trials": 10,
+  "eval_every_trials": 2,
+  "topo_eval_every_trials": 5,
+  "checkpoint_every_trials": 100,
+  "loss_type": "rollout_mse",
+  "recurrence_scale": 1.0,
+  "sigma_noise": 0.03,
+  "dropout": 0.15,
+  "neural_timescale": 2,
+  "time_mode": "continuous",
+  "device": "cpu",
+  "topo_device": "cpu",
+  "mixed_precision": false,
+  "use_wandb": false,
+  "seed": 42,
+  "gradient_clip": 1.0,
+  "environments": [
+    "square_low_alias"
+  ],
+  "env_backend": {
+    "square_low_alias": "minigrid"
+  },
+  "checkpoint_dir": "project4_topology_before_geometry/checkpoints_test/",
+  "log_dir": "project4_topology_before_geometry/logs_test/",
+  "figures_dir": "project4_topology_before_geometry/figures_test/"
+}

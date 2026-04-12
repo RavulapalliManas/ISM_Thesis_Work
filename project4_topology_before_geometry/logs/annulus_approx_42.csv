@@ -1,0 +1,5 @@
+trial,loss,srsa_euclidean,srsa_geodesic,decode_error,participation_ratio,spatial_info,fraction_tuned,sw_dist,rdm_frobenius_delta,aliasing_score,geo_euclidean_discrepancy,betti_0,betti_1,persistence_gap_ratio_dim1,betti_correct,replay_fraction_consistent,replay_forward_reverse_ratio
+1,0.123,0.060225450148528245,0.04544089563238561,1.3686296939849854,4.458274386282073,0.1928587555885315,0.21875,0.14249345660209656,0.0,0.0,81.06117248535156,nan,nan,nan,nan,0.3225806451612903,1.0
+2,nan,nan,nan,nan,nan,nan,nan,nan,nan,0.0,81.06117248535156,nan,nan,0,0,0.0,False
+1,0.123,0.19743672993672992,0.14815223791128027,1.3452153205871582,2.53273621666878,0.18342682719230652,0.34375,0.36255472898483276,0.0,0.0,1.2864422798156738,nan,nan,nan,nan,0.2,1.0
+2,nan,nan,nan,nan,nan,nan,nan,nan,nan,0.0,1.2864422798156738,nan,nan,0,0,0.0,False
