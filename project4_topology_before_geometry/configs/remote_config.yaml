@@ -1,58 +1,46 @@
-{
-  "hidden_dim": 500,
-  "rollout_k": 5,
-  "seq_duration": 600,
-  "n_trials": 80000,
-  "eval_every_trials": 100,
-  "topo_eval_every_trials": 500,
-  "checkpoint_every_trials": 5000,
-  "loss_type": "rollout_mse",
-  "recurrence_scale": 1.0,
-  "sigma_noise": 0.03,
-  "dropout": 0.15,
-  "neural_timescale": 2,
-  "time_mode": "continuous",
-  "device": "cuda",
-  "topo_device": "cpu",
-  "mixed_precision": true,
-  "pin_memory": true,
-  "dataloader_workers": 4,
-  "use_tqdm": true,
-  "use_wandb": false,
-  "seed": [42, 123, 456],
-  "n_accumulate": 1,
-  "gradient_clip": 1.0,
-  "environments": [
-    "square_low_alias",
-    "square_high_alias",
-    "rectangle_wide",
-    "rectangle_narrow",
-    "l_shape_standard",
-    "l_shape_large",
-    "circle_approx",
-    "triangle_approx",
-    "two_room_corridor",
-    "hairpin_maze",
-    "annulus_approx",
-    "figure8_env",
-    "cylinder_env"
-  ],
-  "env_backend": {
-    "square_low_alias": "minigrid",
-    "square_high_alias": "minigrid",
-    "rectangle_wide": "minigrid",
-    "rectangle_narrow": "minigrid",
-    "l_shape_standard": "minigrid",
-    "l_shape_large": "minigrid",
-    "circle_approx": "minigrid",
-    "triangle_approx": "minigrid",
-    "two_room_corridor": "minigrid",
-    "hairpin_maze": "minigrid",
-    "annulus_approx": "ratinabox",
-    "figure8_env": "ratinabox",
-    "cylinder_env": "ratinabox"
-  },
-  "checkpoint_dir": "project4_topology_before_geometry/checkpoints/",
-  "log_dir": "project4_topology_before_geometry/logs/",
-  "figures_dir": "project4_topology_before_geometry/figures/"
-}
+hidden_dim: 512
+rollout_k: 5
+seq_duration: 100
+n_accumulate: 32
+batch_size: 1
+n_updates: 50000
+eval_every_trials: 500
+topo_eval_every_trials: 2000
+eval_rollout_steps: 256
+checkpoint_every_trials: 5000
+loss_type: rollout_mse
+recurrence_scale: 1.0
+sigma_noise: 0.03
+dropout: 0.15
+neural_timescale: 2
+time_mode: continuous
+device: cuda
+topo_device: cpu
+seed:
+  - 42
+  - 123
+  - 456
+environments:
+  - square_low_alias
+  - circle_approx
+  - l_shape_standard
+  - two_room_corridor
+  - annulus_approx
+env_backend:
+  square_low_alias: minigrid
+  circle_approx: minigrid
+  l_shape_standard: minigrid
+  two_room_corridor: minigrid
+  annulus_approx: ratinabox
+use_compile: true
+mixed_precision: true
+precision: bf16
+use_tqdm: true
+n_rollout_workers: 1
+async_topology: true
+pin_memory: true
+geodesic_resolution: 0.05
+topology_wait_timeout_s: 300
+checkpoint_dir: project4_topology_before_geometry/checkpoints/
+log_dir: project4_topology_before_geometry/logs/
+figures_dir: project4_topology_before_geometry/figures/

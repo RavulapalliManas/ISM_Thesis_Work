@@ -1,0 +1,2 @@
+env_name,T_topology,T_geometry,gap,n_accumulate,complexity_index,geo_euclidean_discrepancy,aliasing_score,coverage_map_shape
+l_shape_standard,,,,4,1.65,1.2478700876235962,0.6737590042645472,"(24, 24)"

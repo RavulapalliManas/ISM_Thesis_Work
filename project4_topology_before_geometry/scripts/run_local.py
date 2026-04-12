@@ -63,32 +63,41 @@ def main() -> None:
     )
     for env_name in env_iterator:
         print(f"\n{'=' * 60}\nEnvironment: {env_name}\n{'=' * 60}")
-        env = get_env(env_name, cfg)
-        act_enc = ActionEncoder(backend=cfg["env_backend"][env_name])
-        model = RolloutPRNN(
-            obs_dim=env.obs_dim,
-            act_dim=act_enc.act_dim,
-            hidden_dim=cfg["hidden_dim"],
-            rollout_k=cfg["rollout_k"],
-            sigma=cfg["sigma_noise"],
-            time_mode=cfg["time_mode"],
-            recurrence_scale=cfg["recurrence_scale"],
-            dropout=cfg["dropout"],
-            neural_timescale=cfg["neural_timescale"],
-            device=device,
-        )
-        print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
-        loss_fn = LossFactory.get_loss(cfg["loss_type"], cfg["rollout_k"], device)
-        tracker = ConvergenceTracker(env, model, TOPOLOGY_LABELS[env_name], cfg)
-        trainer = Trainer(cfg, env, model, act_enc, loss_fn, tracker, device=device)
-        trainer.train(n_trials=cfg["n_trials"])
-        results = tracker.finalize()
-        env_iterator.set_postfix(env=env_name, gap=results.get("gap"))
-        print(f"Results: T_topo={results.get('T_topology')} T_geo={results.get('T_geometry')} gap={results.get('gap')}")
-        import pandas as pd
+        tracker = trainer = None
+        finalized = False
+        try:
+            env = get_env(env_name, cfg)
+            act_enc = ActionEncoder(backend=cfg["env_backend"][env_name])
+            model = RolloutPRNN(
+                obs_dim=env.obs_dim,
+                act_dim=act_enc.act_dim,
+                hidden_dim=cfg["hidden_dim"],
+                rollout_k=cfg["rollout_k"],
+                sigma=cfg["sigma_noise"],
+                time_mode=cfg["time_mode"],
+                recurrence_scale=cfg["recurrence_scale"],
+                dropout=cfg["dropout"],
+                neural_timescale=cfg["neural_timescale"],
+                device=device,
+            )
+            print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
+            loss_fn = LossFactory.get_loss(cfg["loss_type"], cfg["rollout_k"], device)
+            tracker = ConvergenceTracker(env, model, TOPOLOGY_LABELS[env_name], cfg)
+            trainer = Trainer(cfg, env, model, act_enc, loss_fn, tracker, device=device)
+            trainer.train(n_trials=cfg["n_trials"])
+            results = tracker.finalize()
+            finalized = True
+            env_iterator.set_postfix(env=env_name, gap=results.get("gap"))
+            print(f"Results: T_topo={results.get('T_topology')} T_geo={results.get('T_geometry')} gap={results.get('gap')}")
+            import pandas as pd
 
-        log_df = pd.read_csv(Path(cfg["log_dir"]) / f"{env_name}_{seed}.csv")
-        plot_convergence_curves(log_df, env_name, TOPOLOGY_LABELS[env_name], Path(cfg["figures_dir"]))
+            log_df = pd.read_csv(Path(cfg["log_dir"]) / f"{env_name}_{seed}.csv")
+            plot_convergence_curves(log_df, env_name, TOPOLOGY_LABELS[env_name], Path(cfg["figures_dir"]))
+        finally:
+            if trainer is not None:
+                trainer.close()
+            if tracker is not None and not finalized:
+                tracker.close()
 
 
 if __name__ == "__main__":

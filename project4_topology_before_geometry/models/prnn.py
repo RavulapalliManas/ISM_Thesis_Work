@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import numpy as np
@@ -42,6 +43,8 @@ class RolloutPRNN(nn.Module):
         self.device_ = torch.device(device) if device is not None else torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+        if self.device_.type == "cuda" and self.device_.index is None:
+            self.device_ = torch.device("cuda:0")
 
         architecture = "thcycRNN_5win_fullc" if self.time_mode == "continuous" else "thcycRNN_5win_full"
         config = HippocampalConfig(
@@ -67,6 +70,7 @@ class RolloutPRNN(nn.Module):
             recurrence_scale=recurrence_scale,
         )
         self.core_model = HippocampalPredictiveRNN(config)
+        self._compiled_teacher_forced = None
         self.to(self.device_)
 
     @property
@@ -96,7 +100,8 @@ class RolloutPRNN(nn.Module):
         original_initial_state = self.core_model._initial_state
         self.core_model._initial_state = self._sample_initial_state
         try:
-            outputs = self.core_model._forward_teacher_forced(obs, act, training=training)
+            forward_impl = self._compiled_teacher_forced or self.core_model._forward_teacher_forced
+            outputs = forward_impl(obs, act, training=training)
         finally:
             self.core_model._initial_state = original_initial_state
         decoded = outputs.get("decoded_predictions")
@@ -159,3 +164,26 @@ class RolloutPRNN(nn.Module):
 
     def spontaneous(self, timesteps: int, noise_std: float | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         return self.core_model.spontaneous(timesteps, noise_std=noise_std)
+
+    def enable_compile(self, mode: str = "reduce-overhead"):
+        """Compile the teacher-forced forward path when the platform supports it."""
+        if self._compiled_teacher_forced is not None:
+            return self
+        print("Compiling model with torch.compile (mode=reduce-overhead)...")
+        print("First forward pass will take 60-120s. This is normal.")
+        self._compiled_teacher_forced = torch.compile(
+            self.core_model._forward_teacher_forced,
+            mode=mode,
+        )
+        return self
+
+
+def maybe_compile(model: RolloutPRNN, config: dict[str, Any]):
+    """Apply torch.compile on supported platforms and configs."""
+    if (
+        bool(config.get("use_compile", False))
+        and hasattr(torch, "compile")
+        and sys.platform != "win32"
+    ):
+        return model.enable_compile(mode="reduce-overhead")
+    return model
