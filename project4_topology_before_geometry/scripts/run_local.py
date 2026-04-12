@@ -5,11 +5,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import warnings
 
 import numpy as np
 import torch
 from tqdm.auto import tqdm
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 try:
     import yaml
@@ -18,7 +23,7 @@ except ImportError:  # pragma: no cover
 
 from project4_topology_before_geometry.analysis.phase_transition import plot_convergence_curves
 from project4_topology_before_geometry.environments.env_factory import get_env
-from project4_topology_before_geometry.environments.topology_labels import TOPOLOGY_LABELS
+from project4_topology_before_geometry.environments.topology_labels import get_topology_label
 from project4_topology_before_geometry.models.objectives import LossFactory
 from project4_topology_before_geometry.models.prnn import RolloutPRNN
 from project4_topology_before_geometry.sensory.action_encoder import ActionEncoder
@@ -82,7 +87,8 @@ def main() -> None:
             )
             print(f"Params: {sum(p.numel() for p in model.parameters()):,}")
             loss_fn = LossFactory.get_loss(cfg["loss_type"], cfg["rollout_k"], device)
-            tracker = ConvergenceTracker(env, model, TOPOLOGY_LABELS[env_name], cfg)
+            topology_label = get_topology_label(env_name)
+            tracker = ConvergenceTracker(env, model, topology_label, cfg)
             trainer = Trainer(cfg, env, model, act_enc, loss_fn, tracker, device=device)
             trainer.train(n_trials=cfg["n_trials"])
             results = tracker.finalize()
@@ -92,7 +98,7 @@ def main() -> None:
             import pandas as pd
 
             log_df = pd.read_csv(Path(cfg["log_dir"]) / f"{env_name}_{seed}.csv")
-            plot_convergence_curves(log_df, env_name, TOPOLOGY_LABELS[env_name], Path(cfg["figures_dir"]))
+            plot_convergence_curves(log_df, env_name, topology_label, Path(cfg["figures_dir"]))
         finally:
             if trainer is not None:
                 trainer.close()

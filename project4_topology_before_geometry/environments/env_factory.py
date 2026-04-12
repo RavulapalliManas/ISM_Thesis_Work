@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from project4_topology_before_geometry.environments.aliasing_controlled_envs import (
+    is_aliasing_controlled_name,
+    list_prebuilt_environments,
+    make_environment,
+)
 from project4_topology_before_geometry.environments.minigrid_envs import (
     MINIGRID_AVAILABLE,
     build_minigrid_env,
@@ -12,16 +17,25 @@ from project4_topology_before_geometry.environments.rib_envs import build_rib_en
 
 def list_environments() -> list[str]:
     """Return the union of registered MiniGrid and RatInABox environment names."""
-    return sorted(set(build_minigrid_specs()) | set(build_rib_specs()))
+    return sorted(set(build_minigrid_specs()) | set(build_rib_specs()) | set(list_prebuilt_environments()))
 
 
-def get_env(env_name: str, cfg: dict | None = None):
+def get_env(env_name: str | dict, cfg: dict | None = None):
     """Instantiate one environment, preferring MiniGrid and falling back to RatInABox."""
     cfg = dict(cfg or {})
+    if isinstance(env_name, dict):
+        env_request = dict(env_name)
+        env_name = str(env_request.get("env_type") or env_request.get("name") or env_request.get("geometry") or "square")
+        cfg = {**cfg, **env_request}
+
     env_backend = dict(cfg.get("env_backend", {}))
     requested_backend = env_backend.get(env_name)
     seed = int(cfg.get("seed", 42))
     inner_radius = float(cfg.get("inner_radius", 0.15))
+    factory_cfg = {key: value for key, value in cfg.items() if key != "seed"}
+
+    if is_aliasing_controlled_name(env_name):
+        return make_environment(env_name, seed=seed, **factory_cfg)
 
     discrete_names = set(build_minigrid_specs())
     continuous_names = set(build_rib_specs(inner_radius=inner_radius))
