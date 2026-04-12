@@ -57,7 +57,8 @@ def setup(run_cfg: dict, env_name: str, seed: int, device: torch.device):
     precompute_elapsed = time.perf_counter() - precompute_start
     print(f"Precomputed geodesic matrix for {env_name} in {precompute_elapsed:.2f}s")
 
-    act_enc = ActionEncoder(backend=run_cfg["env_backend"][env_name])
+    backend = run_cfg.get("env_backend", {}).get(env_name, "minigrid")
+    act_enc = ActionEncoder(backend=backend)
     model = RolloutPRNN(
         obs_dim=env.obs_dim,
         act_dim=act_enc.act_dim,
