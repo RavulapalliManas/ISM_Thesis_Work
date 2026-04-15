@@ -1,9 +1,32 @@
+"""
+Evaluation metrics for project5_symmetry.
+
+All functions are stateless and take plain numpy arrays.
+Faithful to Levenstein et al. 2024 analysis (Methods pp.17-19).
+
+New metrics (our contributions):
+  sci          — Symmetry Collapse Index
+  dtg_curve    — Topology-Geometry Gap (ΔTG)
+  manifold_id  — TwoNN intrinsic dimensionality
+
+Paper metrics (re-implemented to avoid class dependency):
+  srsa                 — Spatial RSA (Spearman r, cosine neural / Euclidean spatial)
+  compute_tuning_curves — 2D tuning curves via pynapple
+  spatial_information   — Skaggs spatial information per unit
+  spatial_evs           — Spatial explained variance per unit
+"""
+
 import numpy as np
+import pynapple as nap
 from scipy.spatial.distance import pdist, cdist
 from scipy.stats import spearmanr
 
-MAX_SUBSAMPLE = 4000  # matches legacy analysis code cap
+MAX_SUBSAMPLE = 4000  # cap for sRSA (matches legacy analysis code)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _subsample(hidden: np.ndarray, positions: np.ndarray, n: int):
     if hidden.shape[0] > n:
@@ -11,6 +34,10 @@ def _subsample(hidden: np.ndarray, positions: np.ndarray, n: int):
         return hidden[idx], positions[idx]
     return hidden, positions
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paper metric 1 — sRSA
+# ─────────────────────────────────────────────────────────────────────────────
 
 def srsa(
     hidden: np.ndarray,
@@ -20,29 +47,163 @@ def srsa(
     max_n: int = MAX_SUBSAMPLE,
 ) -> float:
     """
-    Spatial Representational Similarity Analysis.
+    Spatial RSA: Spearman r between cosine neural distances and Euclidean
+    spatial distances across all pairs of timepoints (Methods p.19).
 
-    Parameters
-    ----------
-    hidden    : (T, H) float array of hidden states
-    positions : (T, 2) float array of (row, col) positions
-    neural_metric : 'cosine' | 'cityblock'
-    space_metric  : 'euclidean' | 'cityblock'
-
-    Returns
-    -------
-    Spearman r between neural pairwise distances and spatial pairwise distances.
+    hidden    : (T, H)
+    positions : (T, 2)  col/row in MiniGrid coords
     """
     h, p = _subsample(hidden, positions, max_n)
-
-    if neural_metric == 'cityblock':
-        neural_dists = pdist(h, 'cityblock') / h.shape[1]
-    else:
-        neural_dists = pdist(h, neural_metric)
-
+    neural_dists  = pdist(h, neural_metric)
     spatial_dists = pdist(p, space_metric)
     return float(spearmanr(neural_dists, spatial_dists).statistic)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paper metric 2 — Spatial tuning curves (pynapple)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def compute_tuning_curves(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    nb_bins: int = 20,
+) -> tuple:
+    """
+    Compute 2D spatial tuning curves using pynapple.
+
+    Mirrors the approach in utils/predictiveNet.py and the paper (Methods p.18):
+    h_i(x) = E[h_i | x] computed via pynapple.compute_2d_tuning_curves_continuous.
+
+    Parameters
+    ----------
+    hidden    : (T, H) float32 — hidden unit activations
+    positions : (T, 2) float32 — (col, row) agent positions
+    nb_bins   : spatial bin resolution per axis
+
+    Returns
+    -------
+    tc  : dict {unit_id: (nb_bins, nb_bins) ndarray}  — tuning curves
+    occ : (nb_bins, nb_bins) ndarray                  — occupancy map
+    """
+    T = hidden.shape[0]
+    ts = np.arange(T, dtype=np.float64)
+
+    ep = nap.IntervalSet(start=0.0, end=float(T - 1))
+
+    h_tsd = nap.TsdFrame(t=ts, d=hidden.astype(np.float64),
+                          time_support=ep)
+    p_tsd = nap.TsdFrame(t=ts, d=positions.astype(np.float64),
+                          columns=['x', 'y'], time_support=ep)
+
+    tc = nap.compute_2d_tuning_curves_continuous(
+        tsdframe=h_tsd,
+        features=p_tsd,
+        nb_bins=nb_bins,
+        ep=ep,
+    )
+
+    # Occupancy: fraction of time in each bin
+    x_edges = np.linspace(positions[:, 0].min(), positions[:, 0].max(), nb_bins + 1)
+    y_edges = np.linspace(positions[:, 1].min(), positions[:, 1].max(), nb_bins + 1)
+    occ, _, _ = np.histogram2d(positions[:, 0], positions[:, 1],
+                                bins=[x_edges, y_edges])
+    occ = occ / occ.sum()
+
+    return tc, occ
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paper metric 3 — Spatial information (Skaggs et al. 1993)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def spatial_information(tc: dict, occ: np.ndarray) -> np.ndarray:
+    """
+    Skaggs spatial information per unit (bits per spike / per activation).
+
+    I_i = Σ_x p(x) * (h_i(x) / h̄_i) * log2(h_i(x) / h̄_i)
+
+    Parameters
+    ----------
+    tc  : tuning curves dict from compute_tuning_curves
+    occ : occupancy map (nb_bins, nb_bins), sums to 1
+
+    Returns
+    -------
+    SI : (H,) array of spatial information values per unit
+    """
+    occ_flat = occ.ravel()
+    valid = occ_flat > 0
+
+    unit_ids = sorted(tc.keys())
+    SI = np.zeros(len(unit_ids), dtype=np.float64)
+
+    for i, uid in enumerate(unit_ids):
+        tc_flat = tc[uid].ravel()
+        mean_rate = np.sum(tc_flat * occ_flat)
+        if mean_rate <= 0:
+            continue
+        ratio = np.zeros_like(tc_flat)
+        ratio[valid] = tc_flat[valid] / mean_rate
+        log_ratio = np.zeros_like(ratio)
+        log_ratio[ratio > 0] = np.log2(ratio[ratio > 0])
+        SI[i] = float(np.sum(occ_flat * ratio * log_ratio))
+
+    return SI
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paper metric 4 — Spatial explained variance (%EVS)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def spatial_evs(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    tc: dict,
+    nb_bins: int = 20,
+) -> np.ndarray:
+    """
+    Spatial explained variance per unit (Methods p.18):
+    EVS_i = 1 - Var[h_i - h_i(x_t)] / Var[h_i]
+
+    Parameters
+    ----------
+    hidden    : (T, H)
+    positions : (T, 2)
+    tc        : tuning curves dict from compute_tuning_curves
+
+    Returns
+    -------
+    evs : (H,) array of EVS values in [0, 1]
+    """
+    T, H = hidden.shape
+    unit_ids = sorted(tc.keys())
+
+    x_min, x_max = positions[:, 0].min(), positions[:, 0].max()
+    y_min, y_max = positions[:, 1].min(), positions[:, 1].max()
+    x_edges = np.linspace(x_min, x_max, nb_bins + 1)
+    y_edges = np.linspace(y_min, y_max, nb_bins + 1)
+
+    # Bin each timepoint
+    xi = np.clip(np.digitize(positions[:, 0], x_edges) - 1, 0, nb_bins - 1)
+    yi = np.clip(np.digitize(positions[:, 1], y_edges) - 1, 0, nb_bins - 1)
+
+    evs = np.zeros(len(unit_ids), dtype=np.float64)
+    for i, uid in enumerate(unit_ids):
+        tc_arr = tc[uid]                          # (nb_bins, nb_bins)
+        expected = tc_arr[xi, yi]                 # (T,) — expected rate at each pos
+        h_i = hidden[:, i].astype(np.float64)
+        var_total = np.var(h_i)
+        if var_total <= 0:
+            continue
+        residual = h_i - expected
+        evs[i] = 1.0 - np.var(residual) / var_total
+
+    return evs
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New metric 1 — Symmetry Collapse Index (SCI)
+# ─────────────────────────────────────────────────────────────────────────────
 
 def sci(
     hidden: np.ndarray,
@@ -52,49 +213,35 @@ def sci(
     n_random_pairs: int = 10000,
 ) -> float:
     """
-    Symmetry Collapse Index.
+    SCI = mean_d_neural(sym-related pairs) / mean_d_neural(random pairs)
 
-    SCI = mean(d_neural(x, T*x)) / mean(d_neural(x, x'))
+    SCI ≈ 1 → fully disambiguated; SCI → 0 → symmetry-related positions collapsed.
 
-    symmetry_pairs : list of ((r1,c1), (r2,c2)) from Arena.precompute_symmetry_pairs()
-    Matches each pair to the nearest hidden state by position.
-
-    Returns SCI in [0, 1]; SCI ≈ 1 → fully disambiguated, SCI → 0 → collapsed.
+    symmetry_pairs : list of ((c1,r1),(c2,r2)) from SymmetryArena.precompute_symmetry_pairs()
     """
     if not symmetry_pairs:
         return float('nan')
 
-    pos_arr = np.array(positions, dtype=np.float32)  # (T, 2)
+    pos_arr = positions.astype(np.float32)
+    pair_a  = np.array([list(a) for a, b in symmetry_pairs], dtype=np.float32)
+    pair_b  = np.array([list(b) for a, b in symmetry_pairs], dtype=np.float32)
 
-    # For each symmetry pair, find closest timestep to each position
-    pair_a = np.array([list(a) for a, b in symmetry_pairs], dtype=np.float32)
-    pair_b = np.array([list(b) for a, b in symmetry_pairs], dtype=np.float32)
+    idx_a = cdist(pair_a, pos_arr, 'cityblock').argmin(axis=1)
+    idx_b = cdist(pair_b, pos_arr, 'cityblock').argmin(axis=1)
 
-    # Nearest-neighbour lookup: for each pair endpoint, find closest state
-    dist_a = cdist(pair_a, pos_arr, metric='cityblock')  # (n_pairs, T)
-    dist_b = cdist(pair_b, pos_arr, metric='cityblock')
-    idx_a = dist_a.argmin(axis=1)
-    idx_b = dist_b.argmin(axis=1)
-
-    # Pairwise neural distances for symmetry-related positions
-    h_a = hidden[idx_a]
-    h_b = hidden[idx_b]
+    h_a, h_b = hidden[idx_a], hidden[idx_b]
     if neural_metric == 'cosine':
-        # cosine distance between corresponding rows
-        norm_a = np.linalg.norm(h_a, axis=1, keepdims=True) + 1e-8
-        norm_b = np.linalg.norm(h_b, axis=1, keepdims=True) + 1e-8
-        sym_dists = 1.0 - np.sum((h_a / norm_a) * (h_b / norm_b), axis=1)
+        na = np.linalg.norm(h_a, axis=1, keepdims=True) + 1e-8
+        nb = np.linalg.norm(h_b, axis=1, keepdims=True) + 1e-8
+        sym_dists = 1.0 - np.sum((h_a / na) * (h_b / nb), axis=1)
     else:
         sym_dists = np.abs(h_a - h_b).mean(axis=1)
-
     mean_sym = float(sym_dists.mean())
 
-    # Random pair baseline
     rng = np.random.default_rng(0)
-    n = hidden.shape[0]
-    n_rand = min(n_random_pairs, n * (n - 1) // 2)
-    ri = rng.integers(0, n, size=n_rand)
-    rj = rng.integers(0, n, size=n_rand)
+    n   = hidden.shape[0]
+    ri  = rng.integers(0, n, size=n_random_pairs)
+    rj  = rng.integers(0, n, size=n_random_pairs)
     mask = ri != rj
     ri, rj = ri[mask], rj[mask]
     if neural_metric == 'cosine':
@@ -105,46 +252,33 @@ def sci(
     else:
         rand_dists = np.abs(hidden[ri] - hidden[rj]).mean(axis=1)
 
-    mean_rand = float(rand_dists.mean()) + 1e-8
+    return mean_sym / (float(rand_dists.mean()) + 1e-8)
 
-    return mean_sym / mean_rand
 
+# ─────────────────────────────────────────────────────────────────────────────
+# New metric 2 — Topology-Geometry Gap (ΔTG)
+# ─────────────────────────────────────────────────────────────────────────────
 
 def dtg_curve(srsa_euclid: list, srsa_city: list) -> np.ndarray:
-    """
-    Topology-Geometry Gap: ΔTG(t) = sRSA_Euclidean(t) - sRSA_CityBlock(t).
-
-    Both inputs are lists of floats (one per LOG_INTERVAL checkpoint).
-    Returns numpy array of same length.
-    """
+    """ΔTG(t) = sRSA_Euclidean(t) − sRSA_CityBlock(t), one value per log step."""
     return np.array(srsa_euclid, dtype=np.float64) - np.array(srsa_city, dtype=np.float64)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# New metric 3 — Manifold intrinsic dimensionality (TwoNN)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def manifold_id(hidden: np.ndarray, max_n: int = 4000) -> float:
     """
-    Intrinsic dimensionality via TwoNN estimator (Facco et al. 2017).
-
-    ID = 1 / mean(log(r2 / r1))
-    where r1, r2 are distances to 1st and 2nd nearest neighbours.
-
-    Returns estimated ID (float).
+    TwoNN intrinsic dimensionality estimator (Facco et al. 2017).
+    ID = 1 / mean(log(r2/r1)), r1/r2 = 1st/2nd NN distances.
     """
     h = hidden[:max_n] if hidden.shape[0] > max_n else hidden
-    n = h.shape[0]
-
-    # Pairwise distances — shape (n, n)
-    dists = cdist(h, h, metric='euclidean')
+    dists = cdist(h, h, 'euclidean')
     np.fill_diagonal(dists, np.inf)
-
-    # 1st and 2nd NN distances
-    sorted_dists = np.partition(dists, kth=2, axis=1)[:, :3]
-    r1 = sorted_dists[:, 0]   # closest (after inf diagonal removed)
-    r2 = sorted_dists[:, 1]   # second closest
-
-    # Exclude degenerate rows
-    valid = (r1 > 0) & (r2 > 0)
-    ratio = r2[valid] / r1[valid]
+    top2  = np.partition(dists, kth=2, axis=1)[:, :2]
+    r1, r2 = top2[:, 0], top2[:, 1]
+    valid  = (r1 > 0) & (r2 > 0)
     if valid.sum() < 10:
         return float('nan')
-
-    return float(1.0 / np.mean(np.log(ratio)))
+    return float(1.0 / np.mean(np.log(r2[valid] / r1[valid])))

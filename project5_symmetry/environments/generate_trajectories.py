@@ -1,98 +1,134 @@
+"""
+Offline trajectory generation for project5_symmetry.
+
+Uses utils.agent.RandomActionAgent with the paper's action probabilities
+(forward=0.6, left=0.15, right=0.15, stop=0.1 — Methods p.14).
+
+Observations are converted to float32 [0,1] and stored with positions
+and head directions for downstream dataset loading.
+"""
+
 import os
 import numpy as np
 from multiprocessing import Pool, cpu_count
-from functools import partial
 
-from project5_symmetry.environments.arena import Arena, LEFT, RIGHT, FORWARD, STAY
+from utils.agent import RandomActionAgent
+from project5_symmetry.environments.arena import (
+    make_symmetry_env, PAPER_ACTION_PROBS,
+)
+
+FORWARD_IDX = 2
 
 
-def random_walk(arena: Arena, T: int, p_forward: float = 0.6, seed: int = 0) -> dict:
+def _obs_to_array(obs_list: list, F: int) -> np.ndarray:
     """
-    Generate a single trajectory of T steps via random walk.
-
-    Action probs: forward=p_forward, left/right/stay each get (1-p_forward)/3.
-
-    Returns dict with keys:
-        obs     : float32 (T, obs_size)
-        act     : int32   (T,)
-        pos     : int32   (T, 2)   row/col each timestep
-        heading : int32   (T,)
+    Convert a list of T+1 observation dicts (from RandomActionAgent) to
+    float32 array of shape (T+1, F*F*3) normalised to [0, 1].
     """
-    rng = np.random.default_rng(seed)
-    p_other = (1.0 - p_forward) / 3.0
-    action_probs = [p_other, p_other, p_forward, p_other]  # L, R, F, Stay
+    T1 = len(obs_list)
+    obs_size = F * F * 3
+    out = np.empty((T1, obs_size), dtype=np.float32)
+    for t, obs in enumerate(obs_list):
+        img = obs['image']                        # (F, F, 3) uint8
+        out[t] = img.reshape(-1).astype(np.float32) / 255.0
+    return out
 
-    passable = arena.passable_positions
-    start_idx = rng.integers(0, len(passable))
-    pos = passable[start_idx]
-    heading = int(rng.integers(0, 4))
 
-    obs_buf = np.empty((T, arena.obs_size), dtype=np.float32)
-    act_buf = np.empty(T, dtype=np.int32)
-    pos_buf = np.empty((T, 2), dtype=np.int32)
-    head_buf = np.empty(T, dtype=np.int32)
+def _encode_speed_hd(act: np.ndarray, agent_dir: np.ndarray) -> np.ndarray:
+    """
+    SpeedHD 5-dim encoding faithful to the paper (Methods p.14, form 3):
+      [speed, hd_0, hd_1, hd_2, hd_3]
+    speed = 1 if action == FORWARD else 0
+    hd_i  = one-hot of current head direction in {0,1,2,3}
+    Shape: (T, 5)
+    """
+    T = len(act)
+    enc = np.zeros((T, 5), dtype=np.float32)
+    enc[:, 0] = (act == FORWARD_IDX).astype(np.float32)
+    for i in range(4):
+        enc[:, 1 + i] = (agent_dir[:T] == i).astype(np.float32)
+    return enc
 
-    for t in range(T):
-        obs_buf[t] = arena.get_obs(pos, heading)
-        action = int(rng.choice(4, p=action_probs))
-        act_buf[t] = action
-        pos_buf[t] = pos
-        head_buf[t] = heading
-        pos, heading = arena.step(pos, heading, action)
 
-    return {'obs': obs_buf, 'act': act_buf, 'pos': pos_buf, 'heading': head_buf}
+def collect_trajectory(wrapped_env, T: int) -> dict:
+    """
+    Collect one trajectory of T steps using the paper's random-walk policy.
 
+    Returns dict:
+        obs     : float32 (T+1, obs_size)  — raw observation sequence
+        act_enc : float32 (T,   5)         — SpeedHD encoded actions
+        pos     : int32   (T+1, 2)         — agent (col, row) positions
+        heading : int32   (T+1,)           — agent head directions
+    """
+    F = wrapped_env.env.agent_view_size
+    agent = RandomActionAgent(
+        wrapped_env.action_space,
+        default_action_probability=PAPER_ACTION_PROBS,
+    )
+    obs_list, act_raw, state, _ = agent.getObservations(wrapped_env, T)
+
+    obs = _obs_to_array(obs_list, F)           # (T+1, obs_size)
+    act_enc = _encode_speed_hd(act_raw, state['agent_dir'])  # (T, 5)
+    pos = state['agent_pos'].astype(np.int32)  # (T+1, 2)  col/row
+    heading = state['agent_dir'].astype(np.int32)           # (T+1,)
+
+    return {'obs': obs, 'act_enc': act_enc, 'pos': pos, 'heading': heading}
+
+
+# ------------------------------------------------------------------
+# Multiprocessing worker
+# ------------------------------------------------------------------
 
 def _worker(args) -> None:
-    """Worker that generates a batch of trajectories and saves them."""
-    indices, arena_kwargs, T, p_forward, out_dir, base_seed = args
-    arena = Arena(**arena_kwargs)
+    """Generate a batch of trajectories and save them to disk."""
+    indices, arena_kwargs, T, out_dir = args
+    env = make_symmetry_env(**arena_kwargs)
+    env.reset()
     for i in indices:
-        traj = random_walk(arena, T, p_forward, seed=base_seed + i)
+        traj = collect_trajectory(env, T)
         np.savez_compressed(
             os.path.join(out_dir, f'traj_{i:05d}.npz'),
             obs=traj['obs'],
-            act=traj['act'],
+            act_enc=traj['act_enc'],
             pos=traj['pos'],
             heading=traj['heading'],
         )
 
 
 def generate_dataset(
-    arena: Arena,
+    wrapped_env,
     n_traj: int,
     T: int,
     out_dir: str,
     n_workers: int = 12,
-    p_forward: float = 0.6,
-    base_seed: int = 0,
 ):
     """
-    Generate n_traj trajectories of length T in parallel and save to out_dir.
+    Generate n_traj trajectories of T steps and save to out_dir.
 
-    Files are named traj_00000.npz … traj_{n_traj-1:05d}.npz.
     Skips files that already exist (resumable).
+    Each file: traj_{i:05d}.npz with keys obs, act_enc, pos, heading.
     """
     os.makedirs(out_dir, exist_ok=True)
 
-    # Determine which trajectories still need generating
-    pending = [i for i in range(n_traj)
-               if not os.path.exists(os.path.join(out_dir, f'traj_{i:05d}.npz'))]
+    pending = [
+        i for i in range(n_traj)
+        if not os.path.exists(os.path.join(out_dir, f'traj_{i:05d}.npz'))
+    ]
     if not pending:
         return
 
+    inner = wrapped_env.env
     arena_kwargs = {
-        'shape': arena.shape,
-        'size': arena.size,
-        'U': arena.U,
-        'F': arena.F,
-        'seed': arena.seed,
+        'shape': inner.arena_shape,
+        'size': inner.arena_size,
+        'U': inner.U,
+        'F': inner.agent_view_size,
+        'seed': inner._landmark_seed,
     }
 
-    # Split pending indices across workers
     n_workers = min(n_workers, len(pending), cpu_count())
     chunks = [pending[i::n_workers] for i in range(n_workers)]
-    args = [(chunk, arena_kwargs, T, p_forward, out_dir, base_seed) for chunk in chunks]
+    job_args = [(chunk, arena_kwargs, T, out_dir) for chunk in chunks if chunk]
 
     with Pool(n_workers) as pool:
-        pool.map(_worker, args)
+        pool.map(_worker, job_args)
