@@ -16,6 +16,9 @@ import gym
 from gym_minigrid.minigrid import MiniGridEnv, Grid, Floor, Wall, MissionSpace
 from gym_minigrid.wrappers import RGBImgPartialObsWrapper
 
+# MiniGrid action integers
+MG_LEFT, MG_RIGHT, MG_FORWARD = 0, 1, 2
+
 # Paper landmark colours (all map to existing gym_minigrid COLORS)
 # Rendered as COLORS[name]/2, approximating the paper's 0-1 values
 # grey→[0.196,0.196,0.196] (plain floor), red→[0.5,0,0], blue→[0,0,0.5],
@@ -60,7 +63,8 @@ class SymmetryArena(MiniGridEnv):
             height=size + 2,
             max_steps=size * size * 100,
             agent_view_size=F,
-            render_mode="rgb_array",
+            # render_mode omitted: RGBImgPartialObsWrapper uses gen_obs() directly,
+            # not render(). Passing 'rgb_array' here triggers Pyglet init and hangs.
         )
 
     # ------------------------------------------------------------------
@@ -118,7 +122,16 @@ class SymmetryArena(MiniGridEnv):
                     # Interior walls (L-shape cutout)
                     self.grid.set(c, r, Wall())
 
-        self.place_agent()
+        # Set agent to first passable tile deterministically.
+        # We do NOT call self.place_agent() here because it uses
+        # self.np_random which is only initialised after super().reset()
+        # returns — calling it from _gen_grid causes an infinite loop.
+        first_r, first_c = next(
+            (r, c) for r in range(1, s + 1) for c in range(1, s + 1)
+            if self._is_passable(r, c)
+        )
+        self.agent_pos = np.array([first_c, first_r])  # MiniGrid (x,y) = (col, row)
+        self.agent_dir = 0
 
     # ------------------------------------------------------------------
     # Passable positions list (for trajectory generation and H2)
