@@ -155,8 +155,45 @@ class pRNN_th(pRNN):
         
         self.k = k
         self.actionTheta = actionTheta
-        
-        
+
+        # Lazy Toeplitz buffer — built once on first forward, reused every call.
+        # Pre-declared as buffers with None so register_buffer() can overwrite
+        # them later without raising "attribute already exists".
+        # model.to(device) will automatically move non-None buffers to the
+        # correct device, so indexing always stays on the same device as inputs.
+        self.register_buffer('theta_idx',     None)  # obs-target (k+1, T-k)
+        self.register_buffer('act_theta_idx', None)  # action (k+1, T-k)
+        self._theta_idx_T = None   # plain Python int — tracks T for obs
+        self._act_theta_T = None   # plain Python int — tracks T for act
+
+    def _get_theta_idx(self, T: int) -> torch.Tensor:
+        """
+        Return a (k+1, T-k) long tensor of Toeplitz column indices for the
+        obs-target rollout.  Built once per unique T, then cached as a
+        registered buffer so it lives on the correct device automatically.
+        """
+        if self.theta_idx is None or self._theta_idx_T != T:
+            idx = np.flip(
+                toeplitz(np.arange(self.k + 1), np.arange(T)), 0
+            )
+            idx = idx[:, self.k:]          # shape (k+1, T-k)
+            idx_t = torch.from_numpy(idx.copy()).long()
+            self.register_buffer('theta_idx', idx_t)
+            self._theta_idx_T = T
+        return self.theta_idx
+
+    def _get_act_theta_idx(self, T: int) -> torch.Tensor:
+        """Same cache for the actionTheta=True path (act sequence length)."""
+        if self.act_theta_idx is None or self._act_theta_T != T:
+            idx = np.flip(
+                toeplitz(np.arange(self.k + 1), np.arange(T)), 0
+            )
+            idx = idx[:, self.k:]
+            idx_t = torch.from_numpy(idx.copy()).long()
+            self.register_buffer('act_theta_idx', idx_t)
+            self._act_theta_T = T
+        return self.act_theta_idx
+
     def restructure_inputs(self, obs, act):
         """
         Join obs and act into a single input tensor shape (N,L,H)
@@ -171,11 +208,10 @@ class pRNN_th(pRNN):
         obs_target = obs[:,self.predOffset:,:]
         
         #Apply the theta prediction for target observation
-        theta_idx = np.flip(toeplitz(np.arange(self.k+1),
-                                     np.arange(obs_target.size(1))),0)
-        theta_idx = theta_idx[:,self.k:,]
-        obs_target = obs_target[:,theta_idx.copy()]
-        obs_target = torch.squeeze(obs_target,0)
+        # Shape after indexing: (B, k+1, T-k, obs_size) — valid for any B.
+        # squeeze(0) removed: that was the B=1 hack; no longer needed.
+        theta_idx  = self._get_theta_idx(obs_target.size(1))  # cached (k+1, T-k)
+        obs_target = obs_target[:, theta_idx]
         
         if self.actionTheta == 'hold':
             act = act.expand(self.k+1,-1,-1)
@@ -184,46 +220,74 @@ class pRNN_th(pRNN):
 
 
         elif self.actionTheta is True:
-            theta_idx = np.flip(toeplitz(np.arange(self.k+1),
-                                         np.arange(act.size(1))),0)
-            theta_idx = theta_idx[:,self.k:,]
-            act = act[:,theta_idx.copy()]
-            act = torch.squeeze(act,0)
+            # Shape after indexing: (B, k+1, T-k, act_size) — no squeeze, same B fix as obs
+            act_idx = self._get_act_theta_idx(act.size(1))   # cached (k+1, T-k)
+            act     = act[:, act_idx]
             obs = nn.functional.pad(input=obs, pad=(0,0,0,0,0,self.k), 
                                     mode='constant', value=0)
             
         
         #Make everything the same size
-        minsize = min(obs.size(1),act.size(1),obs_target.size(1))
-        obs, act = obs[:,:minsize,:], act[:,:minsize,:]
-        obs_target = obs_target[:,:minsize,:]
-        
+        # obs_target is now 4D (B, k+1, T-k, obs_size) — time dim is index 2
+        minsize = min(obs.size(1), act.size(1), obs_target.size(2))
+        obs, act = obs[:, :minsize, :], act[:, :minsize, :]
+        obs_target = obs_target[:, :, :minsize, :]   # 4D slice along time axis
+
         #No masks for theta net
-        obs_out = torch.zeros_like(obs, requires_grad=False)
-        act_out = torch.zeros_like(act, requires_grad=False)
-        obs_target_out = torch.zeros_like(obs_target, requires_grad=False)
+        obs_out        = torch.zeros_like(obs,        requires_grad=False)
+        act_out        = torch.zeros_like(act,        requires_grad=False)
+        obs_target_out = torch.zeros_like(obs_target, requires_grad=False)  # 4D
         outmask = True
-        
-        obs_out[:,:,:] = obs[:,:,:]
-        act_out[:,:,:] = act[:,:,:]
-        obs_target_out[:,:,:] = obs_target[:,:,:]
+
+        obs_out       [:, :, :]    = obs       [:, :, :]
+        act_out       [:, :, :]    = act       [:, :, :]
+        obs_target_out[:, :, :, :] = obs_target[:, :, :, :]   # 4D assignment
 
         obs = self.droplayer(obs) #dropout without action
-        
+
         #Concatenate the obs/act into a single input
         x_t = torch.cat((obs_out,act_out), 2)
         return x_t, obs_target_out, outmask
-        
-        
-        
-        
-        
 
-        
-        
-        
-        
-        
+
+    # ── Group 4: forward override ─────────────────────────────────────────────
+    def forward(self, obs, act,
+                noise_t=torch.tensor([]), state=torch.tensor([]), theta=None):
+        """
+        Group 4/5 fix — supports true B>1 batched training.
+
+        Problem: pRNN.forward() passes theta=None which resolves to
+        defaultTheta=k inside thetaRNNLayer. That routes to _forward_theta,
+        which treats the batch dim as the theta dim and only processes the
+        first element of each batch → silently wrong for B>1.
+
+        Fix: always call the RNN with theta=0 so _forward_batched runs,
+        giving h_t of shape (B, T, H) for any B.
+
+        obs_target from restructure_inputs is now (B, k+1, T-k, obs_size).
+        pred from the RNN is (B, T, obs_size).  To make shapes match for
+        F.mse_loss we expand pred along the theta dim — the network is
+        asked to produce the same prediction for every rollout horizon,
+        which is the correct single-hidden-state multi-step training
+        objective (the hidden state must encode enough to satisfy all k+1
+        future targets simultaneously).
+        """
+        x_t, obs_target, _ = self.restructure_inputs(obs, act)
+
+        # theta=0 → _forward_batched → (B, T, H) for any B
+        h_t, _ = self.rnn(x_t, internal=noise_t, state=state, theta=0)
+
+        allout = self.outlayer(h_t)          # (B, T, obs_size)
+
+        # Align time dimension: obs_target is (B, k+1, T-k, obs_size)
+        T_tgt = obs_target.size(2)           # T-k
+        pred  = allout[:, :T_tgt, :]         # (B, T-k, obs_size)
+
+        # Expand to (B, k+1, T-k, obs_size) — broadcast over rollout steps
+        pred = pred.unsqueeze(1).expand(-1, self.k + 1, -1, -1)
+
+        return pred, h_t, obs_target
+
 
 class RNN2L(nn.Module):
     """
