@@ -16,6 +16,7 @@ Progress tracking:
 
 import os
 import json
+import time
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -147,7 +148,7 @@ def train(
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
     pin_memory = (device_str == 'cuda')
-    num_workers = min(4, os.cpu_count() or 2)
+    num_workers = min(8, os.cpu_count() or 2)          # change 3: was 4
     loader  = DataLoader(
         dataset,
         batch_size=1,
@@ -155,7 +156,7 @@ def train(
         num_workers=num_workers,
         pin_memory=pin_memory,
         persistent_workers=(num_workers > 0),
-        prefetch_factor=2 if num_workers > 0 else None,
+        prefetch_factor=4 if num_workers > 0 else None, # change 4: was 2
     )
 
     # ── Model ─────────────────────────────────────────────────────────────────
@@ -169,11 +170,20 @@ def train(
         neuralTimescale=NEURAL_TIMESCALE,
     ).to(device)
 
+    # Change 2: compile only the RNN cell, not the whole model.
+    # The cell (LayerNormRNNCell) is pure PyTorch matmuls + F.layer_norm + ReLU —
+    # Dynamo traces it cleanly. The outer thetaRNNLayer Python loop and pRNN_th's
+    # restructure_inputs() (which uses numpy Toeplitz) cannot be compiled without
+    # graph breaks, so we leave them as-is.
     compiled = False
     try:
-        model = torch.compile(model)
+        model.rnn.cell = torch.compile(model.rnn.cell)
         compiled = True
-    except Exception:
+        tqdm.write(f'  [compile] torch.compile(model.rnn.cell) accepted — '
+                   f'torch {torch.__version__}  '
+                   f'(first cell call triggers JIT; outer loop stays in Python)')
+    except Exception as e:
+        tqdm.write(f'  [compile] torch.compile(cell) SKIPPED: {e}')
         compiled = False
 
     optimizer = _build_optimizer(model)
@@ -228,10 +238,15 @@ def train(
             writer.add_scalar('loss/train', accum_loss, step)
 
             if step % LOG_INTERVAL == 0:
+                _t0 = time.time()
                 h, pos = _collect_hidden_states(model, dataset, SUBSAMPLE_N, device)
                 sRSA_e = float(srsa(h, pos, space_metric='euclidean'))
                 sRSA_c = float(srsa(h, pos, space_metric='cityblock'))
                 dtg    = sRSA_e - sRSA_c
+                _srsa_sec = time.time() - _t0
+                tqdm.write(f'  [step {step:>6d}] sRSA_e={sRSA_e:.3f}  '
+                           f'sRSA_c={sRSA_c:.3f}  ΔTG={dtg:+.3f}  '
+                           f'({_srsa_sec:.1f}s)')
 
                 # ── TensorBoard: metrics ──────────────────────────────────────
                 writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, step)
