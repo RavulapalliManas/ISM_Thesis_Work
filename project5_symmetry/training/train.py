@@ -146,8 +146,17 @@ def train(
 
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
-    loader  = DataLoader(dataset, batch_size=1, shuffle=True,
-                         num_workers=2, pin_memory=(device_str == 'cuda'))
+    pin_memory = (device_str == 'cuda')
+    num_workers = min(4, os.cpu_count() or 2)
+    loader  = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=(num_workers > 0),
+        prefetch_factor=2 if num_workers > 0 else None,
+    )
 
     # ── Model ─────────────────────────────────────────────────────────────────
     model = pRNN_th(
@@ -160,10 +169,12 @@ def train(
         neuralTimescale=NEURAL_TIMESCALE,
     ).to(device)
 
+    compiled = False
     try:
         model = torch.compile(model)
+        compiled = True
     except Exception:
-        pass
+        compiled = False
 
     optimizer = _build_optimizer(model)
 
@@ -197,8 +208,8 @@ def train(
             break
 
         obs_b, act_b, _, _ = batch       # (1, T+1, obs_size), (1, T, 5)
-        obs_b = obs_b.to(device)
-        act_b = act_b.to(device)
+        obs_b = obs_b.to(device, non_blocking=pin_memory)
+        act_b = act_b.to(device, non_blocking=pin_memory)
 
         pred, _, target = model(obs_b, act_b)
         loss = F.mse_loss(pred, target) / accum_steps
@@ -264,7 +275,8 @@ def train(
     with open(os.path.join(out_dir, 'training_log.json'), 'w') as f:
         json.dump(log_dict, f, indent=2)
 
-    tqdm.write(f'  ✓ {run_label or "train"} done — '
+    compile_note = " (torch.compile enabled)" if compiled else ""
+    tqdm.write(f'  ✓ {run_label or "train"} done{compile_note} — '
                f'sRSA_e={sRSA_e:.3f}  sRSA_c={sRSA_c:.3f}  '
                f'tb → {tb_dir}')
 
