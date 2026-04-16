@@ -10,10 +10,11 @@ https://github.com/pytorch/pytorch/blob/master/benchmarks/fastrnns/custom_lstms.
 """
 
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import Parameter
 import torch
-#import torch.jit as jit
-from typing import List, Tuple
+import torch.jit as jit
+from typing import List, Optional, Tuple
 from torch import Tensor
 import numbers
 import numpy as np
@@ -88,7 +89,7 @@ class thetaRNNLayer(nn.Module):
         outputs = []
 
         for i in range(len(inputs)):
-            if np.mod(i, self.trunc) == 0 and i > 0:
+            if i % self.trunc == 0 and i > 0:
                 state_tuple = tuple(component.detach() if torch.is_tensor(component) else component for component in state_tuple)
             out, state_tuple = self.cell(inputs[i], internals[i], state_tuple)
             outputs.append(out)
@@ -125,7 +126,7 @@ class thetaRNNLayer(nn.Module):
         outputs = []
         
         for i in range(len(inputs)):
-            if np.mod(i,self.trunc)==0 and i>0:
+            if i % self.trunc == 0 and i > 0:
                 state_tuple = tuple(component.detach() if torch.is_tensor(component) else component for component in state_tuple)
                 
             out, state_tuple = self.cell(torch.unsqueeze(inputs[i][0,:],0), 
@@ -216,37 +217,41 @@ class AdaptingRNNCell(nn.Module):
 
 
 
-#class LayerNormRNNCell(jit.ScriptModule):
-class LayerNormRNNCell(nn.Module):
-    def __init__(self, input_size, hidden_size, musig=[0,1]):
+class LayerNormRNNCell(jit.ScriptModule):
+    # Change 5: replaced custom LayerNorm with a single fused F.layer_norm call
+    #           (one CUDA kernel instead of two separate passes).
+    # Change 6: jit.ScriptModule + @jit.script_method → compiled to C++ at class
+    #           definition time, eliminating the Python interpreter on every cell call.
+    #
+    # State convention: Tuple[Tensor, int] where int is an unused placeholder kept
+    # for API compatibility with AdaptingLayerNormRNNCell (which stores adapt state).
+    def __init__(self, input_size: int, hidden_size: int, musig: List[float] = [0.0, 1.0]):
         super(LayerNormRNNCell, self).__init__()
-        self.input_size = input_size
+        self.input_size  = input_size
         self.hidden_size = hidden_size
-        
-        #This could all be done as a subclass of RNNCell...
-        #Pytorch Initalization ("goodbug") with input scaling
-        rootk_h = np.sqrt(1./hidden_size)
-        rootk_i = np.sqrt(1./input_size)
-        self.weight_ih = Parameter(torch.rand(hidden_size, input_size)*2*rootk_i-rootk_i)
-        self.weight_hh = Parameter(torch.rand(hidden_size, hidden_size)*2*rootk_h-rootk_h)
-        
-        self.layernorm = LayerNorm(hidden_size,musig)
-        
-        self.layernorm.mu = Parameter(torch.zeros(self.hidden_size)+self.layernorm.mu)
-        self.bias = self.layernorm.mu
-        
-        #TODO: Add option for torch.sigmoid or torch.tanh
+
+        rootk_h = np.sqrt(1.0 / hidden_size)
+        rootk_i = np.sqrt(1.0 / input_size)
+        self.weight_ih = Parameter(torch.rand(hidden_size, input_size) * 2 * rootk_i - rootk_i)
+        self.weight_hh = Parameter(torch.rand(hidden_size, hidden_size) * 2 * rootk_h - rootk_h)
+        # Learnable shift bias for layer-norm (was layernorm.mu).
+        # Exposed as self.bias so pRNN's optimizer group still resolves correctly via
+        #   model.bias → model.rnn.cell.bias
+        self.bias = Parameter(torch.zeros(hidden_size))
+
         self.actfun = torch.nn.ReLU()
 
-    # TODO: with and without history (-h) 
-    #@jit.script_method
-    def forward(self, input: Tensor, internal: Tensor, state: Tensor) -> Tensor:
-        hx = state[0]
+    @jit.script_method
+    def forward(self, input: Tensor, internal: Tensor,
+                state: Tuple[Tensor, int]) -> Tuple[Tensor, Tuple[Tensor, int]]:
+        hx      = state[0]
         i_input = torch.mm(input, self.weight_ih.t())
-        h_input = torch.mm(hx, self.weight_hh.t())
-        x = self.layernorm(i_input + h_input)
+        h_input = torch.mm(hx,    self.weight_hh.t())
+        # Single fused kernel: normalize then add learned shift (bias)
+        x  = F.layer_norm(i_input + h_input, [self.hidden_size],
+                          weight=None, bias=self.bias, eps=1e-4)
         hy = self.actfun(x + internal)
-        return hy, (hy,)
+        return hy, (hy, 0)
 
 
 
@@ -318,7 +323,7 @@ class LayerNorm(nn.Module):
     
 #Unit Tests
 
-import torch.nn.functional as F
+# F already imported at the top of this file
 def test_script_thrnn_layer(seq_len, input_size, hidden_size, trunc, theta):
     inp = torch.randn(1,seq_len,input_size)
     inp = F.pad(inp,(0,0,0,theta))
