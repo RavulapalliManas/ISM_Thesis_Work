@@ -6,21 +6,45 @@ Faithful to Levenstein et al. 2024 (Adrien1.pdf, Methods p.14):
   - Floor tiles: grey + up to 4 landmark colour types (red/blue/yellow/green)
   - Observation: 7x7x3 (or FxFx3) egocentric image, tile_size=1
   - Action encoding: SpeedHD 5-dim (speed + 4-way HD one-hot)
+
+Note on gymnasium wrapper compatibility:
+  gymnasium.Wrapper does NOT forward __getattr__ to self.env, so
+  RGBImgPartialObsWrapper's self.get_frame() call fails on custom envs.
+  We use our own PixelObsWrapper that explicitly calls self.env.get_frame().
 """
 
 import hashlib
 import json
 import numpy as np
 
-import gym
-from gym_minigrid.minigrid import MiniGridEnv, Grid, Floor, Wall, MissionSpace
-from gym_minigrid.wrappers import RGBImgPartialObsWrapper
+import gymnasium
+from gymnasium import spaces
+from gymnasium.core import ObservationWrapper
 
-# Paper landmark colours (all map to existing gym_minigrid COLORS)
-# Rendered as COLORS[name]/2, approximating the paper's 0-1 values
-# grey→[0.196,0.196,0.196] (plain floor), red→[0.5,0,0], blue→[0,0,0.5],
-# yellow→[0.5,0.5,0], green→[0,0.5,0]
+from minigrid.core.world_object import Floor, Wall
+from minigrid.core.grid import Grid
+from minigrid.minigrid_env import MiniGridEnv
+from minigrid.core.mission import MissionSpace
+
+# MiniGrid action integers
+MG_LEFT, MG_RIGHT, MG_FORWARD = 0, 1, 2
+
+# Landmark colour names for random-U mode (legacy, kept for compatibility)
+# MiniGrid renders Floor(name) as COLORS[name]/2 (uint8 in 0–127 range)
 _LANDMARK_COLORS = ['grey', 'red', 'blue', 'yellow', 'green']
+
+# ── Paper-faithful landmark colours (Figure 1A, Levenstein et al. 2024) ──────
+# Maps normalised RGB [0–1] → MiniGrid Floor color name.
+# MiniGrid renders Floor(name) as COLORS[name]/2, so:
+#   'blue'   → [0, 0, 255]/2 → ≈ [0,   0,   0.50]  ≈ target [0,    0,    0.45]
+#   'red'    → [255, 0, 0]/2 → ≈ [0.50, 0,  0]     ≈ target [0.45, 0,    0   ]
+#   'yellow' → [255,255,0]/2 → ≈ [0.50,0.50,0]     ≈ target [0.45, 0.45, 0   ]
+#   'grey'   → [100,100,100]/2 → ≈ [0.20,0.20,0.20] (base floor)
+_LANDMARK_RGB_TO_COLOR: dict[tuple, str] = {
+    (0.0,  0.0,  0.45): 'blue',
+    (0.45, 0.0,  0.0):  'red',
+    (0.45, 0.45, 0.0):  'yellow',
+}
 
 # Action indices (gym_minigrid)
 LEFT, RIGHT, FORWARD = 0, 1, 2
@@ -37,21 +61,38 @@ class SymmetryArena(MiniGridEnv):
 
     Parameters
     ----------
-    shape : 'l_shape' | 'square'
-    size  : int  — interior tile count per side (e.g. 18 for the 18x18 L-shape)
-    U     : int  — number of landmark colour types (0 = uniform grey floor)
-    F     : int  — agent_view_size (obs = F×F×3 with tile_size=1)
-    seed  : int  — controls random landmark placement
+    shape         : 'l_shape' | 'square'
+    size          : int  — interior tile count per side (18 for the paper baseline)
+    U             : int  — number of landmark colour types for random mode (legacy)
+    F             : int  — agent_view_size (obs = F×F×3 with tile_size=1)
+    seed          : int  — controls random landmark placement (random mode only)
+    use_landmarks : bool — if True (default), place the three fixed paper-faithful
+                           landmark regions from Figure 1A of Levenstein et al. 2024.
+                           Set to False for ablation / U=0 (uniform grey floor).
     """
 
-    def __init__(self, shape: str, size: int, U: int, F: int = 7, seed: int = 0):
-        self.arena_shape = shape
-        self.arena_size = size
-        self.U = U
+    def __init__(self, shape: str, size: int, U: int, F: int = 7, seed: int = 0,
+                 use_landmarks: bool = True):
+        self.arena_shape    = shape
+        self.arena_size     = size
+        self.U              = U
         self._landmark_seed = seed
+        self.use_landmarks  = use_landmarks
 
-        # Build the landmark assignment before super().__init__ calls _gen_grid
+        # Build the legacy random landmark map (kept for compatibility)
         self._landmark_map = self._build_landmark_map()
+
+        # ── Validate fixed landmark positions before grid is built ────────────
+        if use_landmarks:
+            bad = [
+                (r, c) for (r, c) in self._get_landmark_tiles()
+                if not self._is_passable(r, c)
+            ]
+            if bad:
+                raise ValueError(
+                    f"Landmark tile(s) fall on impassable cells in "
+                    f"{shape} {size}×{size}: {bad}"
+                )
 
         mission_space = MissionSpace(mission_func=lambda: "explore")
         super().__init__(
@@ -60,7 +101,7 @@ class SymmetryArena(MiniGridEnv):
             height=size + 2,
             max_steps=size * size * 100,
             agent_view_size=F,
-            render_mode="rgb_array",
+            # render_mode omitted — triggers Pyglet init and hangs headlessly
         )
 
     # ------------------------------------------------------------------
@@ -82,6 +123,83 @@ class SymmetryArena(MiniGridEnv):
                     lmap[r, c] = int(rng.integers(0, max(1, self.U)))
         return lmap
 
+    def _get_landmark_tiles(self) -> dict:
+        """
+        Return the fixed landmark tile positions matching Figure 1A of
+        Levenstein et al. (2024).
+
+        Returns
+        -------
+        dict mapping (row, col) → [R, G, B]  (normalised 0–1 floats)
+        Row/col are 1-indexed interior coordinates matching _is_passable().
+
+        Three landmark regions (arena = 18×18, cut = 9, bottom-right missing):
+
+                    Blue staircase  — top-left quadrant  (rows 1–9,  cols 1–9)
+                        6 steps, step size 1, with a 1-tile boundary (no tiles on row/col 1 or 9):
+                            cols 2–7 → heights 2–7 rows  (rows 2–3 up to rows 2–8)
+
+                    Red cross       — top-right quadrant (rows 1–9,  cols 10–18)
+                        Plus shape (width 2), symmetric with a 1-tile boundary:
+                            horizontal bar: rows 5–6, cols 12–17
+                            vertical bar:   rows 3–8, cols 14–15
+
+                    Yellow composite— bottom-left quadrant (rows 10–18, cols 1–9)
+                        Square (rows 12–16, cols 3–7) plus L-shaped protrusions
+                        at each corner creating the irregular / corner-block boundary.
+        """
+        BLUE   = [0.0,  0.0,  0.45]
+        RED    = [0.45, 0.0,  0.0 ]
+        YELLOW = [0.45, 0.45, 0.0 ]
+
+        tiles: dict[tuple[int, int], list[float]] = {}
+
+        # ── Blue staircase (top-left quadrant: rows 1–9, cols 1–9) ───────────
+        # 6 steps, step size 1, 1-tile boundary around the quadrant
+        stair_row0 = 2
+        for i in range(6):
+            c = 2 + i
+            height = 2 + i  # 2..7 (rows 2..8)
+            for r in range(stair_row0, stair_row0 + height):
+                tiles[(r, c)] = BLUE
+
+        # ── Red cross (top-right quadrant: rows 1–9, cols 10–18) ─────────────
+        # Width 2, symmetric, 1-tile boundary inside the quadrant
+        for r in range(5, 7):
+            for c in range(12, 18):
+                tiles[(r, c)] = RED
+        for r in range(3, 9):
+            for c in range(14, 16):
+                tiles[(r, c)] = RED  # overlapping cells keep same color
+
+        # ── Yellow composite (bottom-left quadrant: rows 10–18, cols 1–9) ────
+        # Main body: 5×5 square (2 less per side than the 7×7 baseline)
+        main_top, main_left = 12, 3
+        main_bottom, main_right = 16, 7
+        for r in range(main_top, main_bottom + 1):
+            for c in range(main_left, main_right + 1):
+                tiles[(r, c)] = YELLOW
+        # Corner protrusions (L-shaped blocks at each corner of the main square)
+        for pos in [
+            (main_top - 1, main_left - 1), (main_top - 1, main_left), (main_top, main_left - 1),
+            (main_top - 1, main_right), (main_top - 1, main_right + 1), (main_top, main_right + 1),
+            (main_bottom, main_left - 1), (main_bottom + 1, main_left - 1), (main_bottom + 1, main_left),
+            (main_bottom, main_right + 1), (main_bottom + 1, main_right + 1), (main_bottom + 1, main_right),
+        ]:
+            tiles[pos] = YELLOW
+
+        # Force row 2 to be fully grey (no landmarks) as requested.
+        tiles = {(r, c): v for (r, c), v in tiles.items() if r != 2}
+
+        # Clip to the actual arena size — landmark positions are specified for
+        # the canonical 18×18 design; smaller arenas receive whatever subset
+        # of the regions fit within [1, arena_size] × [1, arena_size].
+        s = self.arena_size
+        tiles = {(r, c): v for (r, c), v in tiles.items()
+                 if 1 <= r <= s and 1 <= c <= s}
+
+        return tiles
+
     def _is_passable(self, row: int, col: int) -> bool:
         """Row, col are 1-indexed interior positions."""
         s = self.arena_size
@@ -89,8 +207,10 @@ class SymmetryArena(MiniGridEnv):
             return False
         if self.arena_shape == 'l_shape':
             cut = s // 2
-            # Remove top-right quadrant: rows 1..cut, cols cut+1..s
-            if row <= cut and col > cut:
+            # Remove BOTTOM-RIGHT quadrant: rows cut+1..s, cols cut+1..s
+            # (matches Figure 1A — the bottom-right is used for agent view
+            #  illustration, not a navigable region)
+            if row > cut and col > cut:
                 return False
         return True
 
@@ -104,21 +224,46 @@ class SymmetryArena(MiniGridEnv):
         self.grid.wall_rect(0, 0, width, height)
 
         s = self.arena_size
+
+        # Build the landmark lookup once for this grid generation.
+        # Keys are (row, col) 1-indexed; values are [R, G, B] float lists.
+        # When use_landmarks=False the dict is empty → all tiles stay grey.
+        landmark_tiles: dict[tuple, list] = (
+            self._get_landmark_tiles() if self.use_landmarks else {}
+        )
+
         for r in range(1, s + 1):
             for c in range(1, s + 1):
                 if self._is_passable(r, c):
-                    ltype = self._landmark_map[r, c]
-                    if self.U == 0 or ltype == 0:
-                        color = 'grey'
+                    if landmark_tiles and (r, c) in landmark_tiles:
+                        # Override base floor with paper-faithful landmark colour.
+                        # _LANDMARK_RGB_TO_COLOR maps the normalised RGB tuple
+                        # to the nearest MiniGrid Floor color name so that
+                        # Floor.render() returns the correct pixel values.
+                        rgb_key = tuple(landmark_tiles[(r, c)])
+                        color   = _LANDMARK_RGB_TO_COLOR.get(rgb_key, 'grey')
                     else:
-                        color = _LANDMARK_COLORS[ltype]   # 1→red, 2→blue, 3→yellow, 4→green
+                        color = 'grey'   # base floor
                     # MiniGrid uses (col, row) = (x, y) ordering
                     self.grid.set(c, r, Floor(color))
                 else:
-                    # Interior walls (L-shape cutout)
+                    # Interior walls (L-shape cutout or out-of-bounds)
                     self.grid.set(c, r, Wall())
 
-        self.place_agent()
+        # Place agent in the yellow (bottom-left) region, matching Figure 1A.
+        # Falls back to the first passable tile if the preferred position is
+        # somehow impassable (e.g. non-18×18 or square arena).
+        # We do NOT call self.place_agent() — np_random is uninitialised here.
+        preferred = [(14, 4), (14, 5), (13, 4), (13, 5), (12, 4)]
+        start_r, start_c = next(
+            ((r, c) for r, c in preferred if self._is_passable(r, c)),
+            next(
+                (r, c) for r in range(1, s + 1) for c in range(1, s + 1)
+                if self._is_passable(r, c)
+            ),
+        )
+        self.agent_pos = np.array([start_c, start_r])  # MiniGrid (x,y) = (col, row)
+        self.agent_dir = 3   # heading North (↑), matching figure
 
     # ------------------------------------------------------------------
     # Passable positions list (for trajectory generation and H2)
@@ -162,19 +307,60 @@ class SymmetryArena(MiniGridEnv):
 
 
 # ------------------------------------------------------------------
-# Factory — returns a wrapped env ready for RandomActionAgent
+# Pixel observation wrapper
 # ------------------------------------------------------------------
 
-def make_symmetry_env(shape: str, size: int, U: int, F: int = 7, seed: int = 0):
+class PixelObsWrapper(ObservationWrapper):
     """
-    Create and wrap a SymmetryArena as expected by utils/agent.py.
+    Replace the 'image' key in the observation dict with an F×F×3 uint8 RGB
+    pixel render of the agent's egocentric view (tile_size=1).
 
-    Returns RGBImgPartialObsWrapper(arena, tile_size=1).
+    Why not RGBImgPartialObsWrapper?
+      That wrapper calls self.get_frame() inside observation(), but
+      gymnasium.Wrapper has no __getattr__ forwarding — so get_frame
+      (defined on MiniGridEnv) is unreachable from the wrapper.
+      We fix this by explicitly calling self.env.get_frame().
+    """
+
+    def __init__(self, env: MiniGridEnv, tile_size: int = 1):
+        super().__init__(env)
+        self.tile_size = tile_size
+        F = env.agent_view_size
+        px = F * tile_size
+        new_image_space = spaces.Box(
+            low=0, high=255, shape=(px, px, 3), dtype=np.uint8
+        )
+        self.observation_space = spaces.Dict(
+            {**self.observation_space.spaces, "image": new_image_space}
+        )
+
+    def observation(self, obs):
+        # self.env is SymmetryArena — get_frame lives there, not on the wrapper
+        rgb = self.env.get_frame(tile_size=self.tile_size, agent_pov=True)
+        return {**obs, "image": rgb}
+
+
+# ------------------------------------------------------------------
+# Factory — returns a wrapped env ready for trajectory collection
+# ------------------------------------------------------------------
+
+def make_symmetry_env(shape: str, size: int, U: int, F: int = 7, seed: int = 0,
+                      use_landmarks: bool = True):
+    """
+    Create and wrap a SymmetryArena with PixelObsWrapper(tile_size=1).
+
     Observation: dict with 'image' key, shape (F, F, 3), dtype uint8.
     Flattened obs_size = F * F * 3.
+
+    Parameters
+    ----------
+    use_landmarks : bool
+        True  (default) — fixed paper-faithful landmark tiles (Figure 1A).
+        False           — uniform grey floor, equivalent to ablation U=0.
     """
-    arena = SymmetryArena(shape=shape, size=size, U=U, F=F, seed=seed)
-    wrapped = RGBImgPartialObsWrapper(arena, tile_size=1)
+    arena = SymmetryArena(shape=shape, size=size, U=U, F=F, seed=seed,
+                          use_landmarks=use_landmarks)
+    wrapped = PixelObsWrapper(arena, tile_size=1)
     return wrapped
 
 
@@ -184,13 +370,14 @@ def get_obs_at(wrapped_env, pos_xy: tuple, heading: int) -> np.ndarray:
     heading: 0=right(East), 1=down(South), 2=left(West), 3=up(North) — MiniGrid convention.
 
     Used for H2 and SCI computation without needing a full episode rollout.
+    Uses unwrapped to bypass gymnasium Wrapper attribute forwarding limitation.
     """
-    inner = wrapped_env.env   # SymmetryArena (1 wrap level with direct instantiation)
+    inner = wrapped_env.unwrapped  # SymmetryArena — always the raw MiniGridEnv
     inner.agent_pos = np.array(pos_xy)
     inner.agent_dir = heading
     raw_obs = inner.gen_obs()
     obs_dict = wrapped_env.observation(raw_obs)
-    img = obs_dict['image']                       # (F, F, 3) uint8
+    img = obs_dict['image']                        # (F, F, 3) uint8
     return (img.reshape(-1).astype(np.float32) / 255.0)
 
 
@@ -200,7 +387,7 @@ def compute_H2(wrapped_env) -> dict:
 
     Returns dict: 'mean', 'distribution' (list), 'n_passable_tiles', 'n_states'.
     """
-    inner = wrapped_env.env
+    inner = wrapped_env.unwrapped
     inner.reset()
 
     states = []
@@ -233,7 +420,7 @@ def compute_H2(wrapped_env) -> dict:
 
 def save_arena_metadata(wrapped_env, path: str):
     """Serialize arena geometry, H2, and symmetry pairs to JSON."""
-    inner = wrapped_env.env
+    inner = wrapped_env.unwrapped
     h2 = compute_H2(wrapped_env)
     sym_pairs = inner.precompute_symmetry_pairs()
     meta = {
