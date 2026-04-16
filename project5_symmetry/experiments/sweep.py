@@ -1,87 +1,117 @@
 """
 Outer sweep loop for project5_symmetry experiments.
 
-Usage (from repo root, after activating env):
-    python -m project5_symmetry.experiments.sweep --phase 0
-    python -m project5_symmetry.experiments.sweep --phase 1
-    python -m project5_symmetry.experiments.sweep --all
+Usage (from repo root):
+    python run.py --phase 0
+    python run.py --phase 1
+    python run.py --phase all
+
+Or directly:
+    PYTHONPATH=. python -m project5_symmetry.experiments.sweep --phase 0
 """
+
 import argparse
 import json
 import os
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
-from project5_symmetry.environments.arena import Arena
+from project5_symmetry.environments.arena import (
+    make_symmetry_env, save_arena_metadata,
+)
 from project5_symmetry.environments.generate_trajectories import generate_dataset
 from project5_symmetry.experiments.configs import (
     PHASE0, PHASE1, PHASE2A, PHASE2B, PHASE4A, PHASE4B, ALL_CONDITIONS,
     ExperimentConfig,
 )
-from project5_symmetry.training.train import train
+from project5_symmetry.training.train import train, _collect_hidden_states
 from project5_symmetry.evaluation.metrics import srsa, sci, dtg_curve, manifold_id
 from project5_symmetry.training.dataset import TrajectoryDataset
 
 GATE_THRESHOLD = 0.4
-BASE_OUT = 'project5_symmetry/results'
+BASE_OUT       = 'project5_symmetry/results'
 
+
+# ── Single condition × seed run ───────────────────────────────────────────────
 
 def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
     cond_dir = os.path.join(base_dir, cfg.condition_id)
     data_dir = os.path.join(cond_dir, 'trajectories')
-    run_dir = os.path.join(cond_dir, f'seed_{seed:02d}')
+    run_dir  = os.path.join(cond_dir, f'seed_{seed:02d}')
     os.makedirs(run_dir, exist_ok=True)
 
-    # Build arena (deterministic per condition; seed just controls landmark colours)
-    arena = Arena(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
+    # ── Trajectory dataset (shared across seeds for same condition) ───────────
+    env = make_symmetry_env(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
 
-    # Generate trajectories once per condition (shared across seeds)
-    if not os.path.exists(data_dir) or len(os.listdir(data_dir)) < cfg.n_traj:
-        print(f"  Generating {cfg.n_traj} trajectories for {cfg.condition_id} …")
-        generate_dataset(arena, cfg.n_traj, cfg.T, data_dir, n_workers=12)
-        arena.save_metadata(os.path.join(cond_dir, 'arena_meta.json'))
+    existing = len([f for f in os.listdir(data_dir) if f.endswith('.npz')]) \
+               if os.path.isdir(data_dir) else 0
 
-    obs_size = cfg.F * cfg.F * 3
-    log = train(
+    if existing < cfg.n_traj:
+        generate_dataset(
+            env, cfg.n_traj, cfg.T, data_dir,
+            desc=f'{cfg.condition_id} trajectories',
+        )
+        meta_path = os.path.join(cond_dir, 'arena_meta.json')
+        if not os.path.exists(meta_path):
+            save_arena_metadata(env, meta_path)
+
+    # ── Training ──────────────────────────────────────────────────────────────
+    obs_size  = cfg.F * cfg.F * 3
+    run_label = f'{cfg.condition_id} seed{seed}'
+
+    training_log = train(
         data_dir=data_dir,
         obs_size=obs_size,
         out_dir=run_dir,
         k=cfg.k,
-        T=cfg.T,
-        batch_size=cfg.B,
         n_steps=cfg.n_steps,
         seed=seed,
+        run_label=run_label,
     )
 
-    # Final evaluation on held-out hidden states
-    dataset = TrajectoryDataset(data_dir)
+    # ── Final evaluation ──────────────────────────────────────────────────────
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    dataset = TrajectoryDataset(data_dir)
 
-    # Load final checkpoint
     from utils.Architectures import pRNN_th
     from utils.thetaRNN import LayerNormRNNCell
+
     ckpt = torch.load(os.path.join(run_dir, 'ckpt_final.pt'), map_location=device)
     model = pRNN_th(obs_size=obs_size, act_size=5, k=cfg.k,
                     hidden_size=500, cell=LayerNormRNNCell, neuralTimescale=2)
     model.load_state_dict(ckpt['model'])
     model.to(device).eval()
 
-    from project5_symmetry.training.train import _collect_hidden_states
     h, pos = _collect_hidden_states(model, dataset, n=4000, device=device)
 
-    sym_pairs = arena.precompute_symmetry_pairs()
+    inner     = env.unwrapped
+    sym_pairs = inner.precompute_symmetry_pairs()
+    # Convert sym_pairs (list of pos tuples) → index pairs for sci()
+    pos_list  = inner.passable_positions
+    pos_index = {p: i for i, p in enumerate(pos_list)}
+    sym_idx   = [
+        (pos_index[a], pos_index[b])
+        for a, b in sym_pairs
+        if a in pos_index and b in pos_index
+    ]
+
     result = {
-        'condition_id': cfg.condition_id,
-        'seed': seed,
-        'final_srsa_euclid': srsa(h, pos, space_metric='euclidean'),
-        'final_srsa_city':   srsa(h, pos, space_metric='cityblock'),
-        'final_sci':         sci(h, pos, sym_pairs),
-        'final_manifold_id': manifold_id(h),
-        'dtg_curve':         dtg_curve(log['srsa_euclid'], log['srsa_city']).tolist(),
-        'srsa_euclid_curve': log['srsa_euclid'],
-        'srsa_city_curve':   log['srsa_city'],
-        'steps': log['steps'],
+        'condition_id':      cfg.condition_id,
+        'seed':              seed,
+        'final_srsa_euclid': float(srsa(h, pos, space_metric='euclidean')),
+        'final_srsa_city':   float(srsa(h, pos, space_metric='cityblock')),
+        'final_sci':         float(sci(h, pos, sym_idx)) if sym_idx else None,
+        'final_manifold_id': float(manifold_id(h)),
+        'dtg_curve':         dtg_curve(
+                                 training_log['srsa_euclid'],
+                                 training_log['srsa_city'],
+                             ).tolist(),
+        'srsa_euclid_curve': training_log['srsa_euclid'],
+        'srsa_city_curve':   training_log['srsa_city'],
+        'loss_curve':        training_log['loss'],
+        'steps':             training_log['steps'],
     }
 
     with open(os.path.join(run_dir, 'metrics.json'), 'w') as f:
@@ -90,59 +120,87 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
     return result
 
 
+# ── Phase runners ─────────────────────────────────────────────────────────────
+
 def run_phase0(base_dir: str) -> bool:
     cfg = PHASE0[0]
-    print(f"\n=== Phase 0 gate: {cfg.condition_id} ===")
+    tqdm.write(f'\n{"="*60}')
+    tqdm.write(f'Phase 0 gate: {cfg.condition_id}  (need sRSA_e > {GATE_THRESHOLD})')
+    tqdm.write(f'{"="*60}')
     result = _run_condition(cfg, seed=0, base_dir=base_dir)
     passed = result['final_srsa_euclid'] > GATE_THRESHOLD
-    print(f"Gate result: sRSA={result['final_srsa_euclid']:.3f} "
-          f"({'PASS' if passed else 'FAIL — halting sweep'})")
+    tqdm.write(
+        f'\nGate: sRSA_euclid = {result["final_srsa_euclid"]:.3f}  '
+        f'→  {"✓ PASS" if passed else "✗ FAIL — sweep halted"}'
+    )
     return passed
 
 
-def run_sweep(conditions: list, base_dir: str, phases_label: str = ''):
+def run_sweep(conditions: list, base_dir: str, label: str = '') -> list:
     os.makedirs(base_dir, exist_ok=True)
     all_results = []
 
+    total_runs = sum(cfg.n_seeds for cfg in conditions)
+    outer_pbar = tqdm(total=total_runs, desc=f'Sweep{label}',
+                      unit='run', dynamic_ncols=True)
+
     for cfg in conditions:
-        print(f"\n=== Condition {cfg.condition_id} ({cfg.n_seeds} seeds) ===")
+        tqdm.write(f'\n── {cfg.condition_id}  '
+                   f'({cfg.arena_shape} {cfg.arena_size}×{cfg.arena_size}, '
+                   f'U={cfg.U}, F={cfg.F}, k={cfg.k}, T={cfg.T}) ──')
         for seed in range(cfg.n_seeds):
-            print(f"  seed {seed} …")
             result = _run_condition(cfg, seed, base_dir)
             all_results.append(result)
+            outer_pbar.update(1)
+            outer_pbar.set_postfix({
+                'cond':   cfg.condition_id,
+                'seed':   seed,
+                'sRSA_e': f'{result["final_srsa_euclid"]:.3f}',
+            })
 
-    out_path = os.path.join(base_dir, f'all_results{phases_label}.json')
+    outer_pbar.close()
+
+    out_path = os.path.join(base_dir, f'all_results{label}.json')
     with open(out_path, 'w') as f:
         json.dump(all_results, f, indent=2)
-    print(f"\nResults written to {out_path}")
+    tqdm.write(f'\n✓ Results written to {out_path}')
     return all_results
 
 
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--phase', type=str, default=None,
-                        choices=['0', '1', '2a', '2b', '4a', '4b', 'all'])
-    parser.add_argument('--out', type=str, default=BASE_OUT)
+    parser = argparse.ArgumentParser(
+        description='project5_symmetry experiment sweep'
+    )
+    parser.add_argument('--phase', type=str, default='0',
+                        choices=['0', '1', '2a', '2b', '4a', '4b', 'all'],
+                        help='Which phase to run (default: 0 = gate only)')
+    parser.add_argument('--out',   type=str, default=BASE_OUT,
+                        help='Output directory root')
+    parser.add_argument('--no-gate', action='store_true',
+                        help='Skip Phase 0 gate check')
     args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
 
     if args.phase == '0':
         run_phase0(args.out)
         return
 
-    if not run_phase0(args.out):
-        return  # gate failed
+    if not args.no_gate and not run_phase0(args.out):
+        return   # gate failed
 
     phase_map = {
-        '1': PHASE1,
-        '2a': PHASE2A,
-        '2b': PHASE2B,
-        '4a': PHASE4A,
-        '4b': PHASE4B,
-        'all': ALL_CONDITIONS,
+        '1':   (PHASE1,  '_phase1'),
+        '2a':  (PHASE2A, '_phase2a'),
+        '2b':  (PHASE2B, '_phase2b'),
+        '4a':  (PHASE4A, '_phase4a'),
+        '4b':  (PHASE4B, '_phase4b'),
+        'all': (ALL_CONDITIONS, '_all'),
     }
-
-    conditions = phase_map.get(args.phase, ALL_CONDITIONS)
-    run_sweep(conditions, args.out, phases_label=f'_phase{args.phase}')
+    conditions, label = phase_map[args.phase]
+    run_sweep(conditions, args.out, label=label)
 
 
 if __name__ == '__main__':

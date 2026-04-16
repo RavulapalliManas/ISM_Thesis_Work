@@ -1,232 +1,401 @@
 """
-Visualise all environment types used in project5_symmetry.
+Environment visualiser for project5_symmetry.
 
-Produces a 4-panel figure:
-  Panel A  — Arena shapes & sizes (top-down grid view)
-  Panel B  — Landmark density sweep U=0..4  (18x18 square)
-  Panel C  — Visual-field size comparison F=3/5/7 (sample obs)
-  Panel D  — H2 aliasing distributions for key conditions
+Saves individual images AND a combined overview figure into an output folder.
+
+Output folder layout
+--------------------
+<out_dir>/
+  arenas/
+    arena_lshape_18.png        — top-down render of each shape × size
+    arena_square_12.png
+    arena_square_18.png
+    arena_square_24.png
+    arena_square_30.png
+  landmarks/
+    landmark_U0.png            — 18×18 square at each U value
+    landmark_U1.png
+    ...
+    landmark_U4.png
+  pov/
+    pov_F3_hd_E.png            — agent egocentric view at each F × heading
+    pov_F5_hd_S.png
+    ...  (12 images total: 3 F-values × 4 headings)
+  h2/
+    h2_distributions.png       — aliasing count histograms
+    h2_heatmap_<condition>.png — per-state H2 heat-map overlaid on arena
+  overview.png                 — all panels combined
 
 Run from repo root:
-    python -m project5_symmetry.visualize_environments
+    PYTHONPATH=. python project5_symmetry/visualize_environments.py
+    PYTHONPATH=. python project5_symmetry/visualize_environments.py --out my_folder
 """
 
 import warnings
 warnings.filterwarnings('ignore')
 
+import argparse
+import os
+
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')          # no display needed
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.patches import Patch
+import matplotlib.colors as mcolors
+from tqdm import tqdm
 
 from project5_symmetry.environments.arena import (
     make_symmetry_env, get_obs_at, compute_H2,
 )
 
+DEFAULT_OUT = 'project5_symmetry/env_viz'
+
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Rendering helpers
+# Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _save(fig, path: str, dpi: int = 150):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fig.savefig(path, dpi=dpi, bbox_inches='tight')
+    plt.close(fig)
+
 
 def render_arena(wrapped_env, tile_px: int = 12) -> np.ndarray:
-    """
-    Return an RGB numpy array of the full top-down arena.
-    Uses MiniGridEnv.get_frame() which does NOT require render_mode or Pyglet.
-    """
-    inner = wrapped_env.env
+    """Top-down RGB render — does not need render_mode or Pyglet."""
+    inner = wrapped_env.unwrapped
     inner.reset()
-    # highlight=False keeps agent tile the same colour as floor
-    frame = inner.get_frame(highlight=False, tile_size=tile_px)
-    return frame          # (H*tile_px, W*tile_px, 3)  uint8
+    return inner.get_frame(highlight=False, tile_size=tile_px)
 
 
-def render_agent_pov(wrapped_env, pos_xy, heading, F) -> np.ndarray:
-    """
-    Return the F×F×3 egocentric observation at (col, row), heading.
-    Reshaped to (F, F, 3) for imshow.
-    """
-    wrapped_env.env.reset()
-    flat = get_obs_at(wrapped_env, pos_xy, heading)   # (F*F*3,) float32 [0,1]
+def render_pov(wrapped_env, pos_xy, heading, F) -> np.ndarray:
+    """Agent egocentric F×F×3 observation at (col,row), heading."""
+    wrapped_env.unwrapped.reset()
+    flat = get_obs_at(wrapped_env, pos_xy, heading)   # float32 [0,1]
     return flat.reshape(F, F, 3)
 
 
 def _centre_pos(wrapped_env):
-    """Return a passable position near the centre of the arena."""
-    positions = wrapped_env.env.passable_positions
-    arr = np.array(positions)
-    centre = arr.mean(axis=0)
-    dists = np.linalg.norm(arr - centre, axis=1)
-    return tuple(positions[dists.argmin()])
+    """Passable tile closest to the arena centroid."""
+    positions = wrapped_env.unwrapped.passable_positions
+    arr = np.array(positions, dtype=float)
+    dists = np.linalg.norm(arr - arr.mean(axis=0), axis=1)
+    return tuple(positions[int(dists.argmin())])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Panel A — arena shapes and sizes
+# Section A — arena shapes & sizes
 # ─────────────────────────────────────────────────────────────────────────────
 
-PANEL_A_CONFIGS = [
-    ('l_shape', 18, 3, 'L-shape 18×18\n(baseline)'),
-    ('square',  12, 3, 'Square 12×12'),
-    ('square',  18, 3, 'Square 18×18'),
-    ('square',  24, 3, 'Square 24×24'),
-    ('square',  30, 3, 'Square 30×30'),
+ARENA_CONFIGS = [
+    ('l_shape', 18, 'L-shape 18×18\n(baseline)'),
+    ('square',  12, 'Square 12×12'),
+    ('square',  18, 'Square 18×18'),
+    ('square',  24, 'Square 24×24'),
+    ('square',  30, 'Square 30×30'),
 ]
 
 
-def draw_panel_a(axes):
-    for ax, (shape, size, U, label) in zip(axes, PANEL_A_CONFIGS):
-        env = make_symmetry_env(shape, size, U, F=7, seed=0)
-        img = render_arena(env, tile_px=10)
+def save_arenas(out_dir: str):
+    folder = os.path.join(out_dir, 'arenas')
+    for shape, size, label in tqdm(ARENA_CONFIGS, desc='Arenas', unit='env'):
+        env = make_symmetry_env(shape, size, U=3, F=7, seed=0)
+        img = render_arena(env, tile_px=12)
+        n   = len(env.unwrapped.passable_positions)
+
+        fig, ax = plt.subplots(figsize=(4, 4))
         ax.imshow(img)
-        ax.set_title(label, fontsize=8, pad=3)
+        ax.set_title(label, fontsize=11, fontweight='bold', pad=6)
+        ax.set_xlabel(f'{n} passable tiles', fontsize=9)
         ax.axis('off')
-        # passable tile count
-        n = len(env.env.passable_positions)
-        ax.set_xlabel(f'{n} passable tiles', fontsize=7)
-        ax.xaxis.set_label_position('top')
+        fname = f'arena_{shape}_{size}.png'
+        _save(fig, os.path.join(folder, fname))
+
+    tqdm.write(f'  ✓ {len(ARENA_CONFIGS)} arena images → {folder}/')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Panel B — landmark density U=0..4 on 18×18 square
+# Section B — landmark density U = 0 … 4
 # ─────────────────────────────────────────────────────────────────────────────
 
-PANEL_B_U = [0, 1, 2, 3, 4]
-U_LABELS = [
-    'U=0\n(uniform grey)',
-    'U=1\n(+red)',
-    'U=2\n(+blue)',
-    'U=3\n(+yellow)\n[paper default]',
-    'U=4\n(+green)',
-]
+U_LABELS = {
+    0: 'U=0  (uniform grey)',
+    1: 'U=1  (+red)',
+    2: 'U=2  (+blue)',
+    3: 'U=3  (+yellow)  [paper]',
+    4: 'U=4  (+green)',
+}
 
 
-def draw_panel_b(axes):
-    for ax, U, label in zip(axes, PANEL_B_U, U_LABELS):
+def save_landmarks(out_dir: str):
+    folder = os.path.join(out_dir, 'landmarks')
+    for U in tqdm(range(5), desc='Landmark densities', unit='U'):
         env = make_symmetry_env('square', 18, U, F=7, seed=42)
-        img = render_arena(env, tile_px=10)
+        img = render_arena(env, tile_px=12)
+
+        fig, ax = plt.subplots(figsize=(4, 4))
         ax.imshow(img)
-        ax.set_title(label, fontsize=7, pad=3)
+        ax.set_title(U_LABELS[U], fontsize=10, fontweight='bold', pad=6)
         ax.axis('off')
+        _save(fig, os.path.join(folder, f'landmark_U{U}.png'))
+
+    tqdm.write(f'  ✓ 5 landmark images → {folder}/')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Panel C — visual field sizes F=3/5/7 (same position, 4 headings)
+# Section C — egocentric POV at F = 3 / 5 / 7  ×  4 headings
 # ─────────────────────────────────────────────────────────────────────────────
 
-PANEL_C_F = [3, 5, 7]
-HEADINGS   = [0, 1, 2, 3]
-HD_LABELS  = ['E', 'S', 'W', 'N']
+F_VALUES   = [3, 5, 7]
+HD_NAMES   = {0: 'E', 1: 'S', 2: 'W', 3: 'N'}
 
 
-def draw_panel_c(axes_grid):
-    # axes_grid: (3 rows = F values) × (4 cols = headings)
-    for row, F in enumerate(PANEL_C_F):
+def save_pov(out_dir: str):
+    folder = os.path.join(out_dir, 'pov')
+    total  = len(F_VALUES) * len(HD_NAMES)
+    pbar   = tqdm(total=total, desc='POV frames', unit='img')
+
+    for F in F_VALUES:
         env = make_symmetry_env('l_shape', 18, U=3, F=F, seed=0)
         env.reset()
         pos = _centre_pos(env)
-        for col, (hd, hd_label) in enumerate(zip(HEADINGS, HD_LABELS)):
-            ax = axes_grid[row][col]
-            pov = render_agent_pov(env, pos, hd, F)
+
+        for hd, hd_name in HD_NAMES.items():
+            pov = render_pov(env, pos, hd, F)
+
+            fig, ax = plt.subplots(figsize=(3, 3))
             ax.imshow(pov, interpolation='nearest')
+            ax.set_title(f'F={F}  heading={hd_name}', fontsize=10,
+                         fontweight='bold', pad=6)
+            ax.set_xlabel(f'{F*F*3}-dim input', fontsize=8)
             ax.axis('off')
-            if row == 0:
-                ax.set_title(f'HD={hd_label}', fontsize=8)
-            if col == 0:
-                ax.set_ylabel(f'F={F}\n({F*F*3}d)', fontsize=8, rotation=0,
-                              labelpad=35, va='center')
+            _save(fig, os.path.join(folder, f'pov_F{F}_hd_{hd_name}.png'))
+            pbar.update(1)
+
+    pbar.close()
+    tqdm.write(f'  ✓ {total} POV images → {folder}/')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Panel D — H2 aliasing distributions for selected conditions
+# Section D — H2 aliasing
 # ─────────────────────────────────────────────────────────────────────────────
 
-PANEL_D_CONFIGS = [
-    ('l_shape', 18, 3, 7, 'L-shape\nU=3, F=7'),
-    ('square',  18, 0, 7, 'Square\nU=0, F=7'),
-    ('square',  18, 1, 7, 'Square\nU=1, F=7'),
-    ('square',  18, 3, 7, 'Square\nU=3, F=7'),
-    ('square',  18, 3, 5, 'Square\nU=3, F=5'),
-    ('square',  18, 3, 3, 'Square\nU=3, F=3'),
+H2_CONFIGS = [
+    ('l_shape', 18, 3, 7, 'L-shape  U=3 F=7'),
+    ('square',  18, 0, 7, 'Square   U=0 F=7'),
+    ('square',  18, 1, 7, 'Square   U=1 F=7'),
+    ('square',  18, 3, 7, 'Square   U=3 F=7'),
+    ('square',  18, 3, 5, 'Square   U=3 F=5'),
+    ('square',  18, 3, 3, 'Square   U=3 F=3'),
 ]
+H2_COLORS = ['#2196F3', '#F44336', '#FF9800', '#4CAF50', '#9C27B0', '#795548']
 
-COLORS_D = ['#2196F3', '#F44336', '#FF9800', '#4CAF50', '#9C27B0', '#795548']
 
+def save_h2(out_dir: str):
+    folder = os.path.join(out_dir, 'h2')
 
-def draw_panel_d(ax):
-    for i, (shape, size, U, F, label) in enumerate(PANEL_D_CONFIGS):
+    # ── 1. Histogram of aliasing counts ──────────────────────────────────────
+    fig_hist, ax_hist = plt.subplots(figsize=(8, 4))
+
+    for (shape, size, U, F, label), color in tqdm(
+            zip(H2_CONFIGS, H2_COLORS), total=len(H2_CONFIGS),
+            desc='H2 histograms', unit='env'):
+
         env = make_symmetry_env(shape, size, U, F=F, seed=0)
-        env.reset()
-        h2 = compute_H2(env)
+        h2  = compute_H2(env)
         dist = np.array(h2['distribution'])
         mean = h2['mean']
-        # KDE-style histogram (normalised)
         bins = np.arange(dist.max() + 2) - 0.5
-        ax.hist(dist, bins=bins, density=True, alpha=0.55,
-                color=COLORS_D[i], label=f'{label}  (μ={mean:.1f})',
-                edgecolor='none')
+        ax_hist.hist(dist, bins=bins, density=True, alpha=0.55,
+                     color=color, label=f'{label}  μ={mean:.2f}',
+                     edgecolor='none')
 
-    ax.set_xlabel('H2 aliasing count per state', fontsize=9)
-    ax.set_ylabel('Density', fontsize=9)
-    ax.set_title('H2 aliasing distributions', fontsize=10)
-    ax.legend(fontsize=7, loc='upper right', framealpha=0.8)
-    ax.spines[['top', 'right']].set_visible(False)
+    ax_hist.set_xlabel('Aliasing count (# other states with identical obs)', fontsize=10)
+    ax_hist.set_ylabel('Density', fontsize=10)
+    ax_hist.set_title('H2 aliasing distributions', fontsize=12, fontweight='bold')
+    ax_hist.legend(fontsize=8, loc='upper right', framealpha=0.8)
+    ax_hist.spines[['top', 'right']].set_visible(False)
+    _save(fig_hist, os.path.join(folder, 'h2_distributions.png'))
+
+    # ── 2. Per-state H2 heat-maps overlaid on arena ──────────────────────────
+    heatmap_configs = [
+        ('l_shape', 18, 3, 7),
+        ('square',  18, 0, 7),
+        ('square',  18, 3, 7),
+        ('square',  18, 3, 3),
+    ]
+
+    for shape, size, U, F in tqdm(heatmap_configs, desc='H2 heatmaps', unit='env'):
+        env   = make_symmetry_env(shape, size, U, F=F, seed=0)
+        h2    = compute_H2(env)
+        inner = env.unwrapped
+
+        # Build 2-D aliasing grid (average over 4 headings per tile)
+        grid = np.zeros((size + 2, size + 2), dtype=float)
+        dist = np.array(h2['distribution'])
+        states = [(pos, hd) for pos in inner.passable_positions for hd in range(4)]
+        for idx, ((col, row), _) in enumerate(states):
+            grid[row, col] += dist[idx] / 4.0   # mean over headings
+
+        # Arena background
+        arena_img = render_arena(env, tile_px=10)
+        h_px, w_px = arena_img.shape[:2]
+
+        fig, axes = plt.subplots(1, 2, figsize=(9, 4),
+                                 gridspec_kw={'width_ratios': [1, 1]})
+        axes[0].imshow(arena_img)
+        axes[0].set_title('Arena (top-down)', fontsize=9)
+        axes[0].axis('off')
+
+        im = axes[1].imshow(grid, cmap='hot_r', interpolation='nearest',
+                            origin='upper')
+        plt.colorbar(im, ax=axes[1], label='Mean H2 aliasing')
+        axes[1].set_title('H2 aliasing per tile\n(mean over 4 headings)', fontsize=9)
+        axes[1].axis('off')
+
+        fig.suptitle(f'{shape}  {size}×{size}  U={U}  F={F}',
+                     fontsize=11, fontweight='bold')
+        plt.tight_layout()
+        fname = f'h2_heatmap_{shape}_{size}_U{U}_F{F}.png'
+        _save(fig, os.path.join(folder, fname))
+
+    tqdm.write(f'  ✓ H2 images → {folder}/')
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Compose full figure
+# Combined overview figure
+# ─────────────────────────────────────────────────────────────────────────────
+
+def save_overview(out_dir: str):
+    """One big figure with panels A-D side by side for quick inspection."""
+    fig = plt.figure(figsize=(22, 18))
+    fig.suptitle('project5_symmetry — Environment Overview',
+                 fontsize=14, fontweight='bold', y=0.99)
+
+    outer = gridspec.GridSpec(4, 1, figure=fig, hspace=0.5,
+                              height_ratios=[1, 1, 1.2, 1.2])
+
+    # ── Panel A ──────────────────────────────────────────────────────────────
+    inner_a = gridspec.GridSpecFromSubplotSpec(
+        1, len(ARENA_CONFIGS), subplot_spec=outer[0], wspace=0.06)
+    for j, (shape, size, label) in enumerate(
+            tqdm(ARENA_CONFIGS, desc='Overview A', leave=False)):
+        ax = fig.add_subplot(inner_a[0, j])
+        env = make_symmetry_env(shape, size, U=3, F=7, seed=0)
+        ax.imshow(render_arena(env, tile_px=10))
+        ax.set_title(label, fontsize=8, pad=3)
+        ax.axis('off')
+    fig.add_subplot(outer[0]).set_title(
+        'A  —  Arena shapes & sizes  (U=3, F=7)',
+        fontsize=10, fontweight='bold', loc='left', pad=10, color='#333')
+    fig.axes[-1].axis('off')
+
+    # ── Panel B ──────────────────────────────────────────────────────────────
+    inner_b = gridspec.GridSpecFromSubplotSpec(
+        1, 5, subplot_spec=outer[1], wspace=0.06)
+    for U in tqdm(range(5), desc='Overview B', leave=False):
+        ax = fig.add_subplot(inner_b[0, U])
+        env = make_symmetry_env('square', 18, U, F=7, seed=42)
+        ax.imshow(render_arena(env, tile_px=10))
+        ax.set_title(U_LABELS[U], fontsize=7, pad=3)
+        ax.axis('off')
+    fig.add_subplot(outer[1]).set_title(
+        'B  —  Landmark density  (18×18 square, F=7)',
+        fontsize=10, fontweight='bold', loc='left', pad=10, color='#333')
+    fig.axes[-1].axis('off')
+
+    # ── Panel C ──────────────────────────────────────────────────────────────
+    n_rows, n_cols = len(F_VALUES), len(HD_NAMES)
+    inner_c = gridspec.GridSpecFromSubplotSpec(
+        n_rows, n_cols, subplot_spec=outer[2], wspace=0.04, hspace=0.12)
+    for r, F in enumerate(tqdm(F_VALUES, desc='Overview C', leave=False)):
+        env = make_symmetry_env('l_shape', 18, U=3, F=F, seed=0)
+        env.reset()
+        pos = _centre_pos(env)
+        for c, (hd, hd_name) in enumerate(HD_NAMES.items()):
+            ax = fig.add_subplot(inner_c[r, c])
+            ax.imshow(render_pov(env, pos, hd, F), interpolation='nearest')
+            ax.axis('off')
+            if r == 0:
+                ax.set_title(f'HD={hd_name}', fontsize=8)
+            if c == 0:
+                ax.set_ylabel(f'F={F}', fontsize=8, rotation=0,
+                              labelpad=28, va='center')
+    fig.add_subplot(outer[2]).set_title(
+        'C  —  Agent POV  (L-shape, U=3, centre tile)',
+        fontsize=10, fontweight='bold', loc='left', pad=10, color='#333')
+    fig.axes[-1].axis('off')
+
+    # ── Panel D ──────────────────────────────────────────────────────────────
+    ax_d = fig.add_subplot(outer[3])
+    for (shape, size, U, F, label), color in tqdm(
+            zip(H2_CONFIGS, H2_COLORS), total=len(H2_CONFIGS),
+            desc='Overview D', leave=False):
+        env  = make_symmetry_env(shape, size, U, F=F, seed=0)
+        h2   = compute_H2(env)
+        dist = np.array(h2['distribution'])
+        bins = np.arange(dist.max() + 2) - 0.5
+        ax_d.hist(dist, bins=bins, density=True, alpha=0.55,
+                  color=color, label=f'{label}  μ={h2["mean"]:.2f}',
+                  edgecolor='none')
+    ax_d.set_xlabel('H2 aliasing count', fontsize=9)
+    ax_d.set_ylabel('Density', fontsize=9)
+    ax_d.set_title('D  —  H2 aliasing distributions',
+                   fontsize=10, fontweight='bold', loc='left', pad=6, color='#333')
+    ax_d.legend(fontsize=7, loc='upper right', framealpha=0.8)
+    ax_d.spines[['top', 'right']].set_visible(False)
+
+    out_path = os.path.join(out_dir, 'overview.png')
+    _save(fig, out_path, dpi=150)
+    tqdm.write(f'  ✓ Combined overview → {out_path}')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    fig = plt.figure(figsize=(20, 18))
-    fig.suptitle('project5_symmetry — Environment Overview', fontsize=14,
-                 fontweight='bold', y=0.98)
+    parser = argparse.ArgumentParser(
+        description='Generate environment visualisation images'
+    )
+    parser.add_argument('--out', default=DEFAULT_OUT,
+                        help=f'Output folder (default: {DEFAULT_OUT})')
+    parser.add_argument('--skip-h2', action='store_true',
+                        help='Skip H2 computation (slow for large arenas)')
+    parser.add_argument('--skip-overview', action='store_true',
+                        help='Skip combined overview figure')
+    args = parser.parse_args()
 
-    outer = gridspec.GridSpec(4, 1, figure=fig,
-                              hspace=0.45,
-                              height_ratios=[1, 1, 1, 1])
+    os.makedirs(args.out, exist_ok=True)
+    print(f'\nSaving all images to:  {os.path.abspath(args.out)}/\n')
 
-    # ── Panel A: arena shapes/sizes ──────────────────────────────────────────
-    ax_a_label = fig.add_subplot(outer[0])
-    ax_a_label.axis('off')
-    ax_a_label.set_title('A  —  Arena shapes & sizes (U=3, F=7, top-down view)',
-                          fontsize=10, loc='left', pad=8, fontweight='bold')
-    inner_a = gridspec.GridSpecFromSubplotSpec(
-        1, len(PANEL_A_CONFIGS), subplot_spec=outer[0], wspace=0.08)
-    axes_a = [fig.add_subplot(inner_a[0, j]) for j in range(len(PANEL_A_CONFIGS))]
-    draw_panel_a(axes_a)
+    save_arenas(args.out)
+    save_landmarks(args.out)
+    save_pov(args.out)
 
-    # ── Panel B: landmark density ─────────────────────────────────────────────
-    ax_b_label = fig.add_subplot(outer[1])
-    ax_b_label.axis('off')
-    ax_b_label.set_title('B  —  Landmark density sweep  (18×18 square, F=7)',
-                          fontsize=10, loc='left', pad=8, fontweight='bold')
-    inner_b = gridspec.GridSpecFromSubplotSpec(
-        1, len(PANEL_B_U), subplot_spec=outer[1], wspace=0.08)
-    axes_b = [fig.add_subplot(inner_b[0, j]) for j in range(len(PANEL_B_U))]
-    draw_panel_b(axes_b)
+    if not args.skip_h2:
+        save_h2(args.out)
+    else:
+        print('  (H2 skipped)')
 
-    # ── Panel C: egocentric obs at F=3/5/7 ───────────────────────────────────
-    ax_c_label = fig.add_subplot(outer[2])
-    ax_c_label.axis('off')
-    ax_c_label.set_title('C  —  Agent POV at F=3/5/7  (L-shape, U=3, centre position)',
-                          fontsize=10, loc='left', pad=8, fontweight='bold')
-    inner_c = gridspec.GridSpecFromSubplotSpec(
-        len(PANEL_C_F), len(HEADINGS), subplot_spec=outer[2],
-        wspace=0.05, hspace=0.15)
-    axes_c = [[fig.add_subplot(inner_c[r, c])
-               for c in range(len(HEADINGS))]
-              for r in range(len(PANEL_C_F))]
-    draw_panel_c(axes_c)
+    if not args.skip_overview:
+        print('\nBuilding combined overview figure...')
+        save_overview(args.out)
 
-    # ── Panel D: H2 distributions ─────────────────────────────────────────────
-    ax_d = fig.add_subplot(outer[3])
-    ax_d.set_title('D  —  H2 aliasing distributions for key conditions',
-                   fontsize=10, loc='left', pad=8, fontweight='bold')
-    draw_panel_d(ax_d)
-
-    plt.savefig('project5_symmetry/environment_overview.png',
-                dpi=150, bbox_inches='tight')
-    print('Saved: project5_symmetry/environment_overview.png')
-    plt.show()
+    # ── Print file tree ───────────────────────────────────────────────────────
+    print(f'\n{"─"*50}')
+    print(f'Done.  Output folder: {os.path.abspath(args.out)}/')
+    for root, dirs, files in os.walk(args.out):
+        dirs.sort()
+        level = root.replace(args.out, '').count(os.sep)
+        indent = '  ' * level
+        rel = os.path.relpath(root, args.out)
+        if rel != '.':
+            print(f'{indent}{os.path.basename(root)}/')
+        for f in sorted(files):
+            print(f'{"  "*(level+1)}{f}')
+    print(f'{"─"*50}\n')
 
 
 if __name__ == '__main__':

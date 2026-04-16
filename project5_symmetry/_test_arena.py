@@ -6,8 +6,11 @@ print("1. importing gym..."); sys.stdout.flush()
 import minigrid 
 
 print("2. importing gym_minigrid..."); sys.stdout.flush()
-from gym_minigrid.minigrid import MiniGridEnv, Grid, Floor, Wall, MissionSpace
-from gym_minigrid.wrappers import RGBImgPartialObsWrapper
+from minigrid.core.grid import Grid
+from minigrid.core.world_object import Floor, Wall
+from minigrid.minigrid_env import MiniGridEnv
+from minigrid.core.mission import MissionSpace
+from minigrid.wrappers import RGBImgPartialObsWrapper
 import numpy as np
 
 print("3. creating MissionSpace..."); sys.stdout.flush()
