@@ -67,8 +67,18 @@ def collect_trajectory(wrapped_env, T: int, rng: np.random.Generator = None) -> 
     pos_arr  = np.empty((T + 1, 2),        dtype=np.int32)
     dir_arr  = np.empty((T + 1,),          dtype=np.int32)
 
-    raw_obs, _ = wrapped_env.reset()
-    obs_arr[0]  = raw_obs['image'].reshape(-1).astype(np.float32) / 255.0
+    wrapped_env.reset()
+    # Randomize start position and heading independently on every trajectory.
+    # _gen_grid always places the agent at a fixed tile (yellow region, North) —
+    # overriding here gives uniform coverage of the arena from t=0.
+    passable = inner.passable_positions          # list of (col, row) MiniGrid coords
+    start_col, start_row = passable[int(rng.integers(len(passable)))]
+    inner.agent_pos = np.array([start_col, start_row])
+    inner.agent_dir = int(rng.integers(4))       # 0=E 1=S 2=W 3=N, uniform
+
+    raw_obs = inner.gen_obs()
+    obs_dict = wrapped_env.observation(raw_obs)
+    obs_arr[0]  = obs_dict['image'].reshape(-1).astype(np.float32) / 255.0
     pos_arr[0]  = inner.agent_pos
     dir_arr[0]  = inner.agent_dir
 

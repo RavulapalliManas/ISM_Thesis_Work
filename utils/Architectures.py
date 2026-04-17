@@ -39,7 +39,7 @@ class pRNN(nn.Module):
                  cell=RNNCell,  dropp=0, trunc=50, k=0, f=0.5,
                  predOffset=1, inMask=[True], outMask=None, cyclePeriod=1,
                  actOffset=0, actMask=None, neuralTimescale=2,
-                continuousTheta=False):
+                 continuousTheta=False, hidden_init_sigma=0.1):
         super(pRNN, self).__init__()
 
         #pRNN architecture parameters
@@ -64,8 +64,9 @@ class pRNN(nn.Module):
         #TODO: add cellparams input to pass through
         #Consider putting the sigmoid outside this layer...
         input_size = obs_size + act_size
-        self.rnn = thetaRNNLayer(cell, trunc, input_size, hidden_size, musig, 
-                                 defaultTheta=k, continuousTheta=continuousTheta)
+        self.rnn = thetaRNNLayer(cell, trunc, input_size, hidden_size, musig,
+                                 defaultTheta=k, continuousTheta=continuousTheta,
+                                 hidden_init_sigma=hidden_init_sigma)
         self.outlayer = nn.Sequential(
             nn.Linear(hidden_size, obs_size, bias=False),
             nn.Sigmoid()
@@ -140,18 +141,20 @@ class pRNN(nn.Module):
 
 
 
-class pRNN_th(pRNN):    
+class pRNN_th(pRNN):
     def __init__(self, obs_size, act_size, k, hidden_size=500,
                  cell=RNNCell,  dropp=0, trunc=50, f=0.5,
-                 predOffset=0, inMask=[True], outMask=None,
+                 predOffset=1, inMask=[True], outMask=None,
                  actOffset=0, actMask=None, neuralTimescale=2,
-                continuousTheta=False, actionTheta=False):
+                 continuousTheta=False, actionTheta=False,
+                 hidden_init_sigma=0.1):
         super(pRNN_th, self).__init__(obs_size, act_size, hidden_size=hidden_size,
                  cell=cell,  dropp=dropp, trunc=trunc, k=k, f=0.5,
                  predOffset=predOffset, inMask=inMask, outMask=outMask,
                  actOffset=actOffset, actMask=actMask,
-                                      neuralTimescale=neuralTimescale,
-                                     continuousTheta=continuousTheta)
+                 neuralTimescale=neuralTimescale,
+                 continuousTheta=continuousTheta,
+                 hidden_init_sigma=hidden_init_sigma)
         
         self.k = k
         self.actionTheta = actionTheta

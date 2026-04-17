@@ -32,12 +32,14 @@ class thetaRNNLayer(nn.Module):
     internal [theta x sequence x neuron] (optional if input provided)
     state [DL fill this in] (optional)
     """
-    def __init__(self, cell, trunc, *cell_args, defaultTheta=0, continuousTheta=False):
+    def __init__(self, cell, trunc, *cell_args, defaultTheta=0, continuousTheta=False,
+                 hidden_init_sigma=0.1):
         super(thetaRNNLayer, self).__init__()
         self.cell = cell(*cell_args)
         self.trunc = trunc
         self.theta = defaultTheta
         self.continuousTheta = continuousTheta
+        self.hidden_init_sigma = hidden_init_sigma
         
 
     #@jit.script_method
@@ -74,7 +76,7 @@ class thetaRNNLayer(nn.Module):
                 input.size(0),
                 self.cell.hidden_size,
                 device=self.cell.weight_hh.device,
-            )
+            ).uniform_(0, self.hidden_init_sigma)
         if internal.size(0) == 0:
             internal = torch.zeros(
                 input.size(0),
