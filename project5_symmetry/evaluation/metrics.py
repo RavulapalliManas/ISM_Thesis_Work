@@ -17,6 +17,7 @@ Paper metrics (re-implemented to avoid class dependency):
 """
 
 import numpy as np
+import torch
 import pynapple as nap
 from scipy.spatial.distance import pdist, cdist
 from scipy.stats import spearmanr
@@ -33,6 +34,41 @@ def _subsample(hidden: np.ndarray, positions: np.ndarray, n: int):
         idx = np.random.choice(hidden.shape[0], n, replace=False)
         return hidden[idx], positions[idx]
     return hidden, positions
+
+
+def _pdist_cosine(X: np.ndarray) -> np.ndarray:
+    """Vectorized pairwise cosine distances via matrix multiply — replaces pdist(X, 'cosine')."""
+    X_t  = torch.from_numpy(X).float()
+    norms = X_t.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    X_n  = X_t / norms
+    cos_sim = X_n @ X_n.T
+    D = torch.clamp(1.0 - cos_sim, min=0.0, max=2.0)
+    i, j = torch.triu_indices(len(X_t), len(X_t), offset=1)
+    return D[i, j].numpy()
+
+
+def _pdist_euclidean(X: np.ndarray) -> np.ndarray:
+    """Vectorized pairwise Euclidean distances via matrix multiply."""
+    X_t = torch.from_numpy(X).float()
+    sq  = (X_t ** 2).sum(dim=1, keepdim=True)
+    D   = sq + sq.T - 2 * X_t @ X_t.T
+    D   = torch.clamp(D, min=0).sqrt()
+    i, j = torch.triu_indices(len(X_t), len(X_t), offset=1)
+    return D[i, j].numpy()
+
+
+def _pdist_cityblock(X: np.ndarray) -> np.ndarray:
+    """Vectorized pairwise CityBlock distances — chunked to avoid OOM."""
+    X_t   = torch.from_numpy(X).float()
+    n     = len(X_t)
+    chunk = 256
+    out   = []
+    for i in range(0, n, chunk):
+        diff = torch.abs(X_t[i:i + chunk].unsqueeze(1) - X_t.unsqueeze(0))
+        out.append(diff.sum(dim=2))
+    D    = torch.cat(out, dim=0)
+    i, j = torch.triu_indices(n, n, offset=1)
+    return D[i, j].numpy()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -54,8 +90,16 @@ def srsa(
     positions : (T, 2)  col/row in MiniGrid coords
     """
     h, p = _subsample(hidden, positions, max_n)
-    neural_dists  = pdist(h, neural_metric)
-    spatial_dists = pdist(p, space_metric)
+    if neural_metric == 'cosine':
+        neural_dists = _pdist_cosine(h)
+    else:
+        neural_dists = pdist(h, neural_metric)
+    if space_metric == 'euclidean':
+        spatial_dists = _pdist_euclidean(p)
+    elif space_metric == 'cityblock':
+        spatial_dists = _pdist_cityblock(p)
+    else:
+        spatial_dists = pdist(p, space_metric)
     return float(spearmanr(neural_dists, spatial_dists).statistic)
 
 

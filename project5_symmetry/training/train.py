@@ -4,8 +4,7 @@ Training loop for project5_symmetry rollout pRNN.
 Faithful to Levenstein et al. 2024 (Methods p.16-17):
   - Optimizer: RMSProp, alpha=0.95, eps=1e-8  (NOT Adam)
   - Learning rates scaled by init value
-  - B=1 single-trial updates (pRNN_th requires B=1 due to squeeze(0))
-  - Effective B=8 via gradient accumulation
+  - B=8 per optimizer step (DataLoader batch_size=8)
   - Checkpoints at steps {5000, 10000, 20000, 40000, final}
   - sRSA (Euclidean + CityBlock) logged every LOG_INTERVAL steps
 
@@ -42,7 +41,7 @@ WEIGHT_DECAY     = 3e-3      # lambda_wd
 RMSPROP_ALPHA    = 0.95
 RMSPROP_EPS      = 1e-8
 
-ACCUM_STEPS      = 8         # gradient accumulation → effective B=8
+BATCH_SIZE       = 8         # true B=8: DataLoader returns 8 trajectories per call
 LOG_INTERVAL     = 1000      # steps between sRSA evaluations
 CHECKPOINT_STEPS = {5000, 10000, 20000, 40000}
 SUBSAMPLE_N      = 4000      # timesteps subsampled for sRSA
@@ -55,17 +54,17 @@ def _build_optimizer(model: pRNN_th) -> torch.optim.Optimizer:
     Per-parameter LRs scaled by init magnitude (Methods p.17):
       LR(W_rec, W_out) = lambda * sqrt(1/H)
       LR(W_in, W_act)  = lambda * sqrt(1/(obs+act))
-      LR(bias)         = lambda_b * lambda
+      LR(bias, scale)  = lambda_b * lambda
     """
     k_io = 1.0 / model.rnn.cell.weight_ih.shape[1]
     k_h  = 1.0 / model.rnn.cell.weight_hh.shape[0]
 
     return torch.optim.RMSprop(
         [
-            {'params': [model.W],     'lr': GLOBAL_LR * k_h  ** 0.5},
-            {'params': [model.W_in],  'lr': GLOBAL_LR * k_io ** 0.5},
-            {'params': [model.W_out], 'lr': GLOBAL_LR * k_h  ** 0.5},
-            {'params': [model.bias],  'lr': GLOBAL_LR * BIAS_LR_SCALE},
+            {'params': [model.W],                              'lr': GLOBAL_LR * k_h  ** 0.5},
+            {'params': [model.W_in],                          'lr': GLOBAL_LR * k_io ** 0.5},
+            {'params': [model.W_out],                         'lr': GLOBAL_LR * k_h  ** 0.5},
+            {'params': [model.bias, model.rnn.cell.scale],    'lr': GLOBAL_LR * BIAS_LR_SCALE},
         ],
         alpha=RMSPROP_ALPHA,
         eps=RMSPROP_EPS,
@@ -92,7 +91,7 @@ def _collect_hidden_states(model: pRNN_th, dataset: TrajectoryDataset,
             obs, act, pos, _ = dataset[int(idx)]
             _, h, _ = model(obs.unsqueeze(0).to(device),
                             act.unsqueeze(0).to(device))
-            # h shape: (T', H)  — rollout returns 2-D tensor for θ=0 path
+            # h shape: (1, T', H) from pRNN_th.forward (theta=0 batched path)
             h0 = h.squeeze(0).cpu().numpy() if h.dim() == 3 else h.cpu().numpy()
             p  = pos.numpy()[:h0.shape[0]]
             take = min(h0.shape[0], n - total)
@@ -114,7 +113,7 @@ def train(
     out_dir: str,
     k: int = 5,
     n_steps: int = 40000,
-    accum_steps: int = ACCUM_STEPS,
+    batch_size: int = BATCH_SIZE,
     seed: int = 0,
     device_str: str = None,
     run_label: str = '',       # shown in tqdm bar and TensorBoard run name
@@ -128,8 +127,8 @@ def train(
     obs_size   : F*F*3 (e.g. 147 for F=7)
     out_dir    : directory for checkpoints, training_log.json, and tb/ logs
     k          : rollout steps ahead
-    n_steps    : total optimizer steps  (each step = accum_steps micro-batches)
-    accum_steps: gradient accumulation → effective batch size
+    n_steps    : total optimizer steps  (each step processes one B=8 batch)
+    batch_size : trajectories per optimizer step (default 8)
     seed       : RNG seed
     run_label  : short string shown in tqdm + TensorBoard (e.g. 'P0 seed0')
 
@@ -148,15 +147,16 @@ def train(
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
     pin_memory = (device_str == 'cuda')
-    num_workers = min(8, os.cpu_count() or 2)          # change 3: was 4
+    num_workers = min(8, os.cpu_count() or 2)
     loader  = DataLoader(
         dataset,
-        batch_size=1,
+        batch_size=batch_size,   # B=8: one call → 8 trajectories → one RNN forward
         shuffle=True,
+        drop_last=True,          # ensure every batch is exactly B=8
         num_workers=num_workers,
         pin_memory=pin_memory,
         persistent_workers=(num_workers > 0),
-        prefetch_factor=4 if num_workers > 0 else None, # change 4: was 2
+        prefetch_factor=4 if num_workers > 0 else None,
     )
 
     # ── Model ─────────────────────────────────────────────────────────────────
@@ -175,6 +175,11 @@ def train(
     # Dynamo traces it cleanly. The outer thetaRNNLayer Python loop and pRNN_th's
     # restructure_inputs() (which uses numpy Toeplitz) cannot be compiled without
     # graph breaks, so we leave them as-is.
+    # Bug 2 fix: build optimizer BEFORE torch.compile so parameter references
+    # are clean (model.rnn.cell.weight_ih etc. live on the original module,
+    # not the OptimizedModule wrapper).
+    optimizer = _build_optimizer(model)
+
     compiled = False
     try:
         model.rnn.cell = torch.compile(model.rnn.cell)
@@ -186,8 +191,6 @@ def train(
         tqdm.write(f'  [compile] torch.compile(cell) SKIPPED: {e}')
         compiled = False
 
-    optimizer = _build_optimizer(model)
-
     # ── Logging setup ─────────────────────────────────────────────────────────
     tb_dir = os.path.join(out_dir, 'tb')
     writer = SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else '')
@@ -195,8 +198,6 @@ def train(
     log_dict  = {'steps': [], 'srsa_euclid': [], 'srsa_city': [], 'loss': []}
     ckpt_paths = []
     step       = 0
-    accum_loss = 0.0
-    micro      = 0
 
     # ── Training loop ─────────────────────────────────────────────────────────
     pbar = tqdm(
@@ -217,63 +218,60 @@ def train(
         if step >= n_steps:
             break
 
-        obs_b, act_b, _, _ = batch       # (1, T+1, obs_size), (1, T, 5)
+        obs_b, act_b, _, _ = batch   # (B, T+1, obs_size), (B, T, 5)
         obs_b = obs_b.to(device, non_blocking=pin_memory)
         act_b = act_b.to(device, non_blocking=pin_memory)
 
         pred, _, target = model(obs_b, act_b)
-        loss = F.mse_loss(pred, target) / accum_steps
+        loss = F.mse_loss(pred, target)   # B trajectories, one scalar loss
         loss.backward()
-        accum_loss += loss.item()
-        micro += 1
 
-        if micro == accum_steps:
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-            step += 1
-            micro = 0
-            pbar.update(1)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+        step += 1
+        step_loss = loss.item()
 
-            # ── TensorBoard: loss every step ──────────────────────────────────
-            writer.add_scalar('loss/train', accum_loss, step)
+        pbar.update(1)
 
-            if step % LOG_INTERVAL == 0:
-                _t0 = time.time()
-                h, pos = _collect_hidden_states(model, dataset, SUBSAMPLE_N, device)
-                sRSA_e = float(srsa(h, pos, space_metric='euclidean'))
-                sRSA_c = float(srsa(h, pos, space_metric='cityblock'))
-                dtg    = sRSA_e - sRSA_c
-                _srsa_sec = time.time() - _t0
-                tqdm.write(f'  [step {step:>6d}] sRSA_e={sRSA_e:.3f}  '
-                           f'sRSA_c={sRSA_c:.3f}  ΔTG={dtg:+.3f}  '
-                           f'({_srsa_sec:.1f}s)')
+        # ── TensorBoard: loss every step ──────────────────────────────────
+        writer.add_scalar('loss/train', step_loss, step)
 
-                # ── TensorBoard: metrics ──────────────────────────────────────
-                writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, step)
-                writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, step)
-                writer.add_scalar('metrics/delta_TG',       dtg,    step)
+        if step % LOG_INTERVAL == 0:
+            _t0 = time.time()
+            h, pos = _collect_hidden_states(model, dataset, SUBSAMPLE_N, device)
+            sRSA_e = float(srsa(h, pos, space_metric='euclidean'))
+            sRSA_c = float(srsa(h, pos, space_metric='cityblock'))
+            dtg    = sRSA_e - sRSA_c
+            _srsa_sec = time.time() - _t0
+            tqdm.write(f'  [step {step:>6d}] sRSA_e={sRSA_e:.3f}  '
+                       f'sRSA_c={sRSA_c:.3f}  ΔTG={dtg:+.3f}  '
+                       f'({_srsa_sec:.1f}s)')
 
-                # ── tqdm postfix ──────────────────────────────────────────────
-                pbar.set_postfix({
-                    'loss':   f'{accum_loss:.4f}',
-                    'sRSA_e': f'{sRSA_e:.3f}',
-                    'sRSA_c': f'{sRSA_c:.3f}',
-                    'ΔTG':    f'{dtg:+.3f}',
-                })
+            # ── TensorBoard: metrics ──────────────────────────────────────
+            writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, step)
+            writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, step)
+            writer.add_scalar('metrics/delta_TG',       dtg,    step)
 
-                log_dict['steps'].append(step)
-                log_dict['srsa_euclid'].append(sRSA_e)
-                log_dict['srsa_city'].append(sRSA_c)
-                log_dict['loss'].append(float(accum_loss))
-                accum_loss = 0.0
+            # ── tqdm postfix ──────────────────────────────────────────────
+            pbar.set_postfix({
+                'loss':   f'{step_loss:.4f}',
+                'sRSA_e': f'{sRSA_e:.3f}',
+                'sRSA_c': f'{sRSA_c:.3f}',
+                'ΔTG':    f'{dtg:+.3f}',
+            })
 
-            if step in CHECKPOINT_STEPS:
-                ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
-                torch.save({'step': step,
-                            'model': model.state_dict(),
-                            'optimizer': optimizer.state_dict()}, ckpt)
-                ckpt_paths.append(ckpt)
-                writer.add_text('checkpoint', ckpt, step)
+            log_dict['steps'].append(step)
+            log_dict['srsa_euclid'].append(sRSA_e)
+            log_dict['srsa_city'].append(sRSA_c)
+            log_dict['loss'].append(float(step_loss))
+
+        if step in CHECKPOINT_STEPS:
+            ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
+            torch.save({'step': step,
+                        'model': model.state_dict(),
+                        'optimizer': optimizer.state_dict()}, ckpt)
+            ckpt_paths.append(ckpt)
+            writer.add_text('checkpoint', ckpt, step)
 
     pbar.close()
 
