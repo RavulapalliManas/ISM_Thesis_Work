@@ -237,7 +237,8 @@ class LayerNormRNNCell(jit.ScriptModule):
         # Learnable shift bias for layer-norm (was layernorm.mu).
         # Exposed as self.bias so pRNN's optimizer group still resolves correctly via
         #   model.bias → model.rnn.cell.bias
-        self.bias = Parameter(torch.zeros(hidden_size))
+        self.bias  = Parameter(torch.zeros(hidden_size))
+        self.scale = Parameter(torch.ones(hidden_size))
 
         self.actfun = torch.nn.ReLU()
 
@@ -249,7 +250,7 @@ class LayerNormRNNCell(jit.ScriptModule):
         h_input = torch.mm(hx,    self.weight_hh.t())
         # Single fused kernel: normalize then add learned shift (bias)
         x  = F.layer_norm(i_input + h_input, [self.hidden_size],
-                          weight=None, bias=self.bias, eps=1e-4)
+                          weight=self.scale, bias=self.bias, eps=1e-4)
         hy = self.actfun(x + internal)
         return hy, (hy, 0)
 

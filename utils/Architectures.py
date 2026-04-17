@@ -233,21 +233,10 @@ class pRNN_th(pRNN):
         obs, act = obs[:, :minsize, :], act[:, :minsize, :]
         obs_target = obs_target[:, :, :minsize, :]   # 4D slice along time axis
 
-        #No masks for theta net
-        obs_out        = torch.zeros_like(obs,        requires_grad=False)
-        act_out        = torch.zeros_like(act,        requires_grad=False)
-        obs_target_out = torch.zeros_like(obs_target, requires_grad=False)  # 4D
         outmask = True
-
-        obs_out       [:, :, :]    = obs       [:, :, :]
-        act_out       [:, :, :]    = act       [:, :, :]
-        obs_target_out[:, :, :, :] = obs_target[:, :, :, :]   # 4D assignment
-
-        obs = self.droplayer(obs) #dropout without action
-
-        #Concatenate the obs/act into a single input
-        x_t = torch.cat((obs_out,act_out), 2)
-        return x_t, obs_target_out, outmask
+        obs = self.droplayer(obs)
+        x_t = torch.cat((obs.detach(), act.detach()), 2)
+        return x_t, obs_target.detach(), outmask
 
 
     # ── Group 4: forward override ─────────────────────────────────────────────
