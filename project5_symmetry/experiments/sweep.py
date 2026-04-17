@@ -67,6 +67,7 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
         out_dir=run_dir,
         k=cfg.k,
         n_steps=cfg.n_steps,
+        trunc=cfg.T,
         seed=seed,
         run_label=run_label,
     )

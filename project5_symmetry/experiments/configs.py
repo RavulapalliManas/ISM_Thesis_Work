@@ -13,7 +13,7 @@ class ExperimentConfig:
     n_seeds: int = 9
     n_traj: int = 10000
     B: int = 8
-    n_steps: int = 40000
+    n_steps: int = 80000
 
 
 # ---------------------------------------------------------------------------

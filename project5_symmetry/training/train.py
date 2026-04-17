@@ -45,6 +45,7 @@ BATCH_SIZE       = 8         # true B=8: DataLoader returns 8 trajectories per c
 LOG_INTERVAL     = 1000      # steps between sRSA evaluations
 CHECKPOINT_STEPS = {5000, 10000, 20000, 40000, 60000, 80000}
 SUBSAMPLE_N      = 4000      # timesteps subsampled for sRSA
+HIDDEN_INIT_SIGMA = 0.1      # U(0, σ) hidden state init per trial (Levenstein p.16)
 
 
 # ── Optimizer ─────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ def train(
     out_dir: str,
     k: int = 5,
     n_steps: int = 80000,
+    trunc: int = 200,
     batch_size: int = BATCH_SIZE,
     seed: int = 0,
     device_str: str = None,
@@ -168,6 +170,9 @@ def train(
         cell=LayerNormRNNCell,
         dropp=DROPOUT_P,
         neuralTimescale=NEURAL_TIMESCALE,
+        trunc=trunc,
+        predOffset=1,
+        hidden_init_sigma=HIDDEN_INIT_SIGMA,
     ).to(device)
 
     # Change 2: compile only the RNN cell, not the whole model.
