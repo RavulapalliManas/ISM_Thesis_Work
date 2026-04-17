@@ -5,7 +5,7 @@ Faithful to Levenstein et al. 2024 (Methods p.16-17):
   - Optimizer: RMSProp, alpha=0.95, eps=1e-8  (NOT Adam)
   - Learning rates scaled by init value
   - B=8 per optimizer step (DataLoader batch_size=8)
-  - Checkpoints at steps {5000, 10000, 20000, 40000, final}
+  - Checkpoints at steps {5000, 10000, 20000, 40000, 60000, 80000, final}
   - sRSA (Euclidean + CityBlock) logged every LOG_INTERVAL steps
 
 Progress tracking:
@@ -43,7 +43,7 @@ RMSPROP_EPS      = 1e-8
 
 BATCH_SIZE       = 8         # true B=8: DataLoader returns 8 trajectories per call
 LOG_INTERVAL     = 1000      # steps between sRSA evaluations
-CHECKPOINT_STEPS = {5000, 10000, 20000, 40000}
+CHECKPOINT_STEPS = {5000, 10000, 20000, 40000, 60000, 80000}
 SUBSAMPLE_N      = 4000      # timesteps subsampled for sRSA
 
 
@@ -112,7 +112,7 @@ def train(
     obs_size: int,
     out_dir: str,
     k: int = 5,
-    n_steps: int = 40000,
+    n_steps: int = 80000,
     batch_size: int = BATCH_SIZE,
     seed: int = 0,
     device_str: str = None,
