@@ -15,12 +15,13 @@ import os
 import sys
 import json
 import time
+from pathlib import Path
 
 # Make repo root importable regardless of cwd
-_HERE   = os.path.dirname(os.path.abspath(__file__))
-_ROOT   = os.path.abspath(os.path.join(_HERE, '..', '..'))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+_HERE = Path(__file__).resolve().parent          # .../project5_symmetry/training
+_ROOT = _HERE.parent.parent                      # repo root
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import torch
 import torch.nn.functional as F
@@ -53,10 +54,10 @@ from project5_symmetry.training.train import (
 )
 
 # ── P0 constants ──────────────────────────────────────────────────────────────
-DATA_DIR  = os.path.join(_ROOT, 'project5_symmetry', 'results', 'P0', 'trajectories')
-OUT_DIR   = os.path.join(_ROOT, 'project5_symmetry', 'results', 'P0', 'seed_00')
-CKPT_IN   = os.path.join(OUT_DIR, 'ckpt_final.pt')
-LOG_JSON  = os.path.join(OUT_DIR, 'training_log.json')
+DATA_DIR  = _ROOT / 'project5_symmetry' / 'results' / 'P0' / 'trajectories'
+OUT_DIR   = _ROOT / 'project5_symmetry' / 'results' / 'P0' / 'seed_00'
+CKPT_IN   = OUT_DIR / 'ckpt_final.pt'
+LOG_JSON  = OUT_DIR / 'training_log.json'
 
 OBS_SIZE  = 7 * 7 * 3   # F=7, RGB
 ACT_SIZE  = 5
@@ -90,8 +91,8 @@ def main():
         log_dict['ckpt_paths'] = []
 
     # ── Dataset & DataLoader ──────────────────────────────────────────────────
-    dataset     = TrajectoryDataset(DATA_DIR)
-    num_workers = min(8, os.cpu_count() or 2)
+    dataset     = TrajectoryDataset(str(DATA_DIR))
+    num_workers = min(8, (os.cpu_count() or 2))
     loader      = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
@@ -156,8 +157,8 @@ def main():
         sys.exit(1)
 
     # ── TensorBoard (append to existing run directory) ────────────────────────
-    tb_dir = os.path.join(OUT_DIR, 'tb')
-    writer = SummaryWriter(log_dir=tb_dir, comment='_P0_seed0_resume')
+    tb_dir = OUT_DIR / 'tb'
+    writer = SummaryWriter(log_dir=str(tb_dir), comment='_P0_seed0_resume')
 
     # ── Resume training loop ──────────────────────────────────────────────────
     step        = START_STEP
@@ -225,13 +226,13 @@ def main():
             log_dict['loss'].append(float(step_loss))
 
         if step in RESUME_CHECKPOINT_STEPS:
-            ckpt_path = os.path.join(OUT_DIR, f'ckpt_{step}.pt')
+            ckpt_path = OUT_DIR / f'ckpt_{step}.pt'
             torch.save({'step': step,
                         'model': model.state_dict(),
                         'optimizer': optimizer.state_dict()}, ckpt_path)
-            log_dict['ckpt_paths'].append(ckpt_path)
-            writer.add_text('checkpoint', ckpt_path, step)
-            tqdm.write(f'  [ckpt] saved → {ckpt_path}')
+            log_dict['ckpt_paths'].append(str(ckpt_path))
+            writer.add_text('checkpoint', str(ckpt_path), step)
+            tqdm.write(f'  [ckpt] saved -> {ckpt_path}')
 
     pbar.close()
     writer.close()
