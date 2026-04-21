@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 from utils.Architectures import pRNN_th
 from utils.thetaRNN import LayerNormRNNCell
 
-from project5_symmetry.training.dataset import TrajectoryDataset
+from project5_symmetry.training.dataset import TrajectoryDataset, PackedTrajectoryStore
 from project5_symmetry.evaluation.metrics import srsa
 
 # ── Paper hyperparameters (Table 1, p.17) ─────────────────────────────────────
@@ -45,6 +45,9 @@ RMSPROP_ALPHA    = 0.95
 RMSPROP_EPS      = 1e-6
 
 BATCH_SIZE       = 8         # true B=8: DataLoader returns 8 trajectories per call
+FAST_BATCH_SIZE  = 16
+PARALLEL_SEED_GROUP = 4
+ANCHOR_SUBSAMPLE_N = 32
 LOG_INTERVAL     = 1000      # steps between sRSA evaluations
 CHECKPOINT_STEPS = {5000, 10000, 20000, 40000, 60000, 80000}
 SUBSAMPLE_N      = 5000      # timesteps subsampled per sRSA run
@@ -135,7 +138,7 @@ def _evaluate_srsa(
 
 # ── Main training function ────────────────────────────────────────────────────
 
-def train(
+def _train_legacy(
     data_dir: str,
     obs_size: int,
     out_dir: str,
@@ -460,3 +463,380 @@ def train(
                f'tb → {tb_dir}')
 
     return log_dict
+
+
+def _enable_tf32(device: torch.device):
+    if device.type != 'cuda':
+        return
+    torch.backends.cuda.matmul.allow_tf32 = True
+    if hasattr(torch.backends.cudnn, 'allow_tf32'):
+        torch.backends.cudnn.allow_tf32 = True
+    if hasattr(torch, 'set_float32_matmul_precision'):
+        torch.set_float32_matmul_precision('high')
+
+
+def _sample_anchor_idx(T_k: int, device: torch.device, anchor_subsample_n: int):
+    if anchor_subsample_n <= 0 or anchor_subsample_n >= T_k:
+        return None
+    idx = torch.randperm(T_k, device=device)[:anchor_subsample_n]
+    return torch.sort(idx).values
+
+
+def _sample_main_noise(batch_size: int, T_act: int, hidden_size: int, device: torch.device):
+    if NOISE_STD <= 0:
+        return torch.tensor([], device=device)
+    return NOISE_STD * torch.randn(batch_size, T_act, hidden_size, device=device)
+
+
+def _sample_roll_noise(batch_size: int, k: int, n_anchors: int, hidden_size: int, device: torch.device):
+    if NOISE_STD <= 0:
+        return torch.tensor([], device=device)
+    return NOISE_STD * torch.randn(batch_size, k, n_anchors, hidden_size, device=device)
+
+
+def _build_model(obs_size: int, act_size: int, k: int, trunc: int, device: torch.device, compile_cell: bool = True):
+    model = pRNN_th(
+        obs_size=obs_size,
+        act_size=act_size,
+        k=k,
+        hidden_size=HIDDEN_SIZE,
+        cell=LayerNormRNNCell,
+        dropp=DROPOUT_P,
+        neuralTimescale=NEURAL_TIMESCALE,
+        trunc=trunc,
+        predOffset=PRED_OFFSET,
+        hidden_init_sigma=HIDDEN_INIT_SIGMA,
+    ).to(device)
+
+    compiled = False
+    if compile_cell:
+        try:
+            model.rnn.cell = torch.compile(model.rnn.cell, mode='reduce-overhead')
+            compiled = True
+        except Exception:
+            compiled = False
+    return model, compiled
+
+
+def _save_checkpoint(ckpt_path: str, step: int, model: pRNN_th, optimizer, trunc: int, extra_meta: dict | None = None):
+    meta = {
+        'obs_scale': OBS_SCALE,
+        'pred_offset': PRED_OFFSET,
+        'dropout_p': DROPOUT_P,
+        'noise_std': NOISE_STD,
+        'hidden_init_sigma': HIDDEN_INIT_SIGMA,
+        'trunc': trunc,
+        'srsa_eval_n': SUBSAMPLE_N,
+        'srsa_eval_runs': SRSA_EVAL_RUNS,
+        'anchor_subsample_n': ANCHOR_SUBSAMPLE_N,
+    }
+    if extra_meta:
+        meta.update(extra_meta)
+
+    torch.save(
+        {
+            'step': step,
+            'model': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'meta': meta,
+        },
+        ckpt_path,
+    )
+
+
+def _train_fast_single(
+    data_dir: str,
+    obs_size: int,
+    out_dir: str,
+    k: int = 5,
+    n_steps: int = 80000,
+    trunc: int = 200,
+    batch_size: int = BATCH_SIZE,
+    seed: int = 0,
+    device_str: str = None,
+    run_label: str = '',
+) -> dict:
+    if device_str is None:
+        device_str = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    os.makedirs(out_dir, exist_ok=True)
+    device = torch.device(device_str)
+    _enable_tf32(device)
+
+    if batch_size == BATCH_SIZE:
+        batch_size = int(os.getenv('PRNN_PER_SEED_BATCH', FAST_BATCH_SIZE))
+
+    anchor_subsample_n = int(os.getenv('PRNN_ANCHOR_SUBSAMPLE', ANCHOR_SUBSAMPLE_N))
+    defer_srsa = os.getenv('PRNN_DEFER_SRSA', '1') != '0'
+
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    eval_dataset = TrajectoryDataset(data_dir)
+    packed = PackedTrajectoryStore(
+        data_dir,
+        device=device,
+        act_dtype=torch.float16 if device.type == 'cuda' else torch.float32,
+    )
+
+    model, compiled = _build_model(
+        obs_size=obs_size,
+        act_size=packed.act_size,
+        k=k,
+        trunc=trunc,
+        device=device,
+        compile_cell=True,
+    )
+    optimizer = _build_optimizer(model, batch_size=batch_size)
+
+    tb_dir = os.path.join(out_dir, 'tb')
+    writer = SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else '')
+    log_dict = {'steps': [], 'srsa_euclid': [], 'srsa_city': [], 'loss': []}
+    ckpt_paths = []
+
+    T_act = packed.act_seq_len
+    T_k = T_act - k
+    pbar = tqdm(total=n_steps, desc=run_label or 'train-fast', unit='step', dynamic_ncols=True, leave=True)
+
+    for step in range(1, n_steps + 1):
+        obs_b, act_b = packed.sample_batch(batch_size)
+        anchor_idx = _sample_anchor_idx(T_k, device, anchor_subsample_n)
+        n_anchors = T_k if anchor_idx is None else int(anchor_idx.numel())
+
+        pred, _, target = model(
+            obs_b,
+            act_b,
+            anchor_idx=anchor_idx,
+            noise_main=_sample_main_noise(batch_size, T_act, HIDDEN_SIZE, device),
+            noise_roll=_sample_roll_noise(batch_size, k, n_anchors, HIDDEN_SIZE, device),
+        )
+
+        loss = F.mse_loss(pred, target)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+
+        step_loss = float(loss.item())
+        writer.add_scalar('loss/train', step_loss, step)
+        pbar.update(1)
+        if step % 100 == 0 or step == 1:
+            pbar.set_postfix({'loss': f'{step_loss:.4f}', 'anchors': n_anchors, 'B': batch_size})
+
+        if step in CHECKPOINT_STEPS:
+            ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
+            _save_checkpoint(
+                ckpt, step, model, optimizer, trunc,
+                extra_meta={'trainer_mode': 'fast-single', 'batch_size': batch_size},
+            )
+            ckpt_paths.append(ckpt)
+            writer.add_text('checkpoint', ckpt, step)
+
+        if not defer_srsa and step % LOG_INTERVAL == 0:
+            sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
+            log_dict['steps'].append(step)
+            log_dict['srsa_euclid'].append(sRSA_e)
+            log_dict['srsa_city'].append(sRSA_c)
+            log_dict['loss'].append(step_loss)
+            writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, step)
+            writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, step)
+
+    sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
+    log_dict['steps'].append(n_steps)
+    log_dict['srsa_euclid'].append(sRSA_e)
+    log_dict['srsa_city'].append(sRSA_c)
+    log_dict['loss'].append(step_loss)
+    writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, n_steps)
+    writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, n_steps)
+
+    ckpt = os.path.join(out_dir, 'ckpt_final.pt')
+    _save_checkpoint(
+        ckpt, n_steps, model, optimizer, trunc,
+        extra_meta={'trainer_mode': 'fast-single', 'batch_size': batch_size},
+    )
+    ckpt_paths.append(ckpt)
+    writer.close()
+    pbar.close()
+
+    log_dict['ckpt_paths'] = ckpt_paths
+    with open(os.path.join(out_dir, 'training_log.json'), 'w') as f:
+        json.dump(log_dict, f, indent=2)
+
+    compile_note = " (torch.compile enabled)" if compiled else ""
+    tqdm.write(
+        f'  ✓ {run_label or "train-fast"} done{compile_note} — '
+        f'sRSA_e={sRSA_e:.3f}  sRSA_c={sRSA_c:.3f}  tb → {tb_dir}'
+    )
+    return log_dict
+
+
+def train_parallel_seeds(
+    data_dir: str,
+    obs_size: int,
+    out_dirs: list[str],
+    seeds: list[int],
+    k: int = 5,
+    n_steps: int = 80000,
+    trunc: int = 200,
+    batch_size: int = FAST_BATCH_SIZE,
+    device_str: str = None,
+    run_labels: list[str] | None = None,
+) -> dict[int, dict]:
+    if device_str is None:
+        device_str = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device_str)
+    _enable_tf32(device)
+
+    if batch_size in (BATCH_SIZE, FAST_BATCH_SIZE):
+        batch_size = int(os.getenv('PRNN_PER_SEED_BATCH', FAST_BATCH_SIZE))
+
+    anchor_subsample_n = int(os.getenv('PRNN_ANCHOR_SUBSAMPLE', ANCHOR_SUBSAMPLE_N))
+
+    packed = PackedTrajectoryStore(
+        data_dir,
+        device=device,
+        act_dtype=torch.float16 if device.type == 'cuda' else torch.float32,
+    )
+    eval_dataset = TrajectoryDataset(data_dir)
+
+    models = []
+    optimizers = []
+    writers = []
+    logs = []
+    ckpt_paths = []
+
+    if run_labels is None:
+        run_labels = [f'seed{seed}' for seed in seeds]
+
+    for seed, out_dir, run_label in zip(seeds, out_dirs, run_labels):
+        os.makedirs(out_dir, exist_ok=True)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        model, _ = _build_model(
+            obs_size=obs_size,
+            act_size=packed.act_size,
+            k=k,
+            trunc=trunc,
+            device=device,
+            compile_cell=True,
+        )
+        models.append(model)
+        optimizers.append(_build_optimizer(model, batch_size=batch_size))
+        tb_dir = os.path.join(out_dir, 'tb')
+        writers.append(SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else ''))
+        logs.append({'steps': [], 'srsa_euclid': [], 'srsa_city': [], 'loss': [], 'ckpt_paths': []})
+        ckpt_paths.append([])
+
+    T_act = packed.act_seq_len
+    T_k = T_act - k
+    group_label = ', '.join(run_labels)
+    pbar = tqdm(total=n_steps, desc=f'parallel[{group_label}]', unit='step', dynamic_ncols=True, leave=True)
+
+    for step in range(1, n_steps + 1):
+        obs_group, act_group = packed.sample_parallel_batches(len(models), batch_size)
+        anchor_idx = _sample_anchor_idx(T_k, device, anchor_subsample_n)
+        n_anchors = T_k if anchor_idx is None else int(anchor_idx.numel())
+
+        for optimizer in optimizers:
+            optimizer.zero_grad(set_to_none=True)
+
+        losses = []
+        total_loss = 0.0
+        for model_idx, model in enumerate(models):
+            pred, _, target = model(
+                obs_group[model_idx],
+                act_group[model_idx],
+                anchor_idx=anchor_idx,
+                noise_main=_sample_main_noise(batch_size, T_act, HIDDEN_SIZE, device),
+                noise_roll=_sample_roll_noise(batch_size, k, n_anchors, HIDDEN_SIZE, device),
+            )
+            loss = F.mse_loss(pred, target)
+            losses.append(loss)
+            total_loss = total_loss + loss
+
+        total_loss.backward()
+        step_losses = []
+        for model, optimizer, loss in zip(models, optimizers, losses):
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            step_losses.append(float(loss.item()))
+
+        for writer, step_loss in zip(writers, step_losses):
+            writer.add_scalar('loss/train', step_loss, step)
+
+        pbar.update(1)
+        if step % 100 == 0 or step == 1:
+            pbar.set_postfix({'loss': f'{np.mean(step_losses):.4f}', 'anchors': n_anchors, 'B': batch_size})
+
+        if step in CHECKPOINT_STEPS:
+            for seed_idx, (seed, out_dir, model, optimizer) in enumerate(zip(seeds, out_dirs, models, optimizers)):
+                ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
+                _save_checkpoint(
+                    ckpt, step, model, optimizer, trunc,
+                    extra_meta={'trainer_mode': 'fast-parallel', 'batch_size': batch_size, 'parallel_group': len(seeds)},
+                )
+                logs[seed_idx]['ckpt_paths'].append(ckpt)
+                writers[seed_idx].add_text('checkpoint', ckpt, step)
+
+    results = {}
+    for idx, (seed, out_dir, model, optimizer, writer) in enumerate(zip(seeds, out_dirs, models, optimizers, writers)):
+        sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
+        logs[idx]['steps'].append(n_steps)
+        logs[idx]['srsa_euclid'].append(sRSA_e)
+        logs[idx]['srsa_city'].append(sRSA_c)
+        logs[idx]['loss'].append(step_losses[idx])
+        writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, n_steps)
+        writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, n_steps)
+        final_ckpt = os.path.join(out_dir, 'ckpt_final.pt')
+        _save_checkpoint(
+            final_ckpt, n_steps, model, optimizer, trunc,
+            extra_meta={'trainer_mode': 'fast-parallel', 'batch_size': batch_size, 'parallel_group': len(seeds)},
+        )
+        logs[idx]['ckpt_paths'].append(final_ckpt)
+        with open(os.path.join(out_dir, 'training_log.json'), 'w') as f:
+            json.dump(logs[idx], f, indent=2)
+        writer.close()
+        results[seed] = logs[idx]
+
+    pbar.close()
+    return results
+
+
+def train(
+    data_dir: str,
+    obs_size: int,
+    out_dir: str,
+    k: int = 5,
+    n_steps: int = 80000,
+    trunc: int = 200,
+    batch_size: int = BATCH_SIZE,
+    seed: int = 0,
+    device_str: str = None,
+    run_label: str = '',
+) -> dict:
+    trainer_mode = os.getenv('PRNN_TRAINER', 'fast')
+    if trainer_mode == 'legacy':
+        return _train_legacy(
+            data_dir=data_dir,
+            obs_size=obs_size,
+            out_dir=out_dir,
+            k=k,
+            n_steps=n_steps,
+            trunc=trunc,
+            batch_size=batch_size,
+            seed=seed,
+            device_str=device_str,
+            run_label=run_label,
+        )
+    return _train_fast_single(
+        data_dir=data_dir,
+        obs_size=obs_size,
+        out_dir=out_dir,
+        k=k,
+        n_steps=n_steps,
+        trunc=trunc,
+        batch_size=batch_size,
+        seed=seed,
+        device_str=device_str,
+        run_label=run_label,
+    )

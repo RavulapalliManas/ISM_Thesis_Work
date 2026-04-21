@@ -101,7 +101,7 @@ class pRNN(nn.Module):
         y_t = self.outlayer(h_t)
         return y_t, h_t
 
-    def restructure_inputs(self, obs, act):
+    def restructure_inputs(self, obs, act, anchor_idx=None):
         """
         Join obs and act into a single input tensor shape (N,L,H)
         N: Batch size
@@ -198,7 +198,7 @@ class pRNN_th(pRNN):
             self._act_theta_T = T
         return self.act_theta_idx
 
-    def restructure_inputs(self, obs, act):
+    def restructure_inputs(self, obs, act, anchor_idx=None):
         """
         Join obs and act into a single input tensor shape (N,L,H)
         N: Batch size/Theta Size
@@ -241,6 +241,8 @@ class pRNN_th(pRNN):
         else:
             act = act[:, :minsize, :]
         obs_target = obs_target[:, :, :minsize, :]   # 4D slice along time axis
+        if anchor_idx is not None:
+            obs_target = obs_target[:, :, anchor_idx, :]
 
         outmask = True
         obs = self.droplayer(obs)
@@ -254,27 +256,43 @@ class pRNN_th(pRNN):
         return x_t, obs_target.detach(), outmask
 
 
-    # ── True batched multi-step rollout ──────────────────────────────────────
-    def _forward_theta_batched(self, obs, act, noise_t=torch.tensor([]), state=torch.tensor([])):
-        """
-        Autoregressive rollout with true batch semantics.
+    def _normalize_anchor_idx(self, anchor_idx, T_k, device):
+        if anchor_idx is None:
+            return torch.arange(T_k, device=device)
+        if not torch.is_tensor(anchor_idx):
+            anchor_idx = torch.tensor(anchor_idx, device=device)
+        anchor_idx = anchor_idx.to(device=device, dtype=torch.long).reshape(-1)
+        if anchor_idx.numel() == 0:
+            raise ValueError('anchor_idx must contain at least one anchor')
+        if anchor_idx.min().item() < 0 or anchor_idx.max().item() >= T_k:
+            raise ValueError(f'anchor_idx must be within [0, {T_k - 1}]')
+        return torch.sort(anchor_idx).values
 
-        obs: (B, T+1, obs_size)  — observations (dropout already applied)
-        act: (B, T,   act_size)  — full action sequence (not truncated)
+    def _prepare_main_noise(self, noise_main, B, T_act, H, device):
+        if torch.is_tensor(noise_main) and noise_main.numel() > 0:
+            noise_main = noise_main.to(device)
+            if noise_main.dim() == 2:
+                noise_main = noise_main.unsqueeze(0).expand(B, -1, -1)
+            elif noise_main.dim() == 3 and noise_main.size(0) == 1 and B > 1:
+                noise_main = noise_main.expand(B, -1, -1)
+            return noise_main[:, :T_act, :]
+        return torch.zeros(B, T_act, H, device=device)
 
-        Returns:
-            preds: (B, k+1, T-k, obs_size)  — one pred per rollout horizon
-            h_t:   (B, T-k, hidden_size)    — main hidden states
-        """
-        B      = obs.size(0)
-        T_act  = act.size(1)          # T
-        T_k    = T_act - self.k       # T - k  (number of anchor timesteps)
-        H      = self.rnn.cell.hidden_size
+    def _prepare_roll_noise(self, noise_roll, B, A, H, device):
+        if torch.is_tensor(noise_roll) and noise_roll.numel() > 0:
+            noise_roll = noise_roll.to(device)
+            if noise_roll.dim() == 3:
+                noise_roll = noise_roll.unsqueeze(0).expand(B, -1, -1, -1)
+            elif noise_roll.dim() == 4 and noise_roll.size(0) == 1 and B > 1:
+                noise_roll = noise_roll.expand(B, -1, -1, -1)
+            return noise_roll[:, :self.k, :A, :]
+        return torch.zeros(B, self.k, A, H, device=device)
+
+    def _forward_main_trajectory(self, obs, act, noise_main=torch.tensor([]), state=torch.tensor([])):
+        B = obs.size(0)
+        T_act = act.size(1)
+        H = self.rnn.cell.hidden_size
         device = obs.device
-
-        # act_theta[b, th, t, :] = act[b, t+th, :] — future actions per anchor
-        act_idx   = self._get_act_theta_idx(T_act)   # (k+1, T-k), cached
-        act_theta = act[:, act_idx]                  # (B, k+1, T-k, act_size)
 
         if torch.is_tensor(state) and state.numel() > 0:
             if state.dim() == 3:
@@ -286,69 +304,84 @@ class pRNN_th(pRNN):
             hx = hx.to(device)
         else:
             hx = torch.empty(B, H, device=device).uniform_(0.0, self.rnn.hidden_init_sigma)
-        state = (hx, 0)
 
-        if torch.is_tensor(noise_t) and noise_t.numel() > 0:
-            if noise_t.dim() == 3:
-                noise = noise_t[:self.k + 1, :T_k, :].to(device)
-                noise = noise.unsqueeze(0).expand(B, -1, -1, -1)
-            elif noise_t.dim() == 4:
-                noise = noise_t[:, :self.k + 1, :T_k, :].to(device)
-                if noise.size(0) == 1 and B > 1:
-                    noise = noise.expand(B, -1, -1, -1)
-            else:
-                raise ValueError(f"noise_t must be 3D or 4D, got shape {tuple(noise_t.shape)}")
-        else:
-            noise = torch.zeros(B, self.k + 1, T_k, H, device=device)
-
-        preds  = []
+        noise_main = self._prepare_main_noise(noise_main, B, T_act, H, device)
+        state_tuple = (hx, 0)
         h_list = []
 
-        for t in range(T_k):
-            # TBPTT: detach hidden state every trunc steps
+        for t in range(T_act):
             if t % self.rnn.trunc == 0 and t > 0:
-                state = (state[0].detach(), 0)
+                state_tuple = (state_tuple[0].detach(), 0)
 
-            # Advance main hidden state using obs[t] and act[t]
-            x_main    = torch.cat([obs[:, t, :], act_theta[:, 0, t, :]], dim=-1)
-            hx, state = self.rnn.cell(x_main, noise[:, 0, t, :], state)
-
-            # Autoregressive rollout from hx for theta = 0 .. k
-            hx_r, st_r = hx, (hx, 0)
-            step_preds  = []
-            for th in range(self.k + 1):
-                pred_th = self.outlayer(hx_r)             # (B, obs_size)
-                step_preds.append(pred_th)
-                if th < self.k:
-                    # Mask observation drive during rollout so future updates
-                    # depend only on recurrent state and future actions.
-                    obs_masked = torch.zeros_like(pred_th)
-                    x_roll     = torch.cat([obs_masked, act_theta[:, th + 1, t, :]], dim=-1)
-                    hx_r, st_r = self.rnn.cell(x_roll, noise[:, th + 1, t, :], st_r)
-
-            preds.append(torch.stack(step_preds, dim=1))  # (B, k+1, obs_size)
+            x_main = torch.cat([obs[:, t, :], act[:, t, :]], dim=-1)
+            hx, state_tuple = self.rnn.cell(x_main, noise_main[:, t, :], state_tuple)
             h_list.append(hx)
 
-        preds = torch.stack(preds, dim=2)    # (B, k+1, T-k, obs_size)
-        h_t   = torch.stack(h_list, dim=1)  # (B, T-k, H)
-        return preds, h_t
+        return torch.stack(h_list, dim=1)
+
+    def _rollout_from_anchors(self, h_all, act, anchor_idx, noise_roll=torch.tensor([])):
+        B = h_all.size(0)
+        H = h_all.size(2)
+        device = h_all.device
+        T_act = act.size(1)
+        A = anchor_idx.numel()
+        obs_size = self.outlayer[0].out_features
+
+        act_idx = self._get_act_theta_idx(T_act)[:, anchor_idx]
+        act_theta = act[:, act_idx]
+        noise_roll = self._prepare_roll_noise(noise_roll, B, A, H, device)
+
+        h_anchor = h_all[:, anchor_idx, :]
+        hx_r = h_anchor
+        step_preds = []
+
+        for th in range(self.k + 1):
+            pred_th = self.outlayer(hx_r.reshape(B * A, H)).view(B, A, obs_size)
+            step_preds.append(pred_th)
+            if th < self.k:
+                obs_masked = torch.zeros(B, A, obs_size, device=device, dtype=pred_th.dtype)
+                x_roll = torch.cat([obs_masked, act_theta[:, th + 1, :, :]], dim=-1)
+                hx_flat, _ = self.rnn.cell(
+                    x_roll.reshape(B * A, -1),
+                    noise_roll[:, th, :, :].reshape(B * A, H),
+                    (hx_r.reshape(B * A, H), 0),
+                )
+                hx_r = hx_flat.view(B, A, H)
+
+        return torch.stack(step_preds, dim=1)
 
     # ── Forward override ──────────────────────────────────────────────────────
     def forward(self, obs, act,
-                noise_t=torch.tensor([]), state=torch.tensor([]), theta=None):
+                noise_t=torch.tensor([]), state=torch.tensor([]), theta=None,
+                anchor_idx=None, noise_main=torch.tensor([]), noise_roll=torch.tensor([])):
         # obs_target via Toeplitz indexing — shape (B, k+1, T-k, obs_size)
-        _, obs_target, _ = self.restructure_inputs(obs, act)
+        T_k = act.size(1) - self.k
+        anchor_idx = self._normalize_anchor_idx(anchor_idx, T_k, obs.device)
+        _, obs_target, _ = self.restructure_inputs(obs, act, anchor_idx=anchor_idx)
 
         # Apply obs dropout (mirrors restructure_inputs droplayer)
         obs_dropped = self.droplayer(obs)
 
-        pred, h_t = self._forward_theta_batched(obs_dropped, act, noise_t=noise_t, state=state)
-        # pred: (B, k+1, T-k, obs_size)
+        if torch.is_tensor(noise_t) and noise_t.numel() > 0 and not (
+            torch.is_tensor(noise_main) and noise_main.numel() > 0
+        ):
+            legacy_noise = noise_t.to(obs.device)
+            if legacy_noise.dim() == 3:
+                noise_main = legacy_noise[0, :act.size(1), :]
+                noise_roll = legacy_noise[1:, :anchor_idx.numel(), :]
+            elif legacy_noise.dim() == 4:
+                noise_main = legacy_noise[:, 0, :act.size(1), :]
+                noise_roll = legacy_noise[:, 1:, :anchor_idx.numel(), :]
 
-        # Some callers can arrive with an off-by-one effective rollout length
-        # (for example when observation and action windows were prepared by
-        # slightly different code paths). Align both tensors here so loss code
-        # always sees one shared rollout grid.
+        h_all = self._forward_main_trajectory(
+            obs_dropped[:, :act.size(1), :],
+            act,
+            noise_main=noise_main,
+            state=state,
+        )
+        pred = self._rollout_from_anchors(h_all, act, anchor_idx, noise_roll=noise_roll)
+        h_t = h_all[:, anchor_idx, :] if anchor_idx.numel() < T_k else h_all[:, :T_k, :]
+
         if pred.dim() == 4 and obs_target.dim() == 4:
             common_h = min(pred.size(1), obs_target.size(1))
             common_t = min(pred.size(2), obs_target.size(2))
