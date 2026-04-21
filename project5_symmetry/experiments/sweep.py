@@ -27,7 +27,8 @@ from project5_symmetry.experiments.configs import (
     ExperimentConfig,
 )
 from project5_symmetry.training.train import (
-    train, _collect_hidden_states, HIDDEN_INIT_SIGMA, PRED_OFFSET, SUBSAMPLE_N,
+    train, train_parallel_seeds, _collect_hidden_states,
+    HIDDEN_INIT_SIGMA, PRED_OFFSET, SUBSAMPLE_N, PARALLEL_SEED_GROUP,
 )
 from project5_symmetry.evaluation.metrics import srsa, sci, dtg_curve, manifold_id
 from project5_symmetry.training.dataset import TrajectoryDataset
@@ -38,13 +39,17 @@ BASE_OUT       = 'project5_symmetry/results'
 
 # ── Single condition × seed run ───────────────────────────────────────────────
 
-def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
+def _condition_paths(cfg: ExperimentConfig, seed: int, base_dir: str) -> tuple[str, str, str]:
     cond_dir = os.path.join(base_dir, cfg.condition_id)
     data_dir = os.path.join(cond_dir, 'trajectories')
     run_dir  = os.path.join(cond_dir, f'seed_{seed:02d}')
-    os.makedirs(run_dir, exist_ok=True)
+    return cond_dir, data_dir, run_dir
 
-    # ── Trajectory dataset (shared across seeds for same condition) ───────────
+
+def _ensure_condition_data(cfg: ExperimentConfig, seed: int, base_dir: str):
+    cond_dir, data_dir, _ = _condition_paths(cfg, seed, base_dir)
+    os.makedirs(cond_dir, exist_ok=True)
+
     env = make_symmetry_env(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
 
     existing = len([f for f in os.listdir(data_dir) if f.endswith('.npz')]) \
@@ -59,22 +64,21 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
         if not os.path.exists(meta_path):
             save_arena_metadata(env, meta_path)
 
-    # ── Training ──────────────────────────────────────────────────────────────
-    obs_size  = cfg.F * cfg.F * 3
-    run_label = f'{cfg.condition_id} seed{seed}'
+    return env
 
-    training_log = train(
-        data_dir=data_dir,
-        obs_size=obs_size,
-        out_dir=run_dir,
-        k=cfg.k,
-        n_steps=cfg.n_steps,
-        trunc=cfg.T,
-        seed=seed,
-        run_label=run_label,
-    )
+
+def _evaluate_condition_run(
+    cfg: ExperimentConfig,
+    seed: int,
+    base_dir: str,
+    training_log: dict,
+) -> dict:
+    cond_dir, data_dir, run_dir = _condition_paths(cfg, seed, base_dir)
+    env = make_symmetry_env(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
+    os.makedirs(run_dir, exist_ok=True)
 
     # ── Final evaluation ──────────────────────────────────────────────────────
+    obs_size = cfg.F * cfg.F * 3
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     dataset = TrajectoryDataset(data_dir)
 
@@ -128,6 +132,27 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
     return result
 
 
+def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
+    _ensure_condition_data(cfg, seed, base_dir)
+    cond_dir, data_dir, run_dir = _condition_paths(cfg, seed, base_dir)
+
+    obs_size  = cfg.F * cfg.F * 3
+    run_label = f'{cfg.condition_id} seed{seed}'
+
+    training_log = train(
+        data_dir=data_dir,
+        obs_size=obs_size,
+        out_dir=run_dir,
+        k=cfg.k,
+        n_steps=cfg.n_steps,
+        trunc=cfg.T,
+        batch_size=cfg.B,
+        seed=seed,
+        run_label=run_label,
+    )
+    return _evaluate_condition_run(cfg, seed, base_dir, training_log)
+
+
 # ── Phase runners ─────────────────────────────────────────────────────────────
 
 def run_phase0(base_dir: str) -> bool:
@@ -147,6 +172,8 @@ def run_phase0(base_dir: str) -> bool:
 def run_sweep(conditions: list, base_dir: str, label: str = '') -> list:
     os.makedirs(base_dir, exist_ok=True)
     all_results = []
+    trainer_mode = os.getenv('PRNN_TRAINER', 'fast')
+    parallel_group = max(1, int(os.getenv('PRNN_PARALLEL_SEEDS', PARALLEL_SEED_GROUP)))
 
     total_runs = sum(cfg.n_seeds for cfg in conditions)
     outer_pbar = tqdm(total=total_runs, desc=f'Sweep{label}',
@@ -156,15 +183,44 @@ def run_sweep(conditions: list, base_dir: str, label: str = '') -> list:
         tqdm.write(f'\n── {cfg.condition_id}  '
                    f'({cfg.arena_shape} {cfg.arena_size}×{cfg.arena_size}, '
                    f'U={cfg.U}, F={cfg.F}, k={cfg.k}, T={cfg.T}) ──')
-        for seed in range(cfg.n_seeds):
-            result = _run_condition(cfg, seed, base_dir)
-            all_results.append(result)
-            outer_pbar.update(1)
-            outer_pbar.set_postfix({
-                'cond':   cfg.condition_id,
-                'seed':   seed,
-                'sRSA_e': f'{result["final_srsa_euclid"]:.3f}',
-            })
+        _ensure_condition_data(cfg, seed=0, base_dir=base_dir)
+
+        if trainer_mode != 'legacy' and parallel_group > 1 and cfg.n_seeds > 1:
+            for group_start in range(0, cfg.n_seeds, parallel_group):
+                seeds = list(range(group_start, min(group_start + parallel_group, cfg.n_seeds)))
+                out_dirs = [_condition_paths(cfg, seed, base_dir)[2] for seed in seeds]
+                run_labels = [f'{cfg.condition_id} seed{seed}' for seed in seeds]
+                obs_size = cfg.F * cfg.F * 3
+                logs_by_seed = train_parallel_seeds(
+                    data_dir=_condition_paths(cfg, seeds[0], base_dir)[1],
+                    obs_size=obs_size,
+                    out_dirs=out_dirs,
+                    seeds=seeds,
+                    k=cfg.k,
+                    n_steps=cfg.n_steps,
+                    trunc=cfg.T,
+                    batch_size=cfg.B,
+                    run_labels=run_labels,
+                )
+                for seed in seeds:
+                    result = _evaluate_condition_run(cfg, seed, base_dir, logs_by_seed[seed])
+                    all_results.append(result)
+                    outer_pbar.update(1)
+                    outer_pbar.set_postfix({
+                        'cond':   cfg.condition_id,
+                        'seed':   seed,
+                        'sRSA_e': f'{result["final_srsa_euclid"]:.3f}',
+                    })
+        else:
+            for seed in range(cfg.n_seeds):
+                result = _run_condition(cfg, seed, base_dir)
+                all_results.append(result)
+                outer_pbar.update(1)
+                outer_pbar.set_postfix({
+                    'cond':   cfg.condition_id,
+                    'seed':   seed,
+                    'sRSA_e': f'{result["final_srsa_euclid"]:.3f}',
+                })
 
     outer_pbar.close()
 
