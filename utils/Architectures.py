@@ -164,8 +164,8 @@ class pRNN_th(pRNN):
         # them later without raising "attribute already exists".
         # model.to(device) will automatically move non-None buffers to the
         # correct device, so indexing always stays on the same device as inputs.
-        self.register_buffer('theta_idx',     None)  # obs-target (k+1, T-k)
-        self.register_buffer('act_theta_idx', None)  # action (k+1, T-k)
+        self.register_buffer('theta_idx',     None, persistent=False)  # obs-target (k+1, T-k)
+        self.register_buffer('act_theta_idx', None, persistent=False)  # action (k+1, T-k)
         self._theta_idx_T = None   # plain Python int — tracks T for obs
         self._act_theta_T = None   # plain Python int — tracks T for act
 
@@ -181,7 +181,7 @@ class pRNN_th(pRNN):
             )
             idx = idx[:, self.k:]          # shape (k+1, T-k)
             idx_t = torch.from_numpy(idx.copy()).long()
-            self.register_buffer('theta_idx', idx_t)
+            self.register_buffer('theta_idx', idx_t, persistent=False)
             self._theta_idx_T = T
         return self.theta_idx
 
@@ -193,7 +193,7 @@ class pRNN_th(pRNN):
             )
             idx = idx[:, self.k:]
             idx_t = torch.from_numpy(idx.copy()).long()
-            self.register_buffer('act_theta_idx', idx_t)
+            self.register_buffer('act_theta_idx', idx_t, persistent=False)
             self._act_theta_T = T
         return self.act_theta_idx
 

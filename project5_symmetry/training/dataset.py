@@ -1,5 +1,5 @@
 """
-PyTorch Dataset that loads pre-generated trajectory .npz files into RAM.
+PyTorch Dataset that preloads pre-generated trajectory .npz files into RAM.
 
 Each file contains:
   obs     : float32 (T+1, obs_size)  — visual observations [0,1]
@@ -10,6 +10,7 @@ Each file contains:
 For pRNN_th (B=1) training, __getitem__ returns one full trajectory.
 """
 
+import glob
 import os
 import numpy as np
 import torch
@@ -25,24 +26,23 @@ class TrajectoryDataset(Dataset):
     """
 
     def __init__(self, data_dir: str):
-        files = sorted(f for f in os.listdir(data_dir) if f.endswith('.npz'))
-        if not files:
+        self.files = sorted(glob.glob(os.path.join(data_dir, 'traj_*.npz')))
+        if not self.files:
             raise FileNotFoundError(f"No .npz files in {data_dir}")
+        # Preload all trajectories once so __getitem__ is pure RAM access.
+        self.cache = [self._load(path) for path in self.files]
 
-        self.obs = []
-        self.act_enc = []
-        self.pos = []
-        self.heading = []
-
-        for fname in files:
-            d = np.load(os.path.join(data_dir, fname))
-            self.obs.append(torch.from_numpy(d['obs']))
-            self.act_enc.append(torch.from_numpy(d['act_enc']))
-            self.pos.append(torch.from_numpy(d['pos'].astype(np.float32)))
-            self.heading.append(torch.from_numpy(d['heading']))
+    def _load(self, path: str):
+        d = np.load(path)
+        return (
+            torch.from_numpy(d['obs']),
+            torch.from_numpy(d['act_enc']),
+            torch.from_numpy(d['pos'].astype(np.float32)),
+            torch.from_numpy(d['heading']),
+        )
 
     def __len__(self):
-        return len(self.obs)
+        return len(self.cache)
 
     def __getitem__(self, idx):
-        return self.obs[idx], self.act_enc[idx], self.pos[idx], self.heading[idx]
+        return self.cache[idx]
