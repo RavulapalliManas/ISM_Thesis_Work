@@ -71,12 +71,12 @@ class thetaRNNLayer(nn.Module):
                 device=self.cell.weight_hh.device,
             )
         if state.size(0) == 0:
-            state = torch.zeros(
+            state = torch.empty(
                 1,
                 input.size(0),
                 self.cell.hidden_size,
                 device=self.cell.weight_hh.device,
-            ).uniform_(0, self.hidden_init_sigma)
+            ).normal_().mul_(self.hidden_init_sigma)
         if internal.size(0) == 0:
             internal = torch.zeros(
                 input.size(0),

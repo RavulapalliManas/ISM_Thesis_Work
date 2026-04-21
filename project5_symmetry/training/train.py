@@ -145,6 +145,7 @@ def train(
     torch.manual_seed(seed)
     np.random.seed(seed)
     device = torch.device(device_str)
+    torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False)
 
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
@@ -197,24 +198,27 @@ def train(
     # not the OptimizedModule wrapper).
     optimizer = _build_optimizer(model)
 
-    compiled = False
-    try:
-        model.rnn.cell = torch.compile(model.rnn.cell)
-        compiled = True
-        tqdm.write(f'  [compile] torch.compile(model.rnn.cell) accepted — '
-                   f'torch {torch.__version__}  '
-                   f'(first cell call triggers JIT; outer loop stays in Python)')
-    except Exception as e:
-        tqdm.write(f'  [compile] torch.compile(cell) SKIPPED: {e}')
-        compiled = False
-
     use_cuda_graph = (device.type == 'cuda')
+    compiled = False
+    if not use_cuda_graph:
+        try:
+            model.rnn.cell = torch.compile(model.rnn.cell, mode='reduce-overhead')
+            compiled = True
+            tqdm.write('  [compile] torch.compile enabled (no CUDA graph)')
+        except Exception as e:
+            compiled = False
+            tqdm.write(f'  [compile] skipped: {e}')
+    else:
+        compiled = False
+        tqdm.write('  [compile] skipped — CUDA graph takes priority')
+
     cuda_graph = None
     loss_static = None
     if use_cuda_graph:
         try:
             tqdm.write('  [cuda graph] warming up...')
             warmup_stream = torch.cuda.Stream()
+            torch.cuda.synchronize()
             with torch.cuda.stream(warmup_stream):
                 for _ in range(11):
                     pred_w, _, target_w = model(obs_static, act_static)
@@ -223,6 +227,7 @@ def train(
                     loss_w.backward()
                     optimizer.step()
             torch.cuda.current_stream().wait_stream(warmup_stream)
+            torch.cuda.synchronize()
 
             tqdm.write('  [cuda graph] capturing...')
             cuda_graph = torch.cuda.CUDAGraph()
