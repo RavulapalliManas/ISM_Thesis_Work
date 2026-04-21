@@ -242,41 +242,73 @@ class pRNN_th(pRNN):
         return x_t, obs_target.detach(), outmask
 
 
-    # ── Group 4: forward override ─────────────────────────────────────────────
+    # ── True batched multi-step rollout ──────────────────────────────────────
+    def _forward_theta_batched(self, obs, act):
+        """
+        Autoregressive rollout with true batch semantics.
+
+        obs: (B, T+1, obs_size)  — observations (dropout already applied)
+        act: (B, T,   act_size)  — full action sequence (not truncated)
+
+        Returns:
+            preds: (B, k+1, T-k, obs_size)  — one pred per rollout horizon
+            h_t:   (B, T-k, hidden_size)    — main hidden states
+        """
+        B      = obs.size(0)
+        T_act  = act.size(1)          # T
+        T_k    = T_act - self.k       # T - k  (number of anchor timesteps)
+        H      = self.rnn.cell.hidden_size
+        device = obs.device
+
+        # act_theta[b, th, t, :] = act[b, t+th, :] — future actions per anchor
+        act_idx   = self._get_act_theta_idx(T_act)   # (k+1, T-k), cached
+        act_theta = act[:, act_idx]                  # (B, k+1, T-k, act_size)
+
+        hx    = torch.zeros(B, H, device=device).uniform_(0, self.rnn.hidden_init_sigma)
+        state = (hx, 0)
+        zeros = torch.zeros(B, H, device=device)     # no noise drive
+
+        preds  = []
+        h_list = []
+
+        for t in range(T_k):
+            # TBPTT: detach hidden state every trunc steps
+            if t % self.rnn.trunc == 0 and t > 0:
+                state = (state[0].detach(), 0)
+
+            # Advance main hidden state using obs[t] and act[t]
+            x_main    = torch.cat([obs[:, t, :], act_theta[:, 0, t, :]], dim=-1)
+            hx, state = self.rnn.cell(x_main, zeros, state)
+
+            # Autoregressive rollout from hx for theta = 0 .. k
+            hx_r, st_r = hx, (hx, 0)
+            step_preds  = []
+            for th in range(self.k + 1):
+                pred_th = self.outlayer(hx_r)             # (B, obs_size)
+                step_preds.append(pred_th)
+                if th < self.k:
+                    # Feed network's own prediction + next future action back in
+                    x_roll     = torch.cat([pred_th, act_theta[:, th + 1, t, :]], dim=-1)
+                    hx_r, st_r = self.rnn.cell(x_roll, zeros, st_r)
+
+            preds.append(torch.stack(step_preds, dim=1))  # (B, k+1, obs_size)
+            h_list.append(hx)
+
+        preds = torch.stack(preds, dim=2)    # (B, k+1, T-k, obs_size)
+        h_t   = torch.stack(h_list, dim=1)  # (B, T-k, H)
+        return preds, h_t
+
+    # ── Forward override ──────────────────────────────────────────────────────
     def forward(self, obs, act,
                 noise_t=torch.tensor([]), state=torch.tensor([]), theta=None):
-        """
-        Group 4/5 fix — supports true B>1 batched training.
+        # obs_target via Toeplitz indexing — shape (B, k+1, T-k, obs_size)
+        _, obs_target, _ = self.restructure_inputs(obs, act)
 
-        Problem: pRNN.forward() passes theta=None which resolves to
-        defaultTheta=k inside thetaRNNLayer. That routes to _forward_theta,
-        which treats the batch dim as the theta dim and only processes the
-        first element of each batch → silently wrong for B>1.
+        # Apply obs dropout (mirrors restructure_inputs droplayer)
+        obs_dropped = self.droplayer(obs)
 
-        Fix: always call the RNN with theta=0 so _forward_batched runs,
-        giving h_t of shape (B, T, H) for any B.
-
-        obs_target from restructure_inputs is now (B, k+1, T-k, obs_size).
-        pred from the RNN is (B, T, obs_size).  To make shapes match for
-        F.mse_loss we expand pred along the theta dim — the network is
-        asked to produce the same prediction for every rollout horizon,
-        which is the correct single-hidden-state multi-step training
-        objective (the hidden state must encode enough to satisfy all k+1
-        future targets simultaneously).
-        """
-        x_t, obs_target, _ = self.restructure_inputs(obs, act)
-
-        # theta=0 → _forward_batched → (B, T, H) for any B
-        h_t, _ = self.rnn(x_t, internal=noise_t, state=state, theta=0)
-
-        allout = self.outlayer(h_t)          # (B, T, obs_size)
-
-        # Align time dimension: obs_target is (B, k+1, T-k, obs_size)
-        T_tgt = obs_target.size(2)           # T-k
-        pred  = allout[:, :T_tgt, :]         # (B, T-k, obs_size)
-
-        # Expand to (B, k+1, T-k, obs_size) — broadcast over rollout steps
-        pred = pred.unsqueeze(1).expand(-1, self.k + 1, -1, -1)
+        pred, h_t = self._forward_theta_batched(obs_dropped, act)
+        # pred: (B, k+1, T-k, obs_size)
 
         return pred, h_t, obs_target
 

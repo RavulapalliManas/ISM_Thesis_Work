@@ -220,7 +220,7 @@ def train(
     sRSA_e = sRSA_c = 0.0   # tracked for tqdm postfix
 
     for batch in _inf_loader():
-        if step >= n_steps:
+        if step >= n_steps or step >= 3:
             break
 
         obs_b, act_b, _, _ = batch   # (B, T+1, obs_size), (B, T, 5)
@@ -228,8 +228,41 @@ def train(
         act_b = act_b.to(device, non_blocking=pin_memory)
 
         pred, _, target = model(obs_b, act_b)
+
+        if step == 0:
+            print("=== CHECK 2: Target Variance ===")
+            print(f"obs_target shape: {target.shape}")
+            print(f"obs_target mean: {target.mean().item():.6f}")
+            print(f"obs_target std: {target.std().item():.6f}")
+            print(f"obs_target min: {target.min().item():.6f}")
+            print(f"obs_target max: {target.max().item():.6f}")
+            print("=== CHECK 3: Prediction Variance ===")
+            print(f"pred shape: {pred.shape}")
+            print(f"pred mean: {pred.mean().item():.6f}")
+            print(f"pred std: {pred.std().item():.6f}")
+
         loss = F.mse_loss(pred, target)   # B trajectories, one scalar loss
+
+        if step == 0:
+            print("=== CHECK 5: Loss Integrity ===")
+            manual_loss = ((pred - target) ** 2).mean()
+            print(f"reported loss: {loss.item():.6f}")
+            print(f"manual MSE:    {manual_loss.item():.6f}")
+            print(f"loss requires_grad: {loss.requires_grad}")
+            print(f"loss grad_fn: {loss.grad_fn}")
+
         loss.backward()
+
+        if step == 0:
+            print("=== CHECK 1: Gradient Flow ===")
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    print(f"{name}: grad_norm={param.grad.norm().item():.6f}")
+                else:
+                    print(f"{name}: NO GRADIENT")
+            print("=== CHECK 4: Learning Rates ===")
+            for pg in optimizer.param_groups:
+                print(f"lr={pg['lr']:.2e}  params={[p_name for p_name, p in model.named_parameters() if any(p is pp for pp in pg['params'])]}")
 
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
