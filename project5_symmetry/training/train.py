@@ -148,6 +148,10 @@ def train(
 
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
+    sample_obs, sample_act, _, _ = dataset[0]
+    act_size = sample_act.shape[-1]
+    obs_seq_len = sample_obs.shape[0]
+    act_seq_len = sample_act.shape[0]
     pin_memory = (device_str == 'cuda')
     # Dataset is RAM-cached, so a few workers are enough to stage batches.
     num_workers = min(4, os.cpu_count() or 2)
@@ -165,7 +169,7 @@ def train(
     # ── Model ─────────────────────────────────────────────────────────────────
     model = pRNN_th(
         obs_size=obs_size,
-        act_size=5,
+        act_size=act_size,
         k=k,
         hidden_size=HIDDEN_SIZE,
         cell=LayerNormRNNCell,
@@ -175,6 +179,13 @@ def train(
         predOffset=1,
         hidden_init_sigma=HIDDEN_INIT_SIGMA,
     ).to(device)
+
+    # Static buffers for CUDA Graph replay — shapes must stay identical.
+    if device.type == 'cuda':
+        obs_static = torch.zeros(batch_size, obs_seq_len, obs_size, device=device)
+        act_static = torch.zeros(batch_size, act_seq_len, act_size, device=device)
+    else:
+        obs_static = act_static = None
 
     # Change 2: compile only the RNN cell, not the whole model.
     # The cell (LayerNormRNNCell) is pure PyTorch matmuls + F.layer_norm + ReLU —
@@ -196,6 +207,38 @@ def train(
     except Exception as e:
         tqdm.write(f'  [compile] torch.compile(cell) SKIPPED: {e}')
         compiled = False
+
+    use_cuda_graph = (device.type == 'cuda')
+    cuda_graph = None
+    loss_static = None
+    if use_cuda_graph:
+        try:
+            tqdm.write('  [cuda graph] warming up...')
+            warmup_stream = torch.cuda.Stream()
+            with torch.cuda.stream(warmup_stream):
+                for _ in range(11):
+                    pred_w, _, target_w = model(obs_static, act_static)
+                    loss_w = F.mse_loss(pred_w, target_w)
+                    optimizer.zero_grad(set_to_none=True)
+                    loss_w.backward()
+                    optimizer.step()
+            torch.cuda.current_stream().wait_stream(warmup_stream)
+
+            tqdm.write('  [cuda graph] capturing...')
+            cuda_graph = torch.cuda.CUDAGraph()
+            optimizer.zero_grad(set_to_none=True)
+            with torch.cuda.graph(cuda_graph):
+                pred_static, _, target_static = model(obs_static, act_static)
+                loss_static = F.mse_loss(pred_static, target_static)
+                loss_static.backward()
+            # Keep allocated grad buffers for replay; just zero contents.
+            optimizer.zero_grad(set_to_none=False)
+            tqdm.write('  [cuda graph] capture complete')
+        except Exception as e:
+            tqdm.write(f'  [cuda graph] capture failed, falling back: {e}')
+            use_cuda_graph = False
+            cuda_graph = None
+            loss_static = None
 
     # ── Logging setup ─────────────────────────────────────────────────────────
     tb_dir = os.path.join(out_dir, 'tb')
@@ -225,55 +268,68 @@ def train(
             break
 
         obs_b, act_b, _, _ = batch   # (B, T+1, obs_size), (B, T, 5)
-        obs_b = obs_b.to(device, non_blocking=pin_memory)
-        act_b = act_b.to(device, non_blocking=pin_memory)
+        if use_cuda_graph and cuda_graph is not None:
+            obs_static.copy_(obs_b.to(device, non_blocking=True))
+            act_static.copy_(act_b.to(device, non_blocking=True))
+            cuda_graph.replay()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=False)
+            step += 1
+            if step % LOG_INTERVAL == 0 or step in CHECKPOINT_STEPS:
+                step_loss = loss_static.item()
+            else:
+                step_loss = float('nan')
+        else:
+            obs_b = obs_b.to(device, non_blocking=pin_memory)
+            act_b = act_b.to(device, non_blocking=pin_memory)
 
-        pred, _, target = model(obs_b, act_b)
+            pred, _, target = model(obs_b, act_b)
 
-        if step == 0:
-            print("=== CHECK 2: Target Variance ===")
-            print(f"obs_target shape: {target.shape}")
-            print(f"obs_target mean: {target.mean().item():.6f}")
-            print(f"obs_target std: {target.std().item():.6f}")
-            print(f"obs_target min: {target.min().item():.6f}")
-            print(f"obs_target max: {target.max().item():.6f}")
-            print("=== CHECK 3: Prediction Variance ===")
-            print(f"pred shape: {pred.shape}")
-            print(f"pred mean: {pred.mean().item():.6f}")
-            print(f"pred std: {pred.std().item():.6f}")
+            if step == 0 and not use_cuda_graph:
+                print("=== CHECK 2: Target Variance ===")
+                print(f"obs_target shape: {target.shape}")
+                print(f"obs_target mean: {target.mean().item():.6f}")
+                print(f"obs_target std: {target.std().item():.6f}")
+                print(f"obs_target min: {target.min().item():.6f}")
+                print(f"obs_target max: {target.max().item():.6f}")
+                print("=== CHECK 3: Prediction Variance ===")
+                print(f"pred shape: {pred.shape}")
+                print(f"pred mean: {pred.mean().item():.6f}")
+                print(f"pred std: {pred.std().item():.6f}")
 
-        loss = F.mse_loss(pred, target)   # B trajectories, one scalar loss
+            loss = F.mse_loss(pred, target)   # B trajectories, one scalar loss
 
-        if step == 0:
-            print("=== CHECK 5: Loss Integrity ===")
-            manual_loss = ((pred - target) ** 2).mean()
-            print(f"reported loss: {loss.item():.6f}")
-            print(f"manual MSE:    {manual_loss.item():.6f}")
-            print(f"loss requires_grad: {loss.requires_grad}")
-            print(f"loss grad_fn: {loss.grad_fn}")
+            if step == 0 and not use_cuda_graph:
+                print("=== CHECK 5: Loss Integrity ===")
+                manual_loss = ((pred - target) ** 2).mean()
+                print(f"reported loss: {loss.item():.6f}")
+                print(f"manual MSE:    {manual_loss.item():.6f}")
+                print(f"loss requires_grad: {loss.requires_grad}")
+                print(f"loss grad_fn: {loss.grad_fn}")
 
-        loss.backward()
+            loss.backward()
 
-        if step == 0:
-            print("=== CHECK 1: Gradient Flow ===")
-            for name, param in model.named_parameters():
-                if param.grad is not None:
-                    print(f"{name}: grad_norm={param.grad.norm().item():.6f}")
-                else:
-                    print(f"{name}: NO GRADIENT")
-            print("=== CHECK 4: Learning Rates ===")
-            for pg in optimizer.param_groups:
-                print(f"lr={pg['lr']:.2e}  params={[p_name for p_name, p in model.named_parameters() if any(p is pp for pp in pg['params'])]}")
+            if step == 0 and not use_cuda_graph:
+                print("=== CHECK 1: Gradient Flow ===")
+                for name, param in model.named_parameters():
+                    if param.grad is not None:
+                        print(f"{name}: grad_norm={param.grad.norm().item():.6f}")
+                    else:
+                        print(f"{name}: NO GRADIENT")
+                print("=== CHECK 4: Learning Rates ===")
+                for pg in optimizer.param_groups:
+                    print(f"lr={pg['lr']:.2e}  params={[p_name for p_name, p in model.named_parameters() if any(p is pp for pp in pg['params'])]}")
 
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
-        step += 1
-        step_loss = loss.item()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            step += 1
+            step_loss = loss.item()
 
         pbar.update(1)
 
-        # ── TensorBoard: loss every step ──────────────────────────────────
-        writer.add_scalar('loss/train', step_loss, step)
+        # ── TensorBoard: loss only when materialized (avoid sync every step) ─
+        if not np.isnan(step_loss):
+            writer.add_scalar('loss/train', step_loss, step)
 
         if step % LOG_INTERVAL == 0:
             _t0 = time.time()
