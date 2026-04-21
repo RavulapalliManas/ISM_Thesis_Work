@@ -170,7 +170,7 @@ class pRNN_th(pRNN):
         self._theta_idx_T = None   # plain Python int — tracks T for obs
         self._act_theta_T = None   # plain Python int — tracks T for act
 
-    def _get_theta_idx(self, T: int) -> torch.Tensor:
+    def _get_theta_idx(self, T: int, device=None) -> torch.Tensor:
         """
         Return a (k+1, T-k) long tensor of Toeplitz column indices for the
         obs-target rollout.  Built once per unique T, then cached as a
@@ -184,9 +184,15 @@ class pRNN_th(pRNN):
             idx_t = torch.from_numpy(idx.copy()).long()
             self.register_buffer('theta_idx', idx_t, persistent=False)
             self._theta_idx_T = T
+        if device is not None and self.theta_idx.device != torch.device(device):
+            self.register_buffer(
+                'theta_idx',
+                self.theta_idx.to(device=device),
+                persistent=False,
+            )
         return self.theta_idx
 
-    def _get_act_theta_idx(self, T: int) -> torch.Tensor:
+    def _get_act_theta_idx(self, T: int, device=None) -> torch.Tensor:
         """Same cache for the actionTheta=True path (act sequence length)."""
         if self.act_theta_idx is None or self._act_theta_T != T:
             idx = np.flip(
@@ -196,6 +202,12 @@ class pRNN_th(pRNN):
             idx_t = torch.from_numpy(idx.copy()).long()
             self.register_buffer('act_theta_idx', idx_t, persistent=False)
             self._act_theta_T = T
+        if device is not None and self.act_theta_idx.device != torch.device(device):
+            self.register_buffer(
+                'act_theta_idx',
+                self.act_theta_idx.to(device=device),
+                persistent=False,
+            )
         return self.act_theta_idx
 
     def restructure_inputs(self, obs, act, anchor_idx=None):
@@ -214,7 +226,7 @@ class pRNN_th(pRNN):
         #Apply the theta prediction for target observation
         # Shape after indexing: (B, k+1, T-k, obs_size) — valid for any B.
         # squeeze(0) removed: that was the B=1 hack; no longer needed.
-        theta_idx  = self._get_theta_idx(obs_target.size(1))  # cached (k+1, T-k)
+        theta_idx  = self._get_theta_idx(obs_target.size(1), device=obs.device)  # cached (k+1, T-k)
         obs_target = obs_target[:, theta_idx]
         
         if self.actionTheta == 'hold':
@@ -225,7 +237,7 @@ class pRNN_th(pRNN):
 
         elif self.actionTheta is True:
             # Shape after indexing: (B, k+1, T-k, act_size) — no squeeze, same B fix as obs
-            act_idx = self._get_act_theta_idx(act.size(1))   # cached (k+1, T-k)
+            act_idx = self._get_act_theta_idx(act.size(1), device=act.device)   # cached (k+1, T-k)
             act     = act[:, act_idx]
             obs = nn.functional.pad(input=obs, pad=(0,0,0,0,0,self.k), 
                                     mode='constant', value=0)
@@ -327,7 +339,7 @@ class pRNN_th(pRNN):
         A = anchor_idx.numel()
         obs_size = self.outlayer[0].out_features
 
-        act_idx = self._get_act_theta_idx(T_act)[:, anchor_idx]
+        act_idx = self._get_act_theta_idx(T_act, device=device)[:, anchor_idx]
         act_theta = act[:, act_idx]
         noise_roll = self._prepare_roll_noise(noise_roll, B, A, H, device)
 
