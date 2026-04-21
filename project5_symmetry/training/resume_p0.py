@@ -26,7 +26,7 @@ if str(_ROOT) not in sys.path:
 import torch
 import torch.nn.functional as F
 import numpy as np
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoade
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 

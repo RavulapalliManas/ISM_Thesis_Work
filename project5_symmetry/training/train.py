@@ -149,7 +149,8 @@ def train(
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
     pin_memory = (device_str == 'cuda')
-    num_workers = min(8, os.cpu_count() or 2)
+    # Dataset is RAM-cached, so a few workers are enough to stage batches.
+    num_workers = min(4, os.cpu_count() or 2)
     loader  = DataLoader(
         dataset,
         batch_size=batch_size,   # B=8: one call → 8 trajectories → one RNN forward
@@ -158,7 +159,7 @@ def train(
         num_workers=num_workers,
         pin_memory=pin_memory,
         persistent_workers=(num_workers > 0),
-        prefetch_factor=4 if num_workers > 0 else None,
+        prefetch_factor=2 if num_workers > 0 else None,
     )
 
     # ── Model ─────────────────────────────────────────────────────────────────
@@ -220,7 +221,7 @@ def train(
     sRSA_e = sRSA_c = 0.0   # tracked for tqdm postfix
 
     for batch in _inf_loader():
-        if step >= n_steps or step >= 3:
+        if step >= n_steps:
             break
 
         obs_b, act_b, _, _ = batch   # (B, T+1, obs_size), (B, T, 5)

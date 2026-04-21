@@ -82,7 +82,11 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
     ckpt = torch.load(os.path.join(run_dir, 'ckpt_final.pt'), map_location=device)
     model = pRNN_th(obs_size=obs_size, act_size=5, k=cfg.k,
                     hidden_size=500, cell=LayerNormRNNCell, neuralTimescale=2)
-    model.load_state_dict(ckpt['model'])
+    state = ckpt['model']
+    fixed_state = {}
+    for k, v in state.items():
+        fixed_state[k.replace('rnn.cell._orig_mod.', 'rnn.cell.')] = v
+    model.load_state_dict(fixed_state, strict=False)
     model.to(device).eval()
 
     h, pos = _collect_hidden_states(model, dataset, n=4000, device=device)
