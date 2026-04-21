@@ -43,25 +43,43 @@ class thetaRNNLayer(nn.Module):
         
 
     #@jit.script_method
-    def forward(self, input: Tensor=torch.tensor([]),
-                internal: Tensor=torch.tensor([]),
-                state: Tensor=torch.tensor([]),
+    def forward(self, input: Optional[Tensor] = None,
+                internal: Optional[Tensor] = None,
+                state: Optional[Tensor] = None,
                 theta=None) -> Tuple[Tensor, Tensor]:
-        
         if theta is None:
             theta = self.theta
-        
+
+        if input is None:
+            input = torch.tensor([])
+        if internal is None:
+            internal = torch.tensor([])
+        if state is None:
+            state = torch.tensor([])
+
         if theta == 0:
-            return self._forward_batched(input=input, internal=internal, state=state)
-        return self._forward_theta(input=input, internal=internal, state=state, theta=theta)
+            return self._forward_batched(input=input,
+                                         internal=internal,
+                                         state=state)
+        return self._forward_theta(input=input,
+                                   internal=internal,
+                                   state=state,
+                                   theta=theta)
 
     def _forward_batched(
         self,
-        input: Tensor = torch.tensor([]),
-        internal: Tensor = torch.tensor([]),
-        state: Tensor = torch.tensor([]),
+        input: Optional[Tensor] = None,
+        internal: Optional[Tensor] = None,
+        state: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor]:
         """Run the recurrent layer with true batch semantics when theta=0."""
+
+        if input is None:
+            input = torch.tensor([])
+        if internal is None:
+            internal = torch.tensor([])
+        if state is None:
+            state = torch.tensor([])
 
         if input.size(0) == 0:
             input = torch.zeros(
@@ -101,12 +119,19 @@ class thetaRNNLayer(nn.Module):
 
     def _forward_theta(
         self,
-        input: Tensor = torch.tensor([]),
-        internal: Tensor = torch.tensor([]),
-        state: Tensor = torch.tensor([]),
+        input: Optional[Tensor] = None,
+        internal: Optional[Tensor] = None,
+        state: Optional[Tensor] = None,
         theta: int = 0,
     ) -> Tuple[Tensor, Tensor]:
         """Run the legacy theta rollout path used by the original architecture family."""
+
+        if input is None:
+            input = torch.tensor([])
+        if internal is None:
+            internal = torch.tensor([])
+        if state is None:
+            state = torch.tensor([])
 
         if input.size(0)==0:
             input = torch.zeros(internal.size(0),internal.size(1),self.cell.input_size,
@@ -354,4 +379,5 @@ def test_script_thrnn_layer(seq_len, input_size, hidden_size, trunc, theta):
     
     return out,rnn_out,inp,rnn
 
-test_script_thrnn_layer(5, 3, 7, 10, 4)
+if __name__ == '__main__':
+    test_script_thrnn_layer(5, 3, 7, 10, 4)
