@@ -16,6 +16,7 @@ Progress tracking:
 import os
 import json
 import time
+import math
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -34,43 +35,51 @@ HIDDEN_SIZE      = 500
 DROPOUT_P        = 0.15
 NOISE_STD        = 0.03
 NEURAL_TIMESCALE = 2
+PRED_OFFSET      = 0
+OBS_SCALE        = 1.0
 
 GLOBAL_LR        = 2e-3
 BIAS_LR_SCALE    = 0.1       # lambda_b
 WEIGHT_DECAY     = 3e-3      # lambda_wd
 RMSPROP_ALPHA    = 0.95
-RMSPROP_EPS      = 1e-8
+RMSPROP_EPS      = 1e-6
 
 BATCH_SIZE       = 8         # true B=8: DataLoader returns 8 trajectories per call
 LOG_INTERVAL     = 1000      # steps between sRSA evaluations
 CHECKPOINT_STEPS = {5000, 10000, 20000, 40000, 60000, 80000}
-SUBSAMPLE_N      = 4000      # timesteps subsampled for sRSA
+SUBSAMPLE_N      = 5000      # timesteps subsampled per sRSA run
+SRSA_EVAL_RUNS   = 3         # average across independent subsamples
 HIDDEN_INIT_SIGMA = 0.1      # U(0, σ) hidden state init per trial (Levenstein p.16)
 
 
 # ── Optimizer ─────────────────────────────────────────────────────────────────
 
-def _build_optimizer(model: pRNN_th) -> torch.optim.Optimizer:
+def _build_optimizer(model: pRNN_th, batch_size: int = BATCH_SIZE) -> torch.optim.Optimizer:
     """
     Per-parameter LRs scaled by init magnitude (Methods p.17):
       LR(W_rec, W_out) = lambda * sqrt(1/H)
       LR(W_in, W_act)  = lambda * sqrt(1/(obs+act))
-      LR(bias, scale)  = lambda_b * lambda
+      LR(bias)         = lambda_b * lambda
     """
     k_io = 1.0 / model.rnn.cell.weight_ih.shape[1]
     k_h  = 1.0 / model.rnn.cell.weight_hh.shape[0]
+    lr_scale = math.sqrt(BATCH_SIZE / batch_size)
+    lr_h = GLOBAL_LR * k_h ** 0.5 * lr_scale
+    lr_io = GLOBAL_LR * k_io ** 0.5 * lr_scale
+    lr_bias = GLOBAL_LR * BIAS_LR_SCALE * lr_scale
 
-    return torch.optim.RMSprop(
-        [
-            {'params': [model.W],                              'lr': GLOBAL_LR * k_h  ** 0.5},
-            {'params': [model.W_in],                          'lr': GLOBAL_LR * k_io ** 0.5},
-            {'params': [model.W_out],                         'lr': GLOBAL_LR * k_h  ** 0.5},
-            {'params': [model.bias, model.rnn.cell.scale],    'lr': GLOBAL_LR * BIAS_LR_SCALE},
-        ],
-        alpha=RMSPROP_ALPHA,
-        eps=RMSPROP_EPS,
-        weight_decay=WEIGHT_DECAY,
-    )
+    param_groups = [
+        {'params': [model.W],      'lr': lr_h,   'weight_decay': 0.0},
+        {'params': [model.W_in],   'lr': lr_io,  'weight_decay': 0.0},
+        {'params': [model.W_out],  'lr': lr_h,   'weight_decay': 0.0},
+        {'params': [model.bias],   'lr': lr_bias, 'weight_decay': WEIGHT_DECAY * lr_bias},
+    ]
+    if hasattr(model.rnn.cell, 'scale') and getattr(model.rnn.cell.scale, 'requires_grad', False):
+        param_groups.append(
+            {'params': [model.rnn.cell.scale], 'lr': lr_bias, 'weight_decay': 0.0}
+        )
+
+    return torch.optim.RMSprop(param_groups, alpha=RMSPROP_ALPHA, eps=RMSPROP_EPS)
 
 
 # ── Hidden state collection ───────────────────────────────────────────────────
@@ -83,6 +92,7 @@ def _collect_hidden_states(model: pRNN_th, dataset: TrajectoryDataset,
 
     Returns (hidden: (n, H), pos: (n, 2)).
     """
+    was_training = model.training
     model.eval()
     all_h, all_pos = [], []
     total = 0
@@ -102,8 +112,25 @@ def _collect_hidden_states(model: pRNN_th, dataset: TrajectoryDataset,
             if total >= n:
                 break
 
-    model.train()
+    if was_training:
+        model.train()
     return np.concatenate(all_h, 0), np.concatenate(all_pos, 0)
+
+
+def _evaluate_srsa(
+    model: pRNN_th,
+    dataset: TrajectoryDataset,
+    device,
+    n: int = SUBSAMPLE_N,
+    repeats: int = SRSA_EVAL_RUNS,
+) -> tuple[float, float]:
+    srsa_e = []
+    srsa_c = []
+    for _ in range(repeats):
+        h, pos = _collect_hidden_states(model, dataset, n=n, device=device)
+        srsa_e.append(float(srsa(h, pos, space_metric='euclidean', max_n=n)))
+        srsa_c.append(float(srsa(h, pos, space_metric='cityblock', max_n=n)))
+    return float(np.mean(srsa_e)), float(np.mean(srsa_c))
 
 
 # ── Main training function ────────────────────────────────────────────────────
@@ -145,7 +172,8 @@ def train(
     torch.manual_seed(seed)
     np.random.seed(seed)
     device = torch.device(device_str)
-    torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False)
+    if hasattr(torch.autograd.graph, 'set_warn_on_accumulate_grad_stream_mismatch'):
+        torch.autograd.graph.set_warn_on_accumulate_grad_stream_mismatch(False)
 
     # ── Data ──────────────────────────────────────────────────────────────────
     dataset = TrajectoryDataset(data_dir)
@@ -153,9 +181,11 @@ def train(
     act_size = sample_act.shape[-1]
     obs_seq_len = sample_obs.shape[0]
     act_seq_len = sample_act.shape[0]
+    rollout_len = act_seq_len - k
     pin_memory = (device_str == 'cuda')
     # Dataset is RAM-cached, so a few workers are enough to stage batches.
-    num_workers = min(4, os.cpu_count() or 2)
+    default_workers = min(4, os.cpu_count() or 2)
+    num_workers = int(os.getenv('PRNN_NUM_WORKERS', default_workers))
     loader  = DataLoader(
         dataset,
         batch_size=batch_size,   # B=8: one call → 8 trajectories → one RNN forward
@@ -177,7 +207,7 @@ def train(
         dropp=DROPOUT_P,
         neuralTimescale=NEURAL_TIMESCALE,
         trunc=trunc,
-        predOffset=1,
+        predOffset=PRED_OFFSET,
         hidden_init_sigma=HIDDEN_INIT_SIGMA,
     ).to(device)
 
@@ -185,8 +215,9 @@ def train(
     if device.type == 'cuda':
         obs_static = torch.zeros(batch_size, obs_seq_len, obs_size, device=device)
         act_static = torch.zeros(batch_size, act_seq_len, act_size, device=device)
+        noise_static = torch.zeros(k + 1, rollout_len, HIDDEN_SIZE, device=device)
     else:
-        obs_static = act_static = None
+        obs_static = act_static = noise_static = None
 
     # Change 2: compile only the RNN cell, not the whole model.
     # The cell (LayerNormRNNCell) is pure PyTorch matmuls + F.layer_norm + ReLU —
@@ -196,7 +227,7 @@ def train(
     # Bug 2 fix: build optimizer BEFORE torch.compile so parameter references
     # are clean (model.rnn.cell.weight_ih etc. live on the original module,
     # not the OptimizedModule wrapper).
-    optimizer = _build_optimizer(model)
+    optimizer = _build_optimizer(model, batch_size=batch_size)
 
     use_cuda_graph = (device.type == 'cuda')
     compiled = False
@@ -214,6 +245,12 @@ def train(
 
     cuda_graph = None
     loss_static = None
+
+    def _sample_rollout_noise():
+        if NOISE_STD <= 0:
+            return torch.tensor([], device=device)
+        return NOISE_STD * torch.randn(k + 1, rollout_len, HIDDEN_SIZE, device=device)
+
     if use_cuda_graph:
         try:
             tqdm.write('  [cuda graph] warming up...')
@@ -221,7 +258,8 @@ def train(
             torch.cuda.synchronize()
             with torch.cuda.stream(warmup_stream):
                 for _ in range(11):
-                    pred_w, _, target_w = model(obs_static, act_static)
+                    noise_static.copy_(_sample_rollout_noise())
+                    pred_w, _, target_w = model(obs_static, act_static, noise_t=noise_static)
                     loss_w = F.mse_loss(pred_w, target_w)
                     optimizer.zero_grad(set_to_none=True)
                     loss_w.backward()
@@ -233,7 +271,7 @@ def train(
             cuda_graph = torch.cuda.CUDAGraph()
             optimizer.zero_grad(set_to_none=True)
             with torch.cuda.graph(cuda_graph):
-                pred_static, _, target_static = model(obs_static, act_static)
+                pred_static, _, target_static = model(obs_static, act_static, noise_t=noise_static)
                 loss_static = F.mse_loss(pred_static, target_static)
                 loss_static.backward()
             # Keep allocated grad buffers for replay; just zero contents.
@@ -276,7 +314,9 @@ def train(
         if use_cuda_graph and cuda_graph is not None:
             obs_static.copy_(obs_b.to(device, non_blocking=True))
             act_static.copy_(act_b.to(device, non_blocking=True))
+            noise_static.copy_(_sample_rollout_noise())
             cuda_graph.replay()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             optimizer.zero_grad(set_to_none=False)
             step += 1
@@ -287,8 +327,9 @@ def train(
         else:
             obs_b = obs_b.to(device, non_blocking=pin_memory)
             act_b = act_b.to(device, non_blocking=pin_memory)
+            noise_b = _sample_rollout_noise()
 
-            pred, _, target = model(obs_b, act_b)
+            pred, _, target = model(obs_b, act_b, noise_t=noise_b)
 
             if step == 0 and not use_cuda_graph:
                 print("=== CHECK 2: Target Variance ===")
@@ -313,6 +354,7 @@ def train(
                 print(f"loss grad_fn: {loss.grad_fn}")
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             if step == 0 and not use_cuda_graph:
                 print("=== CHECK 1: Gradient Flow ===")
@@ -338,9 +380,9 @@ def train(
 
         if step % LOG_INTERVAL == 0:
             _t0 = time.time()
-            h, pos = _collect_hidden_states(model, dataset, SUBSAMPLE_N, device)
-            sRSA_e = float(srsa(h, pos, space_metric='euclidean'))
-            sRSA_c = float(srsa(h, pos, space_metric='cityblock'))
+            sRSA_e, sRSA_c = _evaluate_srsa(
+                model, dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS
+            )
             dtg    = sRSA_e - sRSA_c
             _srsa_sec = time.time() - _t0
             tqdm.write(f'  [step {step:>6d}] sRSA_e={sRSA_e:.3f}  '
@@ -367,9 +409,21 @@ def train(
 
         if step in CHECKPOINT_STEPS:
             ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
-            torch.save({'step': step,
-                        'model': model.state_dict(),
-                        'optimizer': optimizer.state_dict()}, ckpt)
+            torch.save({
+                'step': step,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'meta': {
+                    'obs_scale': OBS_SCALE,
+                    'pred_offset': PRED_OFFSET,
+                    'dropout_p': DROPOUT_P,
+                    'noise_std': NOISE_STD,
+                    'hidden_init_sigma': HIDDEN_INIT_SIGMA,
+                    'trunc': trunc,
+                    'srsa_eval_n': SUBSAMPLE_N,
+                    'srsa_eval_runs': SRSA_EVAL_RUNS,
+                },
+            }, ckpt)
             ckpt_paths.append(ckpt)
             writer.add_text('checkpoint', ckpt, step)
 
@@ -377,9 +431,21 @@ def train(
 
     # ── Final checkpoint ──────────────────────────────────────────────────────
     ckpt = os.path.join(out_dir, 'ckpt_final.pt')
-    torch.save({'step': step,
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict()}, ckpt)
+    torch.save({
+        'step': step,
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'meta': {
+            'obs_scale': OBS_SCALE,
+            'pred_offset': PRED_OFFSET,
+            'dropout_p': DROPOUT_P,
+            'noise_std': NOISE_STD,
+            'hidden_init_sigma': HIDDEN_INIT_SIGMA,
+            'trunc': trunc,
+            'srsa_eval_n': SUBSAMPLE_N,
+            'srsa_eval_runs': SRSA_EVAL_RUNS,
+        },
+    }, ckpt)
     ckpt_paths.append(ckpt)
 
     writer.close()

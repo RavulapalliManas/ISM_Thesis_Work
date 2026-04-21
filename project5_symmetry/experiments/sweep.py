@@ -26,7 +26,9 @@ from project5_symmetry.experiments.configs import (
     PHASE0, PHASE1, PHASE2A, PHASE2B, PHASE4A, PHASE4B, ALL_CONDITIONS,
     ExperimentConfig,
 )
-from project5_symmetry.training.train import train, _collect_hidden_states
+from project5_symmetry.training.train import (
+    train, _collect_hidden_states, HIDDEN_INIT_SIGMA, PRED_OFFSET, SUBSAMPLE_N,
+)
 from project5_symmetry.evaluation.metrics import srsa, sci, dtg_curve, manifold_id
 from project5_symmetry.training.dataset import TrajectoryDataset
 
@@ -81,7 +83,8 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
 
     ckpt = torch.load(os.path.join(run_dir, 'ckpt_final.pt'), map_location=device)
     model = pRNN_th(obs_size=obs_size, act_size=5, k=cfg.k,
-                    hidden_size=500, cell=LayerNormRNNCell, neuralTimescale=2)
+                    hidden_size=500, cell=LayerNormRNNCell, neuralTimescale=2,
+                    predOffset=PRED_OFFSET, hidden_init_sigma=HIDDEN_INIT_SIGMA)
     state = ckpt['model']
     fixed_state = {}
     for k, v in state.items():
@@ -89,7 +92,7 @@ def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
     model.load_state_dict(fixed_state, strict=False)
     model.to(device).eval()
 
-    h, pos = _collect_hidden_states(model, dataset, n=4000, device=device)
+    h, pos = _collect_hidden_states(model, dataset, n=SUBSAMPLE_N, device=device)
 
     inner     = env.unwrapped
     sym_pairs = inner.precompute_symmetry_pairs()

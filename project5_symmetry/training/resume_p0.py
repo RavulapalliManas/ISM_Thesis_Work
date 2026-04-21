@@ -26,7 +26,7 @@ if str(_ROOT) not in sys.path:
 import torch
 import torch.nn.functional as F
 import numpy as np
-from torch.utils.data import DataLoade
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
@@ -50,7 +50,12 @@ from project5_symmetry.training.train import (
     WEIGHT_DECAY,
     BATCH_SIZE,
     LOG_INTERVAL,
+    OBS_SCALE,
+    PRED_OFFSET,
     SUBSAMPLE_N,
+    SRSA_EVAL_RUNS,
+    HIDDEN_INIT_SIGMA,
+    _evaluate_srsa,
 )
 
 # ── P0 constants ──────────────────────────────────────────────────────────────
@@ -92,7 +97,8 @@ def main():
 
     # ── Dataset & DataLoader ──────────────────────────────────────────────────
     dataset     = TrajectoryDataset(str(DATA_DIR))
-    num_workers = min(8, (os.cpu_count() or 2))
+    default_workers = min(8, (os.cpu_count() or 2))
+    num_workers = int(os.getenv('PRNN_NUM_WORKERS', default_workers))
     loader      = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
@@ -113,9 +119,12 @@ def main():
         cell=LayerNormRNNCell,
         dropp=DROPOUT_P,
         neuralTimescale=NEURAL_TIMESCALE,
+        trunc=200,
+        predOffset=PRED_OFFSET,
+        hidden_init_sigma=HIDDEN_INIT_SIGMA,
     ).to(device)
 
-    optimizer = _build_optimizer(model)
+    optimizer = _build_optimizer(model, batch_size=BATCH_SIZE)
 
     # ── Load checkpoint ───────────────────────────────────────────────────────
     print(f'Loading checkpoint: {CKPT_IN}')
@@ -126,6 +135,19 @@ def main():
         f'Expected checkpoint at step {START_STEP}, got step {saved_step}. '
         f'Wrong checkpoint file?'
     )
+
+    meta = ckpt.get('meta', {})
+    if meta:
+        if meta.get('obs_scale') != OBS_SCALE:
+            raise RuntimeError(
+                f"Checkpoint obs_scale={meta.get('obs_scale')} does not match "
+                f'current expected obs_scale={OBS_SCALE}.'
+            )
+        if meta.get('pred_offset') != PRED_OFFSET:
+            raise RuntimeError(
+                f"Checkpoint pred_offset={meta.get('pred_offset')} does not match "
+                f'current expected pred_offset={PRED_OFFSET}.'
+            )
 
     model.load_state_dict(ckpt['model'])
     optimizer.load_state_dict(ckpt['optimizer'])
@@ -188,6 +210,7 @@ def main():
         pred, _, target = model(obs_b, act_b)
         loss = F.mse_loss(pred, target)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
@@ -200,9 +223,9 @@ def main():
 
         if step % LOG_INTERVAL == 0:
             _t0 = time.time()
-            h, pos = _collect_hidden_states(model, dataset, SUBSAMPLE_N, device)
-            sRSA_e = float(srsa(h, pos, space_metric='euclidean'))
-            sRSA_c = float(srsa(h, pos, space_metric='cityblock'))
+            sRSA_e, sRSA_c = _evaluate_srsa(
+                model, dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS
+            )
             dtg    = sRSA_e - sRSA_c
             _elapsed = time.time() - _t0
             tqdm.write(f'  [step {step:>6d}] sRSA_e={sRSA_e:.3f}  '
@@ -227,9 +250,21 @@ def main():
 
         if step in RESUME_CHECKPOINT_STEPS:
             ckpt_path = OUT_DIR / f'ckpt_{step}.pt'
-            torch.save({'step': step,
-                        'model': model.state_dict(),
-                        'optimizer': optimizer.state_dict()}, ckpt_path)
+            torch.save({
+                'step': step,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'meta': {
+                    'obs_scale': OBS_SCALE,
+                    'pred_offset': PRED_OFFSET,
+                    'dropout_p': DROPOUT_P,
+                    'noise_std': NOISE_STD,
+                    'hidden_init_sigma': HIDDEN_INIT_SIGMA,
+                    'trunc': 200,
+                    'srsa_eval_n': SUBSAMPLE_N,
+                    'srsa_eval_runs': SRSA_EVAL_RUNS,
+                },
+            }, ckpt_path)
             log_dict['ckpt_paths'].append(str(ckpt_path))
             writer.add_text('checkpoint', str(ckpt_path), step)
             tqdm.write(f'  [ckpt] saved -> {ckpt_path}')

@@ -94,7 +94,7 @@ class thetaRNNLayer(nn.Module):
                 input.size(0),
                 self.cell.hidden_size,
                 device=self.cell.weight_hh.device,
-            ).normal_().mul_(self.hidden_init_sigma)
+            ).uniform_(0.0, self.hidden_init_sigma)
         if internal.size(0) == 0:
             internal = torch.zeros(
                 input.size(0),
@@ -137,8 +137,12 @@ class thetaRNNLayer(nn.Module):
             input = torch.zeros(internal.size(0),internal.size(1),self.cell.input_size,
                                 device=self.cell.weight_hh.device)
         if state.size(0)==0:
-            state = torch.zeros(1,1,self.cell.hidden_size,
-                                device=self.cell.weight_hh.device)
+            state = torch.empty(
+                1,
+                1,
+                self.cell.hidden_size,
+                device=self.cell.weight_hh.device,
+            ).uniform_(0.0, self.hidden_init_sigma)
         if internal.size(0)==0:
             internal = torch.zeros(theta+1,input.size(1),self.cell.hidden_size,
                                    device=self.cell.weight_hh.device)
@@ -261,11 +265,10 @@ class LayerNormRNNCell(jit.ScriptModule):
         rootk_i = np.sqrt(1.0 / input_size)
         self.weight_ih = Parameter(torch.rand(hidden_size, input_size) * 2 * rootk_i - rootk_i)
         self.weight_hh = Parameter(torch.rand(hidden_size, hidden_size) * 2 * rootk_h - rootk_h)
-        # Learnable shift bias for layer-norm (was layernorm.mu).
-        # Exposed as self.bias so pRNN's optimizer group still resolves correctly via
-        #   model.bias → model.rnn.cell.bias
+        # Learnable neuron-wise post-normalization bias.
         self.bias  = Parameter(torch.zeros(hidden_size))
-        self.scale = Parameter(torch.ones(hidden_size))
+        # Retained only for old checkpoint compatibility; NormReLU does not use gamma.
+        self.scale = Parameter(torch.ones(hidden_size), requires_grad=False)
 
         self.actfun = torch.nn.ReLU()
 
@@ -275,10 +278,11 @@ class LayerNormRNNCell(jit.ScriptModule):
         hx      = state[0]
         i_input = torch.mm(input, self.weight_ih.t())
         h_input = torch.mm(hx,    self.weight_hh.t())
-        # Single fused kernel: normalize then add learned shift (bias)
-        x  = F.layer_norm(i_input + h_input, [self.hidden_size],
-                          weight=self.scale, bias=self.bias, eps=1e-4)
-        hy = self.actfun(x + internal)
+        x = i_input + h_input
+        mean = x.mean(dim=-1, keepdim=True)
+        std = x.std(dim=-1, keepdim=True, unbiased=False)
+        x = (x - mean) / (std + 1e-4)
+        hy = self.actfun(x + self.bias + internal)
         return hy, (hy, 0)
 
 

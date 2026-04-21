@@ -81,6 +81,7 @@ class pRNN(nn.Module):
 
         with torch.no_grad():
             self.W.add_(torch.eye(hidden_size).mul_(1-1/self.neuralTimescale))
+            self.W_out.normal_(mean=0.0, std=0.01)
 
 
     def forward(self, obs, act, noise_t=torch.tensor([]), state=torch.tensor([]), theta=None):
@@ -144,7 +145,7 @@ class pRNN(nn.Module):
 class pRNN_th(pRNN):
     def __init__(self, obs_size, act_size, k, hidden_size=500,
                  cell=RNNCell,  dropp=0, trunc=50, f=0.5,
-                 predOffset=1, inMask=[True], outMask=None,
+                 predOffset=0, inMask=[True], outMask=None,
                  actOffset=0, actMask=None, neuralTimescale=2,
                  continuousTheta=False, actionTheta=False,
                  hidden_init_sigma=0.1):
@@ -232,18 +233,29 @@ class pRNN_th(pRNN):
         
         #Make everything the same size
         # obs_target is now 4D (B, k+1, T-k, obs_size) — time dim is index 2
-        minsize = min(obs.size(1), act.size(1), obs_target.size(2))
-        obs, act = obs[:, :minsize, :], act[:, :minsize, :]
+        act_time = act.size(2) if act.dim() == 4 else act.size(1)
+        minsize = min(obs.size(1), act_time, obs_target.size(2))
+        obs = obs[:, :minsize, :]
+        if act.dim() == 4:
+            act = act[:, :, :minsize, :]
+        else:
+            act = act[:, :minsize, :]
         obs_target = obs_target[:, :, :minsize, :]   # 4D slice along time axis
 
         outmask = True
         obs = self.droplayer(obs)
-        x_t = torch.cat((obs.detach(), act.detach()), 2)
+        if act.dim() == 4:
+            # Theta-rollout forward paths read only obs_target from this helper.
+            # Keep a simple 3D placeholder here so callers that do not consume x_t
+            # can still build batched rollout targets safely.
+            x_t = obs.detach()
+        else:
+            x_t = torch.cat((obs.detach(), act.detach()), 2)
         return x_t, obs_target.detach(), outmask
 
 
     # ── True batched multi-step rollout ──────────────────────────────────────
-    def _forward_theta_batched(self, obs, act):
+    def _forward_theta_batched(self, obs, act, noise_t=torch.tensor([]), state=torch.tensor([])):
         """
         Autoregressive rollout with true batch semantics.
 
@@ -264,9 +276,30 @@ class pRNN_th(pRNN):
         act_idx   = self._get_act_theta_idx(T_act)   # (k+1, T-k), cached
         act_theta = act[:, act_idx]                  # (B, k+1, T-k, act_size)
 
-        hx    = torch.zeros(B, H, device=device).uniform_(0, self.rnn.hidden_init_sigma)
+        if torch.is_tensor(state) and state.numel() > 0:
+            if state.dim() == 3:
+                hx = state.squeeze(0)
+            else:
+                hx = state
+            if hx.size(0) == 1 and B > 1:
+                hx = hx.expand(B, -1).contiguous()
+            hx = hx.to(device)
+        else:
+            hx = torch.empty(B, H, device=device).uniform_(0.0, self.rnn.hidden_init_sigma)
         state = (hx, 0)
-        zeros = torch.zeros(B, H, device=device)     # no noise drive
+
+        if torch.is_tensor(noise_t) and noise_t.numel() > 0:
+            if noise_t.dim() == 3:
+                noise = noise_t[:self.k + 1, :T_k, :].to(device)
+                noise = noise.unsqueeze(0).expand(B, -1, -1, -1)
+            elif noise_t.dim() == 4:
+                noise = noise_t[:, :self.k + 1, :T_k, :].to(device)
+                if noise.size(0) == 1 and B > 1:
+                    noise = noise.expand(B, -1, -1, -1)
+            else:
+                raise ValueError(f"noise_t must be 3D or 4D, got shape {tuple(noise_t.shape)}")
+        else:
+            noise = torch.zeros(B, self.k + 1, T_k, H, device=device)
 
         preds  = []
         h_list = []
@@ -278,7 +311,7 @@ class pRNN_th(pRNN):
 
             # Advance main hidden state using obs[t] and act[t]
             x_main    = torch.cat([obs[:, t, :], act_theta[:, 0, t, :]], dim=-1)
-            hx, state = self.rnn.cell(x_main, zeros, state)
+            hx, state = self.rnn.cell(x_main, noise[:, 0, t, :], state)
 
             # Autoregressive rollout from hx for theta = 0 .. k
             hx_r, st_r = hx, (hx, 0)
@@ -287,9 +320,11 @@ class pRNN_th(pRNN):
                 pred_th = self.outlayer(hx_r)             # (B, obs_size)
                 step_preds.append(pred_th)
                 if th < self.k:
-                    # Feed network's own prediction + next future action back in
-                    x_roll     = torch.cat([pred_th, act_theta[:, th + 1, t, :]], dim=-1)
-                    hx_r, st_r = self.rnn.cell(x_roll, zeros, st_r)
+                    # Mask observation drive during rollout so future updates
+                    # depend only on recurrent state and future actions.
+                    obs_masked = torch.zeros_like(pred_th)
+                    x_roll     = torch.cat([obs_masked, act_theta[:, th + 1, t, :]], dim=-1)
+                    hx_r, st_r = self.rnn.cell(x_roll, noise[:, th + 1, t, :], st_r)
 
             preds.append(torch.stack(step_preds, dim=1))  # (B, k+1, obs_size)
             h_list.append(hx)
@@ -307,8 +342,19 @@ class pRNN_th(pRNN):
         # Apply obs dropout (mirrors restructure_inputs droplayer)
         obs_dropped = self.droplayer(obs)
 
-        pred, h_t = self._forward_theta_batched(obs_dropped, act)
+        pred, h_t = self._forward_theta_batched(obs_dropped, act, noise_t=noise_t, state=state)
         # pred: (B, k+1, T-k, obs_size)
+
+        # Some callers can arrive with an off-by-one effective rollout length
+        # (for example when observation and action windows were prepared by
+        # slightly different code paths). Align both tensors here so loss code
+        # always sees one shared rollout grid.
+        if pred.dim() == 4 and obs_target.dim() == 4:
+            common_h = min(pred.size(1), obs_target.size(1))
+            common_t = min(pred.size(2), obs_target.size(2))
+            pred = pred[:, :common_h, :common_t, :]
+            obs_target = obs_target[:, :common_h, :common_t, :]
+            h_t = h_t[:, :common_t, :]
 
         return pred, h_t, obs_target
 
