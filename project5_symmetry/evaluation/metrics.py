@@ -22,7 +22,7 @@ import pynapple as nap
 from scipy.spatial.distance import pdist, cdist
 from scipy.stats import spearmanr
 
-MAX_SUBSAMPLE = 4000  # cap for sRSA (matches legacy analysis code)
+MAX_SUBSAMPLE = 5000  # larger sample reduces checkpoint-to-checkpoint variance
 
 
 # ─────────────────────────────────────────────────────────────────────────────

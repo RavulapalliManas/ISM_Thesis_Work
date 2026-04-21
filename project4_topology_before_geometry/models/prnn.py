@@ -80,6 +80,14 @@ class RolloutPRNN(nn.Module):
     def _sample_initial_state(self) -> torch.Tensor:
         return self.sigma * torch.randn((1, 1, self.hidden_dim), dtype=torch.float32, device=self.device_)
 
+    def _sample_rollout_noise(self, batch_size: int, timesteps: int) -> torch.Tensor:
+        horizon = self.rollout_k + 1
+        return self.sigma * torch.randn(
+            (batch_size, horizon, timesteps, self.hidden_dim),
+            dtype=torch.float32,
+            device=self.device_,
+        )
+
     def zero_grad(self) -> None:
         self.core_model.zero_grad()
 
@@ -97,25 +105,29 @@ class RolloutPRNN(nn.Module):
         training: bool = True,
     ) -> dict[str, torch.Tensor | np.ndarray]:
         obs, act = self.core_model._ensure_batched_inputs(observations, actions)
-        original_initial_state = self.core_model._initial_state
-        self.core_model._initial_state = self._sample_initial_state
-        try:
-            forward_impl = self._compiled_teacher_forced or self.core_model._forward_teacher_forced
-            outputs = forward_impl(obs, act, training=training)
-        finally:
-            self.core_model._initial_state = original_initial_state
-        decoded = outputs.get("decoded_predictions")
-        raw_targets = outputs.get("raw_targets")
-        encoded_targets = outputs.get("encoded_targets")
-        if (
-            isinstance(decoded, torch.Tensor)
-            and isinstance(raw_targets, torch.Tensor)
-            and isinstance(encoded_targets, torch.Tensor)
-            and decoded.shape != raw_targets.shape
-            and decoded.shape == encoded_targets.shape
-        ):
-            outputs["raw_targets"] = self.core_model.observation_adapter.decode(encoded_targets).float()
-        return outputs
+        batch_size = int(obs.shape[0])
+        init_state = self.sigma * torch.randn(
+            (1, batch_size, self.hidden_dim),
+            dtype=torch.float32,
+            device=self.device_,
+        )
+        noise_t = self._sample_rollout_noise(batch_size, int(obs.shape[1]))
+        with self.core_model._autocast_context():
+            decoded, hidden, raw_targets = self.core_model.core(
+                obs,
+                act,
+                noise_t=noise_t if training else torch.zeros_like(noise_t),
+                state=init_state,
+            )
+        return {
+            "latent_predictions": decoded.float(),
+            "decoded_predictions": decoded.float(),
+            "encoded_targets": raw_targets.float(),
+            "raw_targets": raw_targets.float(),
+            "hidden": hidden.float(),
+            "mask": True,
+            "encoded_observations": obs.float(),
+        }
 
     def forward_rollout(
         self,

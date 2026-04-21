@@ -41,8 +41,8 @@ print()
 # ── Model ─────────────────────────────────────────────────────────────────────
 torch.manual_seed(0)
 model = pRNN_th(obs_size=OBS_SIZE, act_size=ACT_SIZE, k=K,
-                hidden_size=HIDDEN, cell=LayerNormRNNCell,
-                dropp=0.15, neuralTimescale=2).to(DEVICE)
+	                hidden_size=HIDDEN, cell=LayerNormRNNCell,
+	                dropp=0.15, neuralTimescale=2, predOffset=0).to(DEVICE)
 
 print("=" * 60)
 print("PART 1 — torch.compile() probe (dynamo verbose=True)")
@@ -71,7 +71,7 @@ loader  = DataLoader(dataset, batch_size=1, shuffle=True,
                      num_workers=2, prefetch_factor=2,
                      persistent_workers=True)
 
-optimizer = _build_optimizer(model)
+optimizer = _build_optimizer(model, batch_size=1)
 
 def _inf():
     while True:

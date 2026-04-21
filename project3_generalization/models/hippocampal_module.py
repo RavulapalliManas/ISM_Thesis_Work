@@ -299,27 +299,39 @@ class HippocampalPredictiveRNN(nn.Module):
         """Construct the optimizer with legacy-style layerwise learning-rate scaling."""
         rootk_h = (1.0 / self.config.hidden_size) ** 0.5
         rootk_i = (1.0 / self.core.rnn.cell.input_size) ** 0.5
+        bias_params = []
+        if hasattr(self.core, "bias") and isinstance(self.core.bias, nn.Parameter):
+            bias_params.append(self.core.bias)
         parameter_groups = [
             {
-                "params": self.core.W,
+                "params": [self.core.W],
                 "name": "recurrent",
                 "lr": self.config.learning_rate * rootk_h,
-                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
+                "weight_decay": 0.0,
             },
             {
-                "params": self.core.W_out,
+                "params": [self.core.W_out],
                 "name": "readout",
                 "lr": self.config.learning_rate * rootk_h,
-                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
+                "weight_decay": 0.0,
             },
             {
-                "params": self.core.W_in,
+                "params": [self.core.W_in],
                 "name": "input",
                 "lr": self.config.learning_rate * rootk_i,
-                "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_i,
+                "weight_decay": 0.0,
             },
         ]
-        core_params = {id(self.core.W), id(self.core.W_out), id(self.core.W_in)}
+        if bias_params:
+            parameter_groups.append(
+                {
+                    "params": bias_params,
+                    "name": "bias",
+                    "lr": self.config.learning_rate * rootk_h,
+                    "weight_decay": self.config.weight_decay * self.config.learning_rate * rootk_h,
+                }
+            )
+        core_params = {id(self.core.W), id(self.core.W_out), id(self.core.W_in), *(id(param) for param in bias_params)}
         extra_params = [param for param in self.parameters() if param.requires_grad and id(param) not in core_params]
         if extra_params:
             parameter_groups.append(
@@ -327,7 +339,7 @@ class HippocampalPredictiveRNN(nn.Module):
                     "params": extra_params,
                     "name": "adapter",
                     "lr": self.config.learning_rate,
-                    "weight_decay": self.config.weight_decay * self.config.learning_rate,
+                    "weight_decay": 0.0,
                 }
             )
         return torch.optim.RMSprop(parameter_groups, alpha=0.95, eps=1e-7)
