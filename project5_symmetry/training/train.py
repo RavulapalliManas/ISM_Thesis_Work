@@ -28,7 +28,13 @@ from utils.Architectures import pRNN_th
 from utils.thetaRNN import LayerNormRNNCell
 
 from project5_symmetry.training.dataset import TrajectoryDataset, PackedTrajectoryStore
-from project5_symmetry.evaluation.metrics import srsa
+from project5_symmetry.evaluation.metrics import (
+    aggregate_hidden_by_position,
+    manifold_id,
+    place_field_spatial_coherence,
+    representational_geometry_consistency,
+    srsa,
+)
 
 # ── Paper hyperparameters (Table 1, p.17) ─────────────────────────────────────
 HIDDEN_SIZE      = 500
@@ -134,6 +140,114 @@ def _evaluate_srsa(
         srsa_e.append(float(srsa(h, pos, space_metric='euclidean', max_n=n)))
         srsa_c.append(float(srsa(h, pos, space_metric='cityblock', max_n=n)))
     return float(np.mean(srsa_e)), float(np.mean(srsa_c))
+
+
+def _evaluate_live_geometry_metrics(
+    model: pRNN_th,
+    dataset: TrajectoryDataset,
+    device,
+    n: int = SUBSAMPLE_N,
+    hidden: np.ndarray | None = None,
+    positions: np.ndarray | None = None,
+) -> dict:
+    if hidden is None or positions is None:
+        hidden, positions = _collect_hidden_states(model, dataset, n=n, device=device)
+    arena_size = int(np.max(np.rint(positions))) if positions.size else 0
+    aggregated = aggregate_hidden_by_position(hidden, positions)
+    position_hidden = aggregated['hidden']
+
+    rgc = representational_geometry_consistency(position_hidden)
+    coherence = place_field_spatial_coherence(
+        hidden,
+        positions,
+        arena_size=arena_size,
+    )
+    return {
+        'manifold_id': float(manifold_id(position_hidden)),
+        'pca_variance_2d': float(rgc['pca_var_2d']),
+        'mds_stress': float(rgc['stress']),
+        'mean_field_coherence': float(coherence['mean_score']),
+    }
+
+
+def _init_live_metric_log_dict() -> dict:
+    log_dict = {
+        'steps': [],
+        'srsa_euclid': [],
+        'srsa_city': [],
+        'loss': [],
+        'manifold_id': [],
+        'pca_variance_2d': [],
+        'mds_stress': [],
+        'mean_field_coherence': [],
+    }
+    odi_env = os.getenv('PRNN_OBSERVATION_DISCRIMINABILITY')
+    log_dict['observation_discriminability'] = (
+        float(odi_env) if odi_env is not None else None
+    )
+    return log_dict
+
+
+def _log_condition_scalar(writer: SummaryWriter, log_dict: dict):
+    odi = log_dict.get('observation_discriminability')
+    if odi is not None:
+        writer.add_scalar('metrics/observation_discriminability', float(odi), 0)
+
+
+def _append_live_metrics(
+    log_dict: dict,
+    step: int,
+    step_loss: float,
+    srsa_e: float,
+    srsa_c: float,
+    geometry_metrics: dict | None = None,
+):
+    log_dict['steps'].append(step)
+    log_dict['srsa_euclid'].append(float(srsa_e))
+    log_dict['srsa_city'].append(float(srsa_c))
+    log_dict['loss'].append(float(step_loss))
+    if geometry_metrics is not None:
+        log_dict['manifold_id'].append(float(geometry_metrics['manifold_id']))
+        log_dict['pca_variance_2d'].append(float(geometry_metrics['pca_variance_2d']))
+        log_dict['mds_stress'].append(float(geometry_metrics['mds_stress']))
+        log_dict['mean_field_coherence'].append(float(geometry_metrics['mean_field_coherence']))
+    else:
+        log_dict['manifold_id'].append(float('nan'))
+        log_dict['pca_variance_2d'].append(float('nan'))
+        log_dict['mds_stress'].append(float('nan'))
+        log_dict['mean_field_coherence'].append(float('nan'))
+
+
+def _write_live_metrics(
+    writer: SummaryWriter,
+    step: int,
+    srsa_e: float,
+    srsa_c: float,
+    geometry_metrics: dict | None = None,
+):
+    dtg = srsa_e - srsa_c
+    writer.add_scalar('metrics/sRSA_euclidean', srsa_e, step)
+    writer.add_scalar('metrics/sRSA_cityblock', srsa_c, step)
+    writer.add_scalar('metrics/delta_TG', dtg, step)
+    if geometry_metrics is not None:
+        writer.add_scalar('metrics/manifold_id', geometry_metrics['manifold_id'], step)
+        writer.add_scalar('metrics/pca_variance_2d', geometry_metrics['pca_variance_2d'], step)
+        writer.add_scalar('metrics/mds_stress', geometry_metrics['mds_stress'], step)
+        writer.add_scalar('metrics/mean_field_coherence', geometry_metrics['mean_field_coherence'], step)
+
+
+def _print_live_geometry_metrics(
+    run_label: str,
+    step: int,
+    geometry_metrics: dict,
+):
+    tqdm.write(
+        f'[{run_label or "train-fast"} step={step}] '
+        f'manifold_id={geometry_metrics["manifold_id"]:.3f}  '
+        f'pca_variance_2d={geometry_metrics["pca_variance_2d"]:.3f}  '
+        f'mds_stress={geometry_metrics["mds_stress"]:.3f}  '
+        f'mean_field_coherence={geometry_metrics["mean_field_coherence"]:.3f}'
+    )
 
 
 # ── Main training function ────────────────────────────────────────────────────
@@ -591,7 +705,8 @@ def _train_fast_single(
 
     tb_dir = os.path.join(out_dir, 'tb')
     writer = SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else '')
-    log_dict = {'steps': [], 'srsa_euclid': [], 'srsa_city': [], 'loss': []}
+    log_dict = _init_live_metric_log_dict()
+    _log_condition_scalar(writer, log_dict)
     ckpt_paths = []
 
     T_act = packed.act_seq_len
@@ -634,20 +749,46 @@ def _train_fast_single(
 
         if not defer_srsa and step % LOG_INTERVAL == 0:
             sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
-            log_dict['steps'].append(step)
-            log_dict['srsa_euclid'].append(sRSA_e)
-            log_dict['srsa_city'].append(sRSA_c)
-            log_dict['loss'].append(step_loss)
-            writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, step)
-            writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, step)
+            geometry_metrics = _evaluate_live_geometry_metrics(
+                model,
+                eval_dataset,
+                device,
+                n=SUBSAMPLE_N,
+            )
+            _write_live_metrics(writer, step, sRSA_e, sRSA_c, geometry_metrics=geometry_metrics)
+            _append_live_metrics(
+                log_dict,
+                step,
+                step_loss,
+                sRSA_e,
+                sRSA_c,
+                geometry_metrics=geometry_metrics,
+            )
+            _print_live_geometry_metrics(run_label, step, geometry_metrics)
+            pbar.set_postfix({
+                'loss': f'{step_loss:.4f}',
+                'sRSA': f'{sRSA_e:.3f}',
+                'mid': f'{geometry_metrics["manifold_id"]:.2f}',
+                'pca2d': f'{geometry_metrics["pca_variance_2d"]:.2f}',
+            })
 
     sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
-    log_dict['steps'].append(n_steps)
-    log_dict['srsa_euclid'].append(sRSA_e)
-    log_dict['srsa_city'].append(sRSA_c)
-    log_dict['loss'].append(step_loss)
-    writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, n_steps)
-    writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, n_steps)
+    geometry_metrics = _evaluate_live_geometry_metrics(
+        model,
+        eval_dataset,
+        device,
+        n=SUBSAMPLE_N,
+    )
+    _write_live_metrics(writer, n_steps, sRSA_e, sRSA_c, geometry_metrics=geometry_metrics)
+    _append_live_metrics(
+        log_dict,
+        n_steps,
+        step_loss,
+        sRSA_e,
+        sRSA_c,
+        geometry_metrics=geometry_metrics,
+    )
+    _print_live_geometry_metrics(run_label, n_steps, geometry_metrics)
 
     ckpt = os.path.join(out_dir, 'ckpt_final.pt')
     _save_checkpoint(
@@ -665,7 +806,12 @@ def _train_fast_single(
     compile_note = " (torch.compile enabled)" if compiled else ""
     tqdm.write(
         f'  ✓ {run_label or "train-fast"} done{compile_note} — '
-        f'sRSA_e={sRSA_e:.3f}  sRSA_c={sRSA_c:.3f}  tb → {tb_dir}'
+        f'sRSA_e={sRSA_e:.3f}  sRSA_c={sRSA_c:.3f}  '
+        f'manifold_id={geometry_metrics["manifold_id"]:.3f}  '
+        f'pca_variance_2d={geometry_metrics["pca_variance_2d"]:.3f}  '
+        f'mds_stress={geometry_metrics["mds_stress"]:.3f}  '
+        f'mean_field_coherence={geometry_metrics["mean_field_coherence"]:.3f}  '
+        f'tb → {tb_dir}'
     )
     return log_dict
 
@@ -691,6 +837,7 @@ def train_parallel_seeds(
         batch_size = int(os.getenv('PRNN_PER_SEED_BATCH', FAST_BATCH_SIZE))
 
     anchor_subsample_n = int(os.getenv('PRNN_ANCHOR_SUBSAMPLE', ANCHOR_SUBSAMPLE_N))
+    defer_srsa = os.getenv('PRNN_DEFER_SRSA', '1') != '0'
 
     packed = PackedTrajectoryStore(
         data_dir,
@@ -723,8 +870,12 @@ def train_parallel_seeds(
         models.append(model)
         optimizers.append(_build_optimizer(model, batch_size=batch_size))
         tb_dir = os.path.join(out_dir, 'tb')
-        writers.append(SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else ''))
-        logs.append({'steps': [], 'srsa_euclid': [], 'srsa_city': [], 'loss': [], 'ckpt_paths': []})
+        writer = SummaryWriter(log_dir=tb_dir, comment=f'_{run_label}' if run_label else '')
+        writers.append(writer)
+        log_dict = _init_live_metric_log_dict()
+        _log_condition_scalar(writer, log_dict)
+        log_dict['ckpt_paths'] = []
+        logs.append(log_dict)
         ckpt_paths.append([])
 
     T_act = packed.act_seq_len
@@ -778,15 +929,63 @@ def train_parallel_seeds(
                 logs[seed_idx]['ckpt_paths'].append(ckpt)
                 writers[seed_idx].add_text('checkpoint', ckpt, step)
 
+        if not defer_srsa and step % LOG_INTERVAL == 0:
+            mean_srsa = []
+            mean_mid = []
+            for seed_idx, (seed, model, writer, step_loss, run_label) in enumerate(
+                zip(seeds, models, writers, step_losses, run_labels)
+            ):
+                sRSA_e, sRSA_c = _evaluate_srsa(
+                    model,
+                    eval_dataset,
+                    device,
+                    n=SUBSAMPLE_N,
+                    repeats=SRSA_EVAL_RUNS,
+                )
+                geometry_metrics = _evaluate_live_geometry_metrics(
+                    model,
+                    eval_dataset,
+                    device,
+                    n=SUBSAMPLE_N,
+                )
+                _write_live_metrics(writer, step, sRSA_e, sRSA_c, geometry_metrics=geometry_metrics)
+                _append_live_metrics(
+                    logs[seed_idx],
+                    step,
+                    step_loss,
+                    sRSA_e,
+                    sRSA_c,
+                    geometry_metrics=geometry_metrics,
+                )
+                _print_live_geometry_metrics(run_label, step, geometry_metrics)
+                mean_srsa.append(sRSA_e)
+                mean_mid.append(geometry_metrics['manifold_id'])
+            pbar.set_postfix({
+                'loss': f'{np.mean(step_losses):.4f}',
+                'sRSA': f'{np.mean(mean_srsa):.3f}',
+                'mid': f'{np.mean(mean_mid):.2f}',
+                'B': batch_size,
+            })
+
     results = {}
     for idx, (seed, out_dir, model, optimizer, writer) in enumerate(zip(seeds, out_dirs, models, optimizers, writers)):
         sRSA_e, sRSA_c = _evaluate_srsa(model, eval_dataset, device, n=SUBSAMPLE_N, repeats=SRSA_EVAL_RUNS)
-        logs[idx]['steps'].append(n_steps)
-        logs[idx]['srsa_euclid'].append(sRSA_e)
-        logs[idx]['srsa_city'].append(sRSA_c)
-        logs[idx]['loss'].append(step_losses[idx])
-        writer.add_scalar('metrics/sRSA_euclidean', sRSA_e, n_steps)
-        writer.add_scalar('metrics/sRSA_cityblock', sRSA_c, n_steps)
+        geometry_metrics = _evaluate_live_geometry_metrics(
+            model,
+            eval_dataset,
+            device,
+            n=SUBSAMPLE_N,
+        )
+        _write_live_metrics(writer, n_steps, sRSA_e, sRSA_c, geometry_metrics=geometry_metrics)
+        _append_live_metrics(
+            logs[idx],
+            n_steps,
+            step_losses[idx],
+            sRSA_e,
+            sRSA_c,
+            geometry_metrics=geometry_metrics,
+        )
+        _print_live_geometry_metrics(run_labels[idx], n_steps, geometry_metrics)
         final_ckpt = os.path.join(out_dir, 'ckpt_final.pt')
         _save_checkpoint(
             final_ckpt, n_steps, model, optimizer, trunc,

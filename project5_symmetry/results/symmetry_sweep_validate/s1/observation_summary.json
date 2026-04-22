@@ -1,0 +1,9 @@
+{
+  "odi": {
+    "rho": 0.33600394439152487,
+    "observation_metric": "euclidean",
+    "space_metric": "euclidean"
+  },
+  "n_positions": 324,
+  "positions_path": "project5_symmetry/results/symmetry_sweep_validate/s1/observation_summary.pkl"
+}

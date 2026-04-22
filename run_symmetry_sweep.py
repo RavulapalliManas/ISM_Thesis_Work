@@ -12,6 +12,7 @@ import torch
 
 os.environ.setdefault('NUMBA_CACHE_DIR', '/tmp/numba_cache')
 os.environ.setdefault('PRNN_TRAINER', 'fast')
+os.environ.setdefault('PRNN_DEFER_SRSA', '0')
 
 from project5_symmetry.environments.arena import (
     PixelObsWrapper,
@@ -200,6 +201,10 @@ def _write_condition_observation_summary(condition: str, obs_summary: dict, runs
     })
 
 
+def _set_condition_observation_discriminability(obs_summary: dict):
+    os.environ['PRNN_OBSERVATION_DISCRIMINABILITY'] = str(obs_summary['odi']['rho'])
+
+
 def _evaluate_run(condition: str, seed: int, runs_root: Path = RUNS_DIR) -> dict:
     run_dir = _seed_run_dir(condition, seed, runs_root)
     data_dir = _condition_data_dir(condition, runs_root)
@@ -372,6 +377,9 @@ def run_validation(parallel_seeds: int, dataset_workers: int) -> bool:
     try:
         validate_root = VALIDATION_DIR
         validate_root.mkdir(parents=True, exist_ok=True)
+        obs_summary = _condition_observation_summary('s1')
+        _write_condition_observation_summary('s1', obs_summary, runs_root=validate_root)
+        _set_condition_observation_discriminability(obs_summary)
         data_dir = _ensure_condition_data(
             condition='s1',
             n_traj=VALIDATION_N_TRAJ,
@@ -423,6 +431,7 @@ def run_full_sweep(parallel_seeds: int, dataset_workers: int, n_seeds: int = N_S
         )
         obs_summary = _condition_observation_summary(condition)
         _write_condition_observation_summary(condition, obs_summary, runs_root=RUNS_DIR)
+        _set_condition_observation_discriminability(obs_summary)
 
         for seeds in _seed_group_iterator(n_seeds, parallel_seeds):
             group_start = time.time()
