@@ -20,6 +20,7 @@ import numpy as np
 import torch
 import pynapple as nap
 from scipy.spatial.distance import pdist, cdist
+from scipy.signal import correlate2d
 from scipy.stats import spearmanr
 
 MAX_SUBSAMPLE = 5000  # larger sample reduces checkpoint-to-checkpoint variance
@@ -71,6 +72,14 @@ def _pdist_cityblock(X: np.ndarray) -> np.ndarray:
     return D[i, j].numpy()
 
 
+def _cosine_distance_matrix(X: np.ndarray) -> np.ndarray:
+    X_t = torch.from_numpy(X).float()
+    norms = X_t.norm(dim=1, keepdim=True).clamp(min=1e-8)
+    X_n = X_t / norms
+    cos_sim = X_n @ X_n.T
+    return torch.clamp(1.0 - cos_sim, min=0.0, max=2.0).numpy()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Paper metric 1 — sRSA
 # ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +90,8 @@ def srsa(
     neural_metric: str = 'cosine',
     space_metric: str = 'euclidean',
     max_n: int = MAX_SUBSAMPLE,
-) -> float:
+    return_matrix: bool = False,
+) -> float | tuple[float, np.ndarray]:
     """
     Spatial RSA: Spearman r between cosine neural distances and Euclidean
     spatial distances across all pairs of timepoints (Methods p.19).
@@ -91,8 +101,11 @@ def srsa(
     """
     h, p = _subsample(hidden, positions, max_n)
     if neural_metric == 'cosine':
-        neural_dists = _pdist_cosine(h)
+        neural_rsa_matrix = _cosine_distance_matrix(h)
+        idx = np.triu_indices(neural_rsa_matrix.shape[0], k=1)
+        neural_dists = neural_rsa_matrix[idx]
     else:
+        neural_rsa_matrix = cdist(h, h, neural_metric)
         neural_dists = pdist(h, neural_metric)
     if space_metric == 'euclidean':
         spatial_dists = _pdist_euclidean(p)
@@ -100,7 +113,295 @@ def srsa(
         spatial_dists = _pdist_cityblock(p)
     else:
         spatial_dists = pdist(p, space_metric)
-    return float(spearmanr(neural_dists, spatial_dists).statistic)
+    srsa_value = float(spearmanr(neural_dists, spatial_dists).statistic)
+    if return_matrix:
+        return srsa_value, neural_rsa_matrix
+    return srsa_value
+
+
+def cross_seed_rsa_alignment(rsa_matrices):
+    """
+    Pairwise Spearman correlation between neural RSA matrices across seeds.
+
+    Parameters
+    ----------
+    rsa_matrices : list of np.ndarray, each shape (N_pos, N_pos)
+        Neural distance matrices from each trained seed, as produced
+        by the sRSA pipeline. Pass the raw matrix, not the scalar sRSA.
+
+    Returns
+    -------
+    dict:
+        pairwise_rho : np.ndarray (K, K) symmetric
+        mean_rho     : float — mean of upper triangle
+        std_rho      : float — std of upper triangle
+    """
+    K = len(rsa_matrices)
+    pairwise_rho = np.zeros((K, K))
+    for a in range(K):
+        for b in range(a + 1, K):
+            idx = np.triu_indices(rsa_matrices[a].shape[0], k=1)
+            va = rsa_matrices[a][idx]
+            vb = rsa_matrices[b][idx]
+            rho, _ = spearmanr(va, vb)
+            pairwise_rho[a, b] = rho
+            pairwise_rho[b, a] = rho
+    upper = pairwise_rho[np.triu_indices(K, k=1)]
+    return {
+        'pairwise_rho': pairwise_rho,
+        'mean_rho': float(np.mean(upper)),
+        'std_rho': float(np.std(upper)),
+    }
+
+
+def aggregate_hidden_by_position(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    passable_positions: list[tuple[int, int]] | None = None,
+) -> dict:
+    """
+    Average hidden states over repeated visits to the same discrete arena position.
+
+    Returns a dict with:
+      positions : (N_pos, 2) int array in (col, row) order
+      hidden    : (N_pos, H) float32 mean hidden state per position
+      counts    : (N_pos,) visit counts used in the mean
+    """
+    pos_int = np.rint(positions).astype(np.int32)
+    if passable_positions is None:
+        ordered = sorted({(int(c), int(r)) for c, r in pos_int})
+    else:
+        ordered = [(int(c), int(r)) for c, r in passable_positions]
+
+    pos_to_idx = {pos: i for i, pos in enumerate(ordered)}
+    accum = np.zeros((len(ordered), hidden.shape[1]), dtype=np.float64)
+    counts = np.zeros(len(ordered), dtype=np.int32)
+
+    for h_t, (c, r) in zip(hidden, pos_int):
+        idx = pos_to_idx.get((int(c), int(r)))
+        if idx is None:
+            continue
+        accum[idx] += h_t
+        counts[idx] += 1
+
+    valid = counts > 0
+    return {
+        'positions': np.array(ordered, dtype=np.int32)[valid],
+        'hidden': (accum[valid] / counts[valid, None]).astype(np.float32),
+        'counts': counts[valid],
+    }
+
+
+def top_cca_correlation(X: np.ndarray, Y: np.ndarray) -> float:
+    """
+    Top canonical correlation between two position-aligned representation matrices.
+    """
+    Xc = X - X.mean(axis=0, keepdims=True)
+    Yc = Y - Y.mean(axis=0, keepdims=True)
+    if Xc.shape[0] < 2 or Yc.shape[0] < 2:
+        return float('nan')
+    qx, _ = np.linalg.qr(Xc, mode='reduced')
+    qy, _ = np.linalg.qr(Yc, mode='reduced')
+    if qx.size == 0 or qy.size == 0:
+        return float('nan')
+    s = np.linalg.svd(qx.T @ qy, compute_uv=False)
+    return float(np.clip(s[0], -1.0, 1.0))
+
+
+def cross_seed_cca_alignment(position_hidden_matrices: list[np.ndarray]) -> dict:
+    """
+    Pairwise top-CCA alignment between seeds using matched position-mean hidden states.
+    """
+    K = len(position_hidden_matrices)
+    pairwise_top_cca = np.eye(K, dtype=np.float64)
+    for a in range(K):
+        for b in range(a + 1, K):
+            corr = top_cca_correlation(position_hidden_matrices[a], position_hidden_matrices[b])
+            pairwise_top_cca[a, b] = corr
+            pairwise_top_cca[b, a] = corr
+    upper = pairwise_top_cca[np.triu_indices(K, k=1)]
+    return {
+        'pairwise_top_cca': pairwise_top_cca,
+        'mean_top_cca': float(np.nanmean(upper)),
+        'std_top_cca': float(np.nanstd(upper)),
+    }
+
+
+def _exact_tuning_maps(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    arena_size: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    pos_int = np.rint(positions).astype(np.int32)
+    accum = np.zeros((hidden.shape[1], arena_size, arena_size), dtype=np.float64)
+    counts = np.zeros((arena_size, arena_size), dtype=np.float64)
+
+    for h_t, (c, r) in zip(hidden, pos_int):
+        if 1 <= c <= arena_size and 1 <= r <= arena_size:
+            accum[:, r - 1, c - 1] += h_t
+            counts[r - 1, c - 1] += 1.0
+
+    maps = np.divide(
+        accum,
+        counts[None, :, :],
+        out=np.zeros_like(accum),
+        where=counts[None, :, :] > 0,
+    )
+    maps[:, counts == 0] = np.nan
+    return maps, counts
+
+
+def _spatial_evs_exact(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    tuning_maps: np.ndarray,
+) -> np.ndarray:
+    pos_int = np.rint(positions).astype(np.int32)
+    T, H = hidden.shape
+    expected = np.zeros((T, H), dtype=np.float64)
+    valid = np.zeros(T, dtype=bool)
+
+    for t, (c, r) in enumerate(pos_int):
+        if 1 <= c <= tuning_maps.shape[2] and 1 <= r <= tuning_maps.shape[1]:
+            expected[t] = tuning_maps[:, r - 1, c - 1]
+            valid[t] = True
+
+    evs = np.zeros(H, dtype=np.float64)
+    for i in range(H):
+        mask = valid & np.isfinite(expected[:, i])
+        if mask.sum() < 2:
+            evs[i] = np.nan
+            continue
+        h_i = hidden[mask, i].astype(np.float64)
+        var_total = np.var(h_i)
+        if var_total <= 0:
+            evs[i] = np.nan
+            continue
+        residual = h_i - expected[mask, i]
+        evs[i] = 1.0 - np.var(residual) / var_total
+    return evs
+
+
+def place_field_spatial_coherence(
+    hidden: np.ndarray,
+    positions: np.ndarray,
+    arena_size: int,
+    evs_threshold: float = 0.10,
+) -> dict:
+    """
+    Place-field coherence using exact discrete position tuning maps.
+
+    For each sufficiently spatially explained unit, compute:
+      autocorr(0,0) / mean autocorr over lags with Euclidean radius 2..5 tiles.
+    """
+    tuning_maps, occupancy = _exact_tuning_maps(hidden, positions, arena_size=arena_size)
+    evs = _spatial_evs_exact(hidden, positions, tuning_maps)
+
+    scores = np.full(hidden.shape[1], np.nan, dtype=np.float64)
+    for i in range(hidden.shape[1]):
+        if not np.isfinite(evs[i]) or evs[i] < evs_threshold:
+            continue
+        field = tuning_maps[i]
+        if not np.isfinite(field).any():
+            continue
+        field = np.nan_to_num(field, nan=0.0)
+        field = field - field.mean()
+        ac = correlate2d(field, field, mode='full', boundary='fill', fillvalue=0.0)
+        cy, cx = np.array(ac.shape) // 2
+        yy, xx = np.indices(ac.shape)
+        dist = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+        annulus = (dist >= 2.0) & (dist <= 5.0)
+        annulus_vals = ac[annulus]
+        annulus_mean = annulus_vals.mean() if annulus_vals.size else np.nan
+        if not np.isfinite(annulus_mean) or annulus_mean <= 0:
+            continue
+        scores[i] = ac[cy, cx] / (annulus_mean + 1e-8)
+
+    valid_scores = scores[np.isfinite(scores)]
+    return {
+        'per_unit_score': scores,
+        'mean_score': float(np.nanmean(valid_scores)) if valid_scores.size else float('nan'),
+        'std_score': float(np.nanstd(valid_scores)) if valid_scores.size else float('nan'),
+        'n_valid_units': int(valid_scores.size),
+        'evs_threshold': float(evs_threshold),
+        'evs': evs,
+        'occupancy': occupancy,
+    }
+
+
+def observation_discriminability(
+    observations: np.ndarray,
+    positions: np.ndarray,
+    observation_metric: str = 'euclidean',
+    space_metric: str = 'euclidean',
+) -> dict:
+    """
+    Input-space sRSA between mean observations per position and spatial distance.
+    """
+    obs_dists = pdist(observations, observation_metric)
+    if space_metric == 'euclidean':
+        spatial_dists = _pdist_euclidean(positions)
+    elif space_metric == 'cityblock':
+        spatial_dists = _pdist_cityblock(positions)
+    else:
+        spatial_dists = pdist(positions, space_metric)
+    rho = float(spearmanr(obs_dists, spatial_dists).statistic)
+    return {
+        'rho': rho,
+        'observation_metric': observation_metric,
+        'space_metric': space_metric,
+    }
+
+
+def _classical_mds(distance_matrix: np.ndarray, n_components: int = 2) -> np.ndarray:
+    n = distance_matrix.shape[0]
+    J = np.eye(n) - np.ones((n, n), dtype=np.float64) / n
+    B = -0.5 * J @ (distance_matrix.astype(np.float64) ** 2) @ J
+    eigvals, eigvecs = np.linalg.eigh(B)
+    order = np.argsort(eigvals)[::-1]
+    eigvals = eigvals[order]
+    eigvecs = eigvecs[:, order]
+    keep = np.maximum(eigvals[:n_components], 0.0)
+    return eigvecs[:, :n_components] * np.sqrt(keep)
+
+
+def representational_geometry_consistency(
+    hidden: np.ndarray,
+    neural_metric: str = 'cosine',
+) -> dict:
+    """
+    2D geometry consistency via PCA projection and classical-MDS stress.
+    Lower stress means a cleaner 2D map-like representation.
+    """
+    hidden_centered = hidden - hidden.mean(axis=0, keepdims=True)
+    _, s, vt = np.linalg.svd(hidden_centered, full_matrices=False)
+    if vt.shape[0] >= 2:
+        pca_2d = hidden_centered @ vt[:2].T
+    elif vt.shape[0] == 1:
+        pca_2d = np.column_stack([hidden_centered @ vt[:1].T, np.zeros((hidden.shape[0], 1))])
+    else:
+        pca_2d = np.zeros((hidden.shape[0], 2), dtype=np.float64)
+    pca_var_2d = float(np.sum(s[:2] ** 2) / (np.sum(s ** 2) + 1e-8))
+
+    if neural_metric == 'cosine':
+        neural_dist = _cosine_distance_matrix(hidden)
+    else:
+        neural_dist = cdist(hidden, hidden, neural_metric)
+    mds_2d = _classical_mds(neural_dist, n_components=2)
+
+    idx = np.triu_indices(neural_dist.shape[0], k=1)
+    d_true = neural_dist[idx]
+    d_pca = cdist(pca_2d, pca_2d, 'euclidean')[idx]
+    d_mds = cdist(mds_2d, mds_2d, 'euclidean')[idx]
+
+    denom = float(np.sum(d_true ** 2) + 1e-8)
+    stress_pca = float(np.sqrt(np.sum((d_true - d_pca) ** 2) / denom))
+    stress_mds = float(np.sqrt(np.sum((d_true - d_mds) ** 2) / denom))
+    return {
+        'stress': stress_mds,
+        'stress_pca': stress_pca,
+        'pca_var_2d': pca_var_2d,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
