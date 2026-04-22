@@ -160,10 +160,13 @@ def run_phase0(base_dir: str) -> bool:
     tqdm.write(f'\n{"="*60}')
     tqdm.write(f'Phase 0 gate: {cfg.condition_id}  (need sRSA_e > {GATE_THRESHOLD})')
     tqdm.write(f'{"="*60}')
-    result = _run_condition(cfg, seed=0, base_dir=base_dir)
-    passed = result['final_srsa_euclid'] > GATE_THRESHOLD
+    results = run_sweep([cfg], base_dir, label='_phase0')
+    seed0_result = next(result for result in results if result['seed'] == 0)
+    mean_srsa = float(np.mean([result['final_srsa_euclid'] for result in results]))
+    passed = seed0_result['final_srsa_euclid'] > GATE_THRESHOLD
     tqdm.write(
-        f'\nGate: sRSA_euclid = {result["final_srsa_euclid"]:.3f}  '
+        f'\nGate seed_00: sRSA_euclid = {seed0_result["final_srsa_euclid"]:.3f}  '
+        f'(mean across {len(results)} seeds = {mean_srsa:.3f})  '
         f'→  {"✓ PASS" if passed else "✗ FAIL — sweep halted"}'
     )
     return passed

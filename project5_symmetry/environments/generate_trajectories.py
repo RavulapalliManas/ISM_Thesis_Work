@@ -16,7 +16,11 @@ import numpy as np
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
-from project5_symmetry.environments.arena import make_symmetry_env, PAPER_ACTION_PROBS
+from project5_symmetry.environments.arena import (
+    SymmetryArena,
+    PixelObsWrapper,
+    PAPER_ACTION_PROBS,
+)
 
 FORWARD_IDX = 2   # MiniGrid action index for MoveForward
 
@@ -106,7 +110,7 @@ def _worker(args) -> int:
     """Generate a batch of trajectories, save to disk. Returns count written."""
     indices, arena_kwargs, T, out_dir = args
     rng = np.random.default_rng(seed=indices[0])
-    env = make_symmetry_env(**arena_kwargs)
+    env = PixelObsWrapper(SymmetryArena(**arena_kwargs), tile_size=1)
     for i in indices:
         traj = collect_trajectory(env, T, rng=rng)
         np.savez_compressed(
@@ -152,6 +156,8 @@ def generate_dataset(
         'U':     inner.U,
         'F':     inner.agent_view_size,
         'seed':  inner._landmark_seed,
+        'use_landmarks': inner.use_landmarks,
+        'symmetry_condition': getattr(inner, 'symmetry_condition', None),
     }
 
     n_workers = min(n_workers, len(pending), cpu_count())
@@ -161,6 +167,10 @@ def generate_dataset(
     # tqdm tracks chunks completing; total shows individual files
     with tqdm(total=n_traj, initial=already_done,
               desc=desc, unit='traj', dynamic_ncols=True, leave=False) as pbar:
-        with Pool(n_workers) as pool:
-            for n_written in pool.imap_unordered(_worker, job_args):
-                pbar.update(n_written)
+        if n_workers <= 1:
+            for job in job_args:
+                pbar.update(_worker(job))
+        else:
+            with Pool(n_workers) as pool:
+                for n_written in pool.imap_unordered(_worker, job_args):
+                    pbar.update(n_written)

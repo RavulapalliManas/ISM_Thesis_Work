@@ -1,0 +1,17 @@
+{
+  "steps": [
+    10
+  ],
+  "srsa_euclid": [
+    0.22831512918383878
+  ],
+  "srsa_city": [
+    0.23095456366432085
+  ],
+  "loss": [
+    0.05947010964155197
+  ],
+  "ckpt_paths": [
+    "project5_symmetry/results/symmetry_sweep_validate/s1/seed_00/ckpt_final.pt"
+  ]
+}

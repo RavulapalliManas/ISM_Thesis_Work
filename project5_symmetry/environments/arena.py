@@ -44,6 +44,7 @@ _LANDMARK_RGB_TO_COLOR: dict[tuple, str] = {
     (0.0,  0.0,  0.45): 'blue',
     (0.45, 0.0,  0.0):  'red',
     (0.45, 0.45, 0.0):  'yellow',
+    (0.0,  0.35, 0.0):  'green',
 }
 
 # Action indices (gym_minigrid)
@@ -53,6 +54,80 @@ STOP = 3
 
 # Paper action probabilities (Methods, p.14)
 PAPER_ACTION_PROBS = [0.15, 0.15, 0.60, 0.10, 0.0, 0.0, 0.0]
+
+BLUE   = [0.0,  0.0,  0.45]
+RED    = [0.45, 0.0,  0.0 ]
+YELLOW = [0.45, 0.45, 0.0 ]
+GREEN  = [0.0,  0.35, 0.0 ]
+
+
+def _rotate90cw(tiles, N=18):
+    """(r,c) -> (c, N+1-r)"""
+    return {(c, N + 1 - r): color for (r, c), color in tiles.items()}
+
+
+def _rotate180(tiles, N=18):
+    """(r,c) -> (N+1-r, N+1-c)"""
+    return {(N + 1 - r, N + 1 - c): color for (r, c), color in tiles.items()}
+
+
+def _rotate90ccw(tiles, N=18):
+    """(r,c) -> (N+1-c, r)"""
+    return {(N + 1 - c, r): color for (r, c), color in tiles.items()}
+
+
+def _staircase_q1(color):
+    """6-step staircase in Q1 (rows 1-9, cols 1-9).
+    Step i: col (2+i), rows 3..(3+i). Skips rows 1-2 (boundary+paper exclusion)."""
+    tiles = {}
+    for i in range(6):
+        c = 2 + i
+        for r in range(3, 3 + i + 1):
+            tiles[(r, c)] = list(color)
+    return tiles
+
+
+def _cross_q2(color):
+    """Plus-cross in Q2 (rows 1-9, cols 10-18).
+    Horizontal: rows 4-5, cols 12-17. Vertical: rows 2-8, cols 14-15."""
+    tiles = {}
+    for r in range(4, 6):
+        for c in range(12, 18):
+            tiles[(r, c)] = list(color)
+    for r in range(2, 9):
+        for c in range(14, 16):
+            tiles[(r, c)] = list(color)
+    return tiles
+
+
+def _castle_q4(color):
+    """5x5 body + L-corner protrusions in Q4 (rows 10-18, cols 1-9)."""
+    tiles = {}
+    for r in range(12, 17):
+        for c in range(3, 8):
+            tiles[(r, c)] = list(color)
+    for pos in [
+        (11, 2), (11, 3), (12, 2),
+        (11, 7), (11, 8), (12, 8),
+        (16, 2), (17, 2), (17, 3),
+        (16, 8), (17, 7), (17, 8),
+    ]:
+        tiles[pos] = list(color)
+    return tiles
+
+
+def _chevron_q3(color):
+    """Chevron (inverted-V + crossbar) in Q3 (rows 10-18, cols 10-18).
+    Peak at (12,14). Left arm goes down-left, right arm down-right.
+    Crossbar at row 16, cols 11-17."""
+    tiles = {}
+    for dr, dc in [(0, 0), (1, -1), (2, -2), (3, -3), (4, -3)]:
+        tiles[(12 + dr, 14 + dc)] = list(color)
+    for dr, dc in [(1, 1), (2, 2), (3, 3), (4, 3)]:
+        tiles[(12 + dr, 14 + dc)] = list(color)
+    for c in range(11, 18):
+        tiles[(16, c)] = list(color)
+    return tiles
 
 
 class SymmetryArena(MiniGridEnv):
@@ -72,12 +147,13 @@ class SymmetryArena(MiniGridEnv):
     """
 
     def __init__(self, shape: str, size: int, U: int, F: int = 7, seed: int = 0,
-                 use_landmarks: bool = True):
+                 use_landmarks: bool = True, symmetry_condition: str | None = None):
         self.arena_shape    = shape
         self.arena_size     = size
         self.U              = U
         self._landmark_seed = seed
         self.use_landmarks  = use_landmarks
+        self.symmetry_condition = symmetry_condition
 
         # Build the legacy random landmark map (kept for compatibility)
         self._landmark_map = self._build_landmark_map()
@@ -92,6 +168,12 @@ class SymmetryArena(MiniGridEnv):
                 raise ValueError(
                     f"Landmark tile(s) fall on impassable cells in "
                     f"{shape} {size}×{size}: {bad}"
+                )
+        if self.symmetry_condition is not None:
+            allowed_shapes = {'square'}
+            if self.arena_shape not in allowed_shapes:
+                raise ValueError(
+                    f"symmetry_condition requires shape='square', got {self.arena_shape!r}"
                 )
 
         mission_space = MissionSpace(mission_func=lambda: "explore")
@@ -124,6 +206,21 @@ class SymmetryArena(MiniGridEnv):
         return lmap
 
     def _get_landmark_tiles(self) -> dict:
+        if self.symmetry_condition is None:
+            return self._get_landmark_tiles_original()
+        dispatch = {
+            's4': self._get_landmark_tiles_s4,
+            's2': self._get_landmark_tiles_s2,
+            's1': self._get_landmark_tiles_s1,
+        }
+        if self.symmetry_condition not in dispatch:
+            raise ValueError(f"Unknown symmetry_condition: {self.symmetry_condition!r}")
+        tiles = dispatch[self.symmetry_condition]()
+        s = self.arena_size
+        return {(r, c): v for (r, c), v in tiles.items()
+                if 1 <= r <= s and 1 <= c <= s}
+
+    def _get_landmark_tiles_original(self) -> dict:
         """
         Return the fixed landmark tile positions matching Figure 1A of
         Levenstein et al. (2024).
@@ -198,6 +295,36 @@ class SymmetryArena(MiniGridEnv):
         tiles = {(r, c): v for (r, c), v in tiles.items()
                  if 1 <= r <= s and 1 <= c <= s}
 
+        return tiles
+
+    def _get_landmark_tiles_s4(self):
+        """C4-symmetric: staircase rotated 90°x4. Single color BLUE."""
+        q1 = _staircase_q1(BLUE)
+        tiles = {}
+        tiles.update(q1)
+        tiles.update(_rotate90cw(q1))
+        tiles.update(_rotate180(q1))
+        tiles.update(_rotate90ccw(q1))
+        return tiles
+
+    def _get_landmark_tiles_s2(self):
+        """C2-symmetric: staircase pair (BLUE) in Q1+Q3, cross pair (RED) in Q2+Q4."""
+        q1 = _staircase_q1(BLUE)
+        q2 = _cross_q2(RED)
+        tiles = {}
+        tiles.update(q1)
+        tiles.update(_rotate180(q1))
+        tiles.update(q2)
+        tiles.update(_rotate180(q2))
+        return tiles
+
+    def _get_landmark_tiles_s1(self):
+        """No symmetry: four distinct landmarks, one per quadrant."""
+        tiles = {}
+        tiles.update(_staircase_q1(BLUE))
+        tiles.update(_cross_q2(RED))
+        tiles.update(_chevron_q3(GREEN))
+        tiles.update(_castle_q4(YELLOW))
         return tiles
 
     def _is_passable(self, row: int, col: int) -> bool:
