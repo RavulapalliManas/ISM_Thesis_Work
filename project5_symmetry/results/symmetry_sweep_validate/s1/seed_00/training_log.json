@@ -11,6 +11,19 @@
   "loss": [
     0.05947010964155197
   ],
+  "manifold_id": [
+    8.773746454267004
+  ],
+  "pca_variance_2d": [
+    0.596492350101471
+  ],
+  "mds_stress": [
+    0.22038389249712942
+  ],
+  "mean_field_coherence": [
+    69.59244020533184
+  ],
+  "observation_discriminability": 0.33600394439152487,
   "ckpt_paths": [
     "project5_symmetry/results/symmetry_sweep_validate/s1/seed_00/ckpt_final.pt"
   ]
