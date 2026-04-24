@@ -29,17 +29,113 @@ from scipy.optimize import curve_fit
 warnings.filterwarnings('ignore')
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
-RESULTS_ROOT = "results/symmetry_sweep"
-FIGURES_DIR  = "results/figures"
-REPORT_PATH  = "results/symmetry_report.pdf"
-SUMMARY_PATH = "results/analysis_summary.json"
+SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+RESULTS_ROOT = os.path.join(SCRIPT_DIR, "results", "symmetry_sweep")
+FIGURES_DIR  = os.path.join(SCRIPT_DIR, "results", "figures")
+REPORT_PATH  = os.path.join(SCRIPT_DIR, "results", "symmetry_report.pdf")
+SUMMARY_PATH = os.path.join(SCRIPT_DIR, "results", "analysis_summary.json")
 CONDITIONS   = ['s4', 's2', 's1']
 COLORS       = {'s4': '#2166ac', 's2': '#f4a582', 's1': '#d6604d'}
 LABELS       = {'s4': 'S4 (C4-sym)', 's2': 'S2 (C2-sym)', 's1': 'S1 (Asymm)'}
 COND_ORDER   = ['s4', 's2', 's1']
 
 os.makedirs(FIGURES_DIR, exist_ok=True)
-os.makedirs("results", exist_ok=True)
+os.makedirs(os.path.join(SCRIPT_DIR, "results"), exist_ok=True)
+
+
+def safe_float(x):
+    """Convert numeric-like input to finite float; return None otherwise."""
+    try:
+        fx = float(x)
+    except Exception:
+        return None
+    if np.isnan(fx) or np.isinf(fx):
+        return None
+    return fx
+
+
+def recursive_numeric_candidates(obj, prefix=""):
+    """Yield (path, float_value) candidates from nested dict/list structures."""
+    out = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            path = f"{prefix}.{k}" if prefix else str(k)
+            out.extend(recursive_numeric_candidates(v, path))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            path = f"{prefix}[{i}]"
+            out.extend(recursive_numeric_candidates(v, path))
+    else:
+        fv = safe_float(obj)
+        if fv is not None:
+            out.append((prefix, fv))
+    return out
+
+
+def extract_eval_manifold_estimate(evaluation, pkl_raw):
+    """
+    Extract evaluation-time manifold estimate (e.g., H2) if present.
+    Returns (value, source_path) or (None, None).
+    """
+    preferred_paths = []
+    if isinstance(evaluation, dict):
+        preferred_paths.extend([
+            ("evaluation.rgc.h2", evaluation.get('rgc', {}).get('h2') if isinstance(evaluation.get('rgc'), dict) else None),
+            ("evaluation.rgc.manifold_id", evaluation.get('rgc', {}).get('manifold_id') if isinstance(evaluation.get('rgc'), dict) else None),
+            ("evaluation.h2", evaluation.get('h2')),
+            ("evaluation.manifold_id", evaluation.get('manifold_id')),
+            ("evaluation.intrinsic_dim", evaluation.get('intrinsic_dim')),
+            ("evaluation.intrinsic_dimension", evaluation.get('intrinsic_dimension')),
+        ])
+    if isinstance(pkl_raw, dict):
+        preferred_paths.extend([
+            ("pkl.rgc.h2", pkl_raw.get('rgc', {}).get('h2') if isinstance(pkl_raw.get('rgc'), dict) else None),
+            ("pkl.rgc.manifold_id", pkl_raw.get('rgc', {}).get('manifold_id') if isinstance(pkl_raw.get('rgc'), dict) else None),
+            ("pkl.h2", pkl_raw.get('h2')),
+            ("pkl.manifold_id", pkl_raw.get('manifold_id')),
+            ("pkl.intrinsic_dim", pkl_raw.get('intrinsic_dim')),
+            ("pkl.intrinsic_dimension", pkl_raw.get('intrinsic_dimension')),
+        ])
+
+    for path, value in preferred_paths:
+        fv = safe_float(value)
+        if fv is not None:
+            return fv, path
+
+    manifold_tokens = ['manifold', 'intrinsic', 'h2', 'dimensionality', 'id_estimate']
+    exclude_tokens = ['pca', 'stress', 'variance', 'n_valid', 'count', 'seed', 'position', 'shape']
+
+    pool = []
+    if isinstance(evaluation, dict):
+        pool.extend([(f"evaluation.{p}" if p else "evaluation", v)
+                     for p, v in recursive_numeric_candidates(evaluation)])
+    if isinstance(pkl_raw, dict):
+        pool.extend([(f"pkl.{p}" if p else "pkl", v)
+                     for p, v in recursive_numeric_candidates(pkl_raw)])
+
+    ranked = []
+    for path, value in pool:
+        pl = path.lower()
+        if not any(tok in pl for tok in manifold_tokens):
+            continue
+        if any(tok in pl for tok in exclude_tokens):
+            continue
+        if 'h2' in pl:
+            score = 0
+        elif 'manifold' in pl:
+            score = 1
+        elif 'intrinsic' in pl:
+            score = 2
+        else:
+            score = 3
+        ranked.append((score, len(path), path, value))
+
+    if ranked:
+        ranked.sort(key=lambda x: (x[0], x[1]))
+        _, _, path, value = ranked[0]
+        return float(value), path
+
+    return None, None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -124,11 +220,11 @@ def load_pkl(path):
                                 print(f"    rsa fallback at key '{key}': shape {rsa.shape}")
                                 break
 
-        return H, rsa, positions
+        return H, rsa, positions, d
 
     except Exception as e:
         print(f"    ERROR loading pkl: {e}")
-        return None, None, None
+        return None, None, None, None
 
 
 data = {}
@@ -152,6 +248,7 @@ for cond in CONDITIONS:
             'H':            None,
             'rsa_matrix':   None,
             'positions':    None,
+            'pkl_raw':      None,
         }
 
         # training_log.json — required
@@ -174,10 +271,11 @@ for cond in CONDITIONS:
         # evaluation.pkl — optional
         pkl_path = os.path.join(seed_dir, 'evaluation.pkl')
         if os.path.exists(pkl_path):
-            H, rsa, positions = load_pkl(pkl_path)
+            H, rsa, positions, pkl_raw = load_pkl(pkl_path)
             entry['H']          = H
             entry['rsa_matrix'] = rsa
             entry['positions']  = positions
+            entry['pkl_raw']    = pkl_raw
 
         data[cond][seed_idx] = entry
 
@@ -238,6 +336,7 @@ for cond in CONDITIONS:
             'final_srsa_euclid':  float(s_eu[-1]),
             'final_srsa_city':    float(s_ci[-1]),
             'final_dtg':          float(s_eu[-1] - s_ci[-1]),
+            'final_manifold_id_train': float(m_id[-1]),
             'final_manifold_id':  float(m_id[-1]),
             'final_pca_var_2d':   float(pca_2d[-1]),
             'final_mds_stress':   float(stress[-1]),
@@ -262,6 +361,10 @@ for cond in CONDITIONS:
 
         # From evaluation.json
         ev = entry['evaluation']
+        ev_mid, ev_mid_source = extract_eval_manifold_estimate(ev, entry.get('pkl_raw'))
+        sc['final_manifold_id_eval'] = ev_mid if ev_mid is not None else np.nan
+        sc['manifold_eval_source'] = ev_mid_source
+
         if ev is not None:
             sc['pf_mean']      = float(ev.get('place_field_coherence', {}).get('mean_score', np.nan))
             sc['pf_std']       = float(ev.get('place_field_coherence', {}).get('std_score', np.nan))
@@ -273,8 +376,15 @@ for cond in CONDITIONS:
             sc['rgc_stress'] = sc['rgc_pca'] = np.nan
 
         scalars[cond][sidx] = sc
-        print(f"  {cond}/seed_{sidx}: sRSA={sc['final_srsa_euclid']:.4f} "
-              f"DTG={sc['final_dtg']:+.4f} manifold={sc['final_manifold_id']:.2f}")
+        eval_mid_text = (f"{sc['final_manifold_id_eval']:.2f}"
+                         if not np.isnan(sc['final_manifold_id_eval']) else "N/A")
+        src_text = sc['manifold_eval_source'] if sc['manifold_eval_source'] else "N/A"
+        print(
+            f"  {cond}/seed_{sidx}: sRSA={sc['final_srsa_euclid']:.4f} "
+            f"DTG={sc['final_dtg']:+.4f} "
+            f"manifold_train={sc['final_manifold_id_train']:.2f} "
+            f"manifold_eval={eval_mid_text} source={src_text}"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -446,14 +556,31 @@ cca_summary = {}
 
 try:
     from sklearn.cross_decomposition import CCA
+    from sklearn.decomposition import PCA
     HAS_SKLEARN = True
 except ImportError:
     print("  sklearn not available, skipping CCA")
     HAS_SKLEARN = False
 
+
+def canonicalize_hidden_by_position(entry):
+    """
+    Return hidden matrix with deterministic row ordering.
+    If positions are available, sort by (x, y) so cross-seed rows align.
+    """
+    H = entry.get('H')
+    if H is None:
+        return None
+    Hc = np.asarray(H, dtype=np.float64)
+    pos = entry.get('positions')
+    if isinstance(pos, np.ndarray) and pos.ndim == 2 and pos.shape[0] == Hc.shape[0] and pos.shape[1] >= 2:
+        order = np.lexsort((pos[:, 1], pos[:, 0]))
+        return Hc[order]
+    return Hc
+
 if HAS_SKLEARN:
     for cond in CONDITIONS:
-        Hs = [(sidx, data[cond][sidx]['H'])
+        Hs = [(sidx, canonicalize_hidden_by_position(data[cond][sidx]))
               for sidx in data[cond]
               if data[cond][sidx]['H'] is not None]
 
@@ -466,26 +593,60 @@ if HAS_SKLEARN:
             for j in range(i+1, len(Hs)):
                 sa, Ha = Hs[i]
                 sb, Hb = Hs[j]
-                Ha = Ha.astype(np.float64)
-                Hb = Hb.astype(np.float64)
+
+                # Ensure common sample size across seeds.
+                n_pos = min(Ha.shape[0], Hb.shape[0])
+                if n_pos < 3:
+                    print(f"  {cond} ({sa},{sb}): too few positions ({n_pos}), skipping")
+                    continue
+                Ha = Ha[:n_pos].astype(np.float64)
+                Hb = Hb[:n_pos].astype(np.float64)
+
+                # Standardize before PCA.
                 Ha = (Ha - Ha.mean(0)) / (Ha.std(0) + 1e-8)
                 Hb = (Hb - Hb.mean(0)) / (Hb.std(0) + 1e-8)
 
-                n_comp = min(10, Ha.shape[0]-2, Ha.shape[1], Hb.shape[1])
+                # Required preprocessing: reduce H to min(50, N_pos-1) via PCA.
+                n_pca = min(50, n_pos - 1, Ha.shape[1], Hb.shape[1])
+                if n_pca < 2:
+                    print(f"  {cond} ({sa},{sb}): n_pca={n_pca}, skipping")
+                    continue
+
                 try:
+                    pca_a = PCA(n_components=n_pca, svd_solver='full')
+                    pca_b = PCA(n_components=n_pca, svd_solver='full')
+                    Ha_pca = pca_a.fit_transform(Ha)
+                    Hb_pca = pca_b.fit_transform(Hb)
+
+                    n_comp = min(10, n_pca)
                     cca = CCA(n_components=n_comp, max_iter=2000)
-                    cca.fit(Ha, Hb)
-                    Ua, Vb = cca.transform(Ha, Hb)
-                    corrs = [float(np.corrcoef(Ua[:,k], Vb[:,k])[0,1])
-                             for k in range(n_comp)]
+                    cca.fit(Ha_pca, Hb_pca)
+                    Ua, Vb = cca.transform(Ha_pca, Hb_pca)
+
+                    corrs = []
+                    for k in range(n_comp):
+                        if np.std(Ua[:, k]) < 1e-12 or np.std(Vb[:, k]) < 1e-12:
+                            corrs.append(np.nan)
+                        else:
+                            corrs.append(float(np.corrcoef(Ua[:, k], Vb[:, k])[0, 1]))
+                    corrs = np.array(corrs, dtype=float)
+                    corrs = corrs[np.isfinite(corrs)]
+                    if len(corrs) == 0:
+                        print(f"  {cond} ({sa},{sb}): all canonical correlations invalid, skipping")
+                        continue
+
                     cca_pairs[cond].append({
                         'seeds':           (sa, sb),
-                        'canonical_corrs': corrs,
-                        'mean_top3':       float(np.mean(corrs[:3])),
+                        'canonical_corrs': corrs.tolist(),
+                        'mean_top3':       float(np.mean(corrs[:min(3, len(corrs))])),
                         'mean_all':        float(np.mean(corrs)),
-                        'n_comp':          n_comp,
+                        'n_comp':          int(len(corrs)),
+                        'n_pca':           int(n_pca),
                     })
-                    print(f"  {cond} ({sa},{sb}): CCA top3={np.mean(corrs[:3]):.4f}")
+                    print(
+                        f"  {cond} ({sa},{sb}): CCA(PCA) top3={np.mean(corrs[:min(3, len(corrs))]):.4f} "
+                        f"(n_pca={n_pca}, n_comp={len(corrs)})"
+                    )
                 except Exception as e:
                     print(f"  {cond} ({sa},{sb}): CCA failed — {e}")
 
@@ -511,9 +672,10 @@ def get_vals(cond, key):
     """Get list of scalar values for a metric across seeds."""
     vals = []
     for sidx, sc in scalars[cond].items():
-        v = sc.get(key, np.nan)
-        if v is not None and not (isinstance(v, float) and np.isnan(v)):
-            vals.append(float(v))
+        v = sc.get(key, None)
+        fv = safe_float(v)
+        if fv is not None:
+            vals.append(fv)
     return vals
 
 
@@ -599,10 +761,10 @@ fig2.suptitle("Final Metric Comparison by Arena Condition",
 metrics2 = [
     ('final_srsa_euclid', 'sRSA (Euclid)', 'sRSA Euclid', 0.40),
     ('final_dtg',         'DTG (E − C)',   'ΔTG',         0.0),
-    ('final_manifold_id', 'Manifold ID',   'Manifold Dimensionality', None),
+    ('final_manifold_id_train', 'Manifold ID (train)', 'Manifold (training_log estimator)', None),
+    ('final_manifold_id_eval',  'Manifold ID (eval)',  'Manifold (evaluation estimator)', None),
     ('final_pca_var_2d',  'PCA Var 2D',    'PCA Variance (2D)', None),
     ('final_mds_stress',  'MDS Stress',    'MDS Stress',  None),
-    ('pf_mean',           'PF Coherence',  'Place Field Coherence (mean)', None),
 ]
 
 for ax, (key, ylabel, title, hline) in zip(axes2.ravel(), metrics2):
@@ -731,7 +893,7 @@ print(f"  Saved fig5")
 
 # ── Figure 6: CCA Canonical Correlations ────────────────────────────────
 fig6, ax6 = plt.subplots(figsize=(10, 5))
-fig6.suptitle("CCA Canonical Correlations Between Seed Pairs",
+fig6.suptitle("CCA Canonical Correlations Between Seed Pairs (PCA preprocessed)",
               fontsize=12, fontweight='bold')
 ax6.axhline(0, ls='--', color='gray', lw=1, alpha=0.5)
 
@@ -741,11 +903,13 @@ if has_cca:
         pairs = cca_pairs[cond]
         if not pairs:
             continue
-        n_comp = len(pairs[0]['canonical_corrs'])
-        comp_matrix = np.array([p['canonical_corrs'] for p in pairs])
+        min_comp = min(len(p['canonical_corrs']) for p in pairs)
+        if min_comp < 1:
+            continue
+        comp_matrix = np.array([p['canonical_corrs'][:min_comp] for p in pairs], dtype=float)
         mean_corr = comp_matrix.mean(0)
         std_corr  = comp_matrix.std(0)
-        xs = np.arange(1, n_comp + 1)
+        xs = np.arange(1, min_comp + 1)
         ax6.plot(xs, mean_corr, color=COLORS[cond], lw=2.5,
                  marker='o', ms=5, label=LABELS[cond])
         ax6.fill_between(xs, mean_corr - std_corr, mean_corr + std_corr,
@@ -821,8 +985,8 @@ for cond in COND_ORDER:
                  label=LABELS[cond])
 
 ax8.set_xlabel('Training Steps', fontsize=10)
-ax8.set_ylabel('Intrinsic Manifold Dimensionality', fontsize=10)
-ax8.set_title('Manifold Dimensionality Over Training',
+ax8.set_ylabel('Intrinsic Manifold Dimensionality (training_log)', fontsize=10)
+ax8.set_title('Manifold Dimensionality Over Training (online estimator)',
               fontsize=12, fontweight='bold')
 ax8.legend(fontsize=9)
 ax8.spines['top'].set_visible(False)
@@ -887,7 +1051,38 @@ def text_page(pdf, title, body_lines, fontsize_body=10):
     plt.close(fig)
 
 
+def fmt_cond_stat(cond, key, decimals=2):
+    vals = get_vals(cond, key)
+    if not vals:
+        return "N/A"
+    return f"{np.mean(vals):.{decimals}f} ± {np.std(vals):.{decimals}f}"
+
+
+def manifold_source_summary(cond):
+    srcs = sorted({
+        sc.get('manifold_eval_source')
+        for sc in scalars[cond].values()
+        if sc.get('manifold_eval_source')
+    })
+    if not srcs:
+        return "N/A"
+    return "; ".join(srcs)
+
+
 with PdfPages(REPORT_PATH) as pdf:
+
+    train_line = (
+        f"Train-log manifold_id: "
+        f"S4={fmt_cond_stat('s4', 'final_manifold_id_train', 2)}, "
+        f"S2={fmt_cond_stat('s2', 'final_manifold_id_train', 2)}, "
+        f"S1={fmt_cond_stat('s1', 'final_manifold_id_train', 2)}"
+    )
+    eval_line = (
+        f"Evaluation manifold estimate: "
+        f"S4={fmt_cond_stat('s4', 'final_manifold_id_eval', 2)}, "
+        f"S2={fmt_cond_stat('s2', 'final_manifold_id_eval', 2)}, "
+        f"S1={fmt_cond_stat('s1', 'final_manifold_id_eval', 2)}"
+    )
 
     # ── Page 1: Title ──────────────────────────────────────────────────
     text_page(pdf,
@@ -903,19 +1098,25 @@ with PdfPages(REPORT_PATH) as pdf:
             "",
             "  S4 — C4 rotational symmetry (|G| = 4)",
             "       Staircase motif ×4 rotated 90° in each quadrant.",
-            "       Single color (BLUE). H2 mean = 5.54.",
+            "       Single color (BLUE).",
             "",
             "  S2 — C2 rotational symmetry (|G| = 2)",
             "       Staircase (BLUE) in Q1/Q3. Cross (RED) in Q2/Q4.",
-            "       H2 mean = 3.21.",
+            "",
             "",
             "  S1 — No symmetry (|G| = 1)",
             "       Four distinct landmarks: staircase, cross,",
-            "       chevron, castle. H2 mean = 2.15.",
+            "       chevron, castle.",
             "",
             "Training: 80,000 steps | T=200 | k=5 | F=7",
             "Arena: square 18×18 | Hidden dim: 500",
             "Seeds: S4=5, S2=3, S1=3",
+            "",
+            "Manifold estimators (reported separately):",
+            f"  {train_line}",
+            f"  {eval_line}",
+            f"  Eval source paths: S4={manifold_source_summary('s4')} | "
+            f"S2={manifold_source_summary('s2')} | S1={manifold_source_summary('s1')}",
             "",
             "Key design validation:",
             "  ODI = 0.336 ± 0 across all three conditions.",
@@ -963,10 +1164,14 @@ with PdfPages(REPORT_PATH) as pdf:
          safe_fmt('s4','final_dtg'),
          safe_fmt('s2','final_dtg'),
          safe_fmt('s1','final_dtg')],
-        ["Manifold ID",
-         safe_fmt('s4','final_manifold_id',2),
-         safe_fmt('s2','final_manifold_id',2),
-         safe_fmt('s1','final_manifold_id',2)],
+        ["Manifold ID (train log)",
+         safe_fmt('s4','final_manifold_id_train',2),
+         safe_fmt('s2','final_manifold_id_train',2),
+         safe_fmt('s1','final_manifold_id_train',2)],
+        ["Manifold ID (evaluation)",
+         safe_fmt('s4','final_manifold_id_eval',2),
+         safe_fmt('s2','final_manifold_id_eval',2),
+         safe_fmt('s1','final_manifold_id_eval',2)],
         ["PCA Var 2D",
          safe_fmt('s4','final_pca_var_2d'),
          safe_fmt('s2','final_pca_var_2d'),
@@ -1019,8 +1224,8 @@ with PdfPages(REPORT_PATH) as pdf:
 
     ax_tab.text(0.5, 0.02,
         "Note: sRSA is invariant to global rotation — cannot detect orientational degeneracy.\n"
-        "CCA and RSA alignment ρ are the primary degeneracy tests.\n"
-        "SI and EVS are approximations from position-averaged hidden states (not trial-level data).",
+        "CCA uses PCA preprocessing (n_pca = min(50, N_pos-1)) before canonical correlation.\n"
+        "Manifold ID (train log) and manifold ID (evaluation) are different estimators and should be interpreted separately.",
         ha='center', va='bottom', fontsize=8, style='italic',
         transform=ax_tab.transAxes)
 
@@ -1040,7 +1245,8 @@ with PdfPages(REPORT_PATH) as pdf:
          "Figure 2 — Final Metric Comparison",
          "Key finding: DTG is positive in S4 (Euclidean geometry encoded) and "
          "negative in S1/S2 (city-block geometry encoded) — a sign reversal "
-         "consistent across all seeds. Manifold ID is ~2.4 in S4 and ~5-6 in S1/S2."),
+         "consistent across all seeds. Both manifold estimators are shown: "
+         "training_log manifold_id (online) and evaluation-time manifold estimate."),
 
         ('fig3', saved_figs.get('fig3'),
          "Figure 3 — Spatial Information (SI) Distribution",
@@ -1062,9 +1268,9 @@ with PdfPages(REPORT_PATH) as pdf:
 
         ('fig6', saved_figs.get('fig6'),
          "Figure 6 — CCA Canonical Correlations",
-         "Canonical correlations between seed pairs per condition. Tests whether "
-         "the representational subspace is consistent across seeds. Degenerate S4 "
-         "should show lower early canonical correlations than asymmetric S1."),
+         "Canonical correlations between seed pairs per condition after PCA "
+         "preprocessing (n_pca = min(50, N_pos-1)). This avoids unstable high-dimensional "
+         "CCA fits and yields more interpretable cross-seed alignment values."),
 
         ('fig7', saved_figs.get('fig7'),
          "Figure 7 — DTG Over Training",
@@ -1075,9 +1281,9 @@ with PdfPages(REPORT_PATH) as pdf:
 
         ('fig8', saved_figs.get('fig8'),
          "Figure 8 — Manifold Dimensionality Over Training",
-         "S4 converges to ~2.4D early, consistent with a folded local-quadrant map. "
-         "S1/S2 converge to ~5-6D, encoding global arena structure including "
-         "quadrant identity alongside spatial position."),
+         "This panel uses the online training_log manifold_id estimator. "
+         "If evaluation-time manifold estimates differ, report both values and "
+         "interpret them as method-dependent, not directly interchangeable."),
 
         ('fig9', saved_figs.get('fig9'),
          "Figure 9 — Fraction of Tuned Cells",
@@ -1116,8 +1322,13 @@ with PdfPages(REPORT_PATH) as pdf:
 
     s4_dtg = np.mean(get_vals('s4', 'final_dtg')) if get_vals('s4','final_dtg') else float('nan')
     s1_dtg = np.mean(get_vals('s1', 'final_dtg')) if get_vals('s1','final_dtg') else float('nan')
-    s4_mid = np.mean(get_vals('s4', 'final_manifold_id')) if get_vals('s4','final_manifold_id') else float('nan')
-    s1_mid = np.mean(get_vals('s1', 'final_manifold_id')) if get_vals('s1','final_manifold_id') else float('nan')
+    s4_mid_train = np.mean(get_vals('s4', 'final_manifold_id_train')) if get_vals('s4','final_manifold_id_train') else float('nan')
+    s1_mid_train = np.mean(get_vals('s1', 'final_manifold_id_train')) if get_vals('s1','final_manifold_id_train') else float('nan')
+    s4_mid_eval = np.mean(get_vals('s4', 'final_manifold_id_eval')) if get_vals('s4','final_manifold_id_eval') else float('nan')
+    s1_mid_eval = np.mean(get_vals('s1', 'final_manifold_id_eval')) if get_vals('s1','final_manifold_id_eval') else float('nan')
+
+    eval_src_s4 = manifold_source_summary('s4')
+    eval_src_s1 = manifold_source_summary('s1')
 
     text_page(pdf,
         "Key Findings and Interpretation",
@@ -1136,9 +1347,14 @@ with PdfPages(REPORT_PATH) as pdf:
             "   In S1, rich landmarks allow encoding the true navigational",
             "   structure → city-block geometry (successor representation).",
             "",
-            "3. MANIFOLD DIMENSIONALITY DOUBLES FROM S4 TO S1/S2",
-            f"   S4: ~{s4_mid:.1f}D — folded 2D map of one quadrant tiled ×4.",
-            f"   S1: ~{s1_mid:.1f}D — global structure + quadrant identity encoded.",
+            "3. MANIFOLD ESTIMATOR DISCREPANCY (REPORT BOTH)",
+            f"   Training-log manifold_id: S4~{s4_mid_train:.2f}, S1~{s1_mid_train:.2f}",
+            f"   Evaluation manifold estimate: S4~{s4_mid_eval:.2f}, S1~{s1_mid_eval:.2f}",
+            f"   Evaluation source paths: S4={eval_src_s4}; S1={eval_src_s1}",
+            "   These are different estimators of intrinsic dimensionality.",
+            "   Use training-log estimator for trajectory over optimization.",
+            "   Use evaluation estimator for final cross-condition level comparisons",
+            "   because it is measured post-training on a fixed evaluation protocol.",
             "",
             "4. CROSS-SEED ALIGNMENT (degeneracy test)",
             f"   RSA alignment: {rsa_line}",
@@ -1183,6 +1399,11 @@ summary = {}
 for cond in CONDITIONS:
     ra = rsa_alignment.get(cond)
     cs = cca_summary.get(cond)
+    manifold_sources = sorted({
+        sc.get('manifold_eval_source')
+        for sc in scalars[cond].values()
+        if sc.get('manifold_eval_source')
+    })
     summary[cond] = {
         'n_seeds':                  len(scalars[cond]),
         'srsa_euclid_mean':         safe_mean(cond, 'final_srsa_euclid'),
@@ -1191,8 +1412,13 @@ for cond in CONDITIONS:
         'srsa_city_std':            safe_std( cond, 'final_srsa_city'),
         'dtg_mean':                 safe_mean(cond, 'final_dtg'),
         'dtg_std':                  safe_std( cond, 'final_dtg'),
-        'manifold_id_mean':         safe_mean(cond, 'final_manifold_id'),
-        'manifold_id_std':          safe_std( cond, 'final_manifold_id'),
+        'manifold_id_train_mean':   safe_mean(cond, 'final_manifold_id_train'),
+        'manifold_id_train_std':    safe_std( cond, 'final_manifold_id_train'),
+        'manifold_id_eval_mean':    safe_mean(cond, 'final_manifold_id_eval'),
+        'manifold_id_eval_std':     safe_std( cond, 'final_manifold_id_eval'),
+        'manifold_id_mean':         safe_mean(cond, 'final_manifold_id_train'),
+        'manifold_id_std':          safe_std( cond, 'final_manifold_id_train'),
+        'manifold_eval_sources':    manifold_sources,
         'pca_var_2d_mean':          safe_mean(cond, 'final_pca_var_2d'),
         'pca_var_2d_std':           safe_std( cond, 'final_pca_var_2d'),
         'mds_stress_mean':          safe_mean(cond, 'final_mds_stress'),
@@ -1208,6 +1434,10 @@ for cond in CONDITIONS:
         'rsa_alignment_std_rho':    ra['std_rho']  if ra else None,
         'cca_mean_top3':            cs['mean_top3'] if cs else None,
         'cca_std_top3':             cs['std_top3']  if cs else None,
+        'method_note': (
+            "manifold_id_train is the online training-log estimator; "
+            "manifold_id_eval is extracted from evaluation artifacts (if available)."
+        ),
     }
 
 with open(SUMMARY_PATH, 'w') as f:
