@@ -1,0 +1,13 @@
+\begin{thebibliography}{1}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Levenstein et~al.(2024)Levenstein, Efremov, Eyono, Peyrache, and Richards]{levenstein2024}
+Daniel Levenstein, Ivan Efremov, J{\'e}r{\^o}me Eyono, Adrien Peyrache, and Blake~A. Richards.
+\newblock Sequential predictive learning is a unifying theory for hippocampal representation and replay.
+\newblock \emph{bioRxiv}, 2024.
+
+\end{thebibliography}

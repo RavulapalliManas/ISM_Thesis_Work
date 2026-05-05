@@ -1,0 +1,15 @@
+model: phi-2
+dataset: prontoqa
+n_examples: 500
+n_val: 100
+pRNN_hidden: 256
+pRNN_layers: 2
+pRNN_steps: 10000
+subspace_k: 16
+permutation_n: 1000
+batch_size: 1
+device: cpu
+dtype: float32
+extract_layers: []
+use_coconut: false
+
