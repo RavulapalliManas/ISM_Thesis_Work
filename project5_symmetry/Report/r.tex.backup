@@ -1,0 +1,296 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.8cm, right=2.8cm]{geometry}
+\usepackage{palatino}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{needspace}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  format=plain,
+  justification=justified,
+  skip=4pt
+}
+
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+\setlength{\intextsep}{10pt}
+\setlength{\textfloatsep}{10pt}
+\setlength{\floatsep}{8pt}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}
+\titlespacing{\section}{0pt}{14pt}{4pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small\textit{Ravulapalli --- Landmark Symmetry and Cognitive Map Formation}}
+\rhead{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small\textit{Ravulapalli --- Landmark Symmetry and Cognitive Map Formation}}
+\rhead{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \rhead{\small\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\usepackage[numbers]{natbib}
+\usepackage{amssymb}
+\graphicspath{{images/}}
+
+\title{\textbf{Landmark Symmetry and Cognitive Map Formation in Predictive Recurrent Neural Networks}}
+\author{Manas Venkata Sai Ravulapalli\\
+\small Independent Study Module -- Computational Neuroscience}
+\date{}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Landmark Symmetry and Cognitive Map Formation\\[6pt]
+  in Predictive Recurrent Neural Networks}\\[14pt]
+  {\large Manas Venkata Sai Ravulapalli}\\[4pt]
+  {\normalsize Independent Study Module --- Computational Neuroscience}
+\end{center}
+\vspace{10pt}
+
+\thispagestyle{plain}
+
+\begin{abstract}
+Animals navigate in environments where rotational symmetry creates aliasing: multiple locations produce identical sensory observations. We trained predictive recurrent networks in arenas with three levels of rotational symmetry (C4, C2, and asymmetric conditions) matched for total observational information (ODI = 0.336) to test whether landmarks cause global map degeneracy, local representational folding, or both. We introduced three metrics beyond standard RSA: PAA (Permutation-Aware Alignment) detects global orientational degeneracy across seeds; RA (Rotational Autocorrelation) detects unit-level aliasing at symmetric positions; C2 Contrast detects population-level encoding of the symmetry group structure itself. The core finding is partial folding: head-direction input anchors global orientation through transition statistics, preventing degeneracy, while local precision degrades monotonically with symmetry order. RA scales as $S4 = 0.223 > S2 = 0.116 > S1 = 0.098$, decoding error worsens from $S1 = 0.365$ to $S4 = 0.524$, and distance geometry shifts toward path-dependence under high symmetry ($\text{DTG}_{\text{S4}} = -0.052$, $\text{DTG}_{\text{S1}} = -0.020$). These metrics explain why multi-field place cells emerge in symmetric arenas, predict specific deficits from head-direction lesions, and reveal why standard sRSA is blind to map distortion under partial observation symmetry.
+\end{abstract}
+
+\clearpage
+
+\section*{Introduction}
+
+Animals navigate environments where multiple locations generate identical sensory observations, and spatial stability requires disambiguation between rotationally equivalent positions. The head-direction (HD) system tracks global orientation through path integration while landmark anchoring corrects drift via visual cues~\cite{taube1990, knierim1995}, but symmetric landmarks force these two mechanisms into direct conflict: the same landmark view appears at multiple rotations, so the HD state and the landmark signal become discordant. The double-rotation literature documents that place cells increase their number of firing fields in symmetric arenas~\cite{muller1987, knierim1995}, with multi-field fraction scaling with symmetry order, and these multi-field patterns emerge spontaneously in the hippocampus without explicit instruction~\cite{leutgeb2005}. Yet no computational account exists within the predictive learning framework for how symmetry drives these representational changes, nor do we know whether symmetry destroys the global structure of the map, compresses it locally, or produces some hybrid outcome.
+
+This paper asks whether landmark symmetry causes global map degeneracy (where different seeds learn incompatible global orientations), local representational folding (where symmetric positions collapse within a single run), or both. A standard metric (seed-to-seed RSA) cannot answer this question because row permutations preserve pairwise distances, making it blind to both global rotations and local folding. We introduce three metrics that separate identifiability from entanglement: PAA and RA for global vs local, C2 Contrast for group structure: and use them to test predictive networks trained on arenas with graded rotational symmetry. We show that head-direction input prevents global degeneracy while local precision degrades monotonically with symmetry order, and that this partial-folding pattern explains multi-field place cell emergence, predicts specific lesion deficits, and uncovers why sRSA fails under observation aliasing.
+
+\newpage
+
+\section*{Methods}
+
+The arena is an $18 \times 18$ MiniGrid with 324 positions. All conditions are matched on observational discriminability:
+\[
+\mathrm{ODI}=1-\frac{H(X\mid O)}{H(X)}=0.336.
+\]
+S4 has C4-equivalent observations under $90°$ rotation ($H_2=4.0$), S2 has C2-equivalent observations under $180°$ rotation ($H_2=2.0$), and S1 has no designed equivalence ($H_2=1.0$). The number of seeds is S4 $n=5$, S2 $n=3$, S1 $n=3$.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig_setup_schematic.png}
+\caption{Experimental setup and arena conditions. The agent predicts future egocentric observations using observation, action, and head-direction inputs across S4, S2, and S1 arenas matched for total information content.}
+\label{fig:setup}
+\end{figure}
+\noindent Figure 2 shows the experimental setup. The model is a NormReLU pRNN with N=500 units. At time t, the hidden state updates as:
+\[
+h_t = \mathrm{NormReLU}(W_h h_{t-1} + W_o o_t + W_a a_t + W_d d_t),
+\]
+where o_t is the egocentric observation, a_t is the action, and d_t is a 12-bin one-hot head-direction input. Training minimises multi-step prediction loss for k=5 steps:
+\[
+\mathcal{L} = \sum_{j=1}^{k}\|\hat{o}_{t+j} - o_{t+j}\|_2^2,
+\]
+over 80,000 training steps.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig_arenas_overview.png}
+\caption{Arena layouts and spatial views. Overview of arena conditions with varying rotational symmetry (C4, C2, asymmetric) and experimental arena structure.}
+\label{fig:arena_views}
+\end{figure}
+\noindent Figure 3 shows the arena layouts. We define four metrics exactly as follows. RA (Rotational Autocorrelation) is $\mathrm{RA}_u = r(T_u, \mathrm{rot}_{90}(T_u))$ averaged over units with EVS >0.05, with statistical significance determined by a 1,000-shuffle null over position labels. PAA (Permutation-Aware Alignment) gain is the best-fit rotated cross-seed RSA minus identity-alignment RSA, with values below 0.05 indicating no global orientational degeneracy. C2 Contrast is $\mathrm{C2~Contrast} = \left(\frac{1}{2}\sum_{\text{pairs}} d(Q_1,Q_3) + d(Q_2,Q_4)\right) - \left(\frac{1}{2}\sum_{\text{pairs}} d(Q_1,Q_2) + d(Q_3,Q_4)\right)$ where the first term measures C2-equivalent pair similarity and the second measures C4-equivalent pair similarity. SCI (Symmetry Collapse Index) is $\mathrm{SCI} = \bar{d}_{\mathrm{sym}} / \bar{d}_{\mathrm{rand}}$, computed as the mean pairwise distance among symmetry-related positions divided by the mean distance among 10,000 random position pairs in l_2-normalised hidden space.
+
+\newpage
+
+\section*{sRSA cannot detect the failure modes this paper measures}
+
+Seed-to-seed RSA correlates pairwise neural distances with pairwise spatial distances, but this metric has a hidden vulnerability: row permutations of the neural population vector preserve all pairwise distances, so rotated maps yield identical sRSA values. This means sRSA is blind to global rotation divergence across seeds and equally blind to local folding that preserves distance rank order.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_srsa_invariance.png}
+\caption{Why standard sRSA is blind to map degeneracy. Permuting position labels preserves pairwise distances, so rotated maps yield identical sRSA values; PAA and RA detect orientation and unit-level aliasing.}
+\label{fig:srsa_invariance}
+\end{figure}
+\noindent Figure 1 illustrates this directly: two maps can have identical sRSA yet represent opposite global orientations or compress local regions differently. This limitation forced construction of three purpose-built metrics. PAA tests whether a rotated alignment between seeds improves over identity alignment, directly detecting orientational divergence: a capability sRSA lacks entirely. RA measures whether individual units respond identically at rotationally equivalent positions, capturing unit-level aliasing independent of population rank order. C2 Contrast tests whether the population code encodes the symmetry group of the observation function itself. Together these three metrics separate global identifiability from local entanglement from group-theoretic population structure: distinctions no single map-quality score can make. The next page establishes a taxonomy of possible outcomes that frames all results that follow.
+
+\newpage
+
+\section*{Three possible outcomes frame every result that follows}
+
+We distinguish three mechanistically different failure modes. Global degeneracy occurs when seeds learn maps with incompatible rotations—the map attractor exists but its phase is free, implying head-direction input failed to break the symmetry in the transition sequence. Local folding occurs when a single run merges symmetric positions into overlapping representations—cross-seed orientation stays consistent but within-seed precision collapses. Partial folding occurs when global orientation stays stable across seeds while local precision degrades with symmetry order—the outcome predicted if head-direction driven transition statistics fix global phase while locally equivalent positions remain confusable.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig_failure_modes.png}
+\caption{Three possible outcomes of symmetric training. Schematic of global degeneracy, local folding, and partial folding. Colours encode arena quadrant.}
+\label{fig:failure_modes}
+\end{figure}
+\noindent Figure 2 schematises all three outcomes color-coded by arena quadrant. The sRSA learning curves (Figure 3) show all three conditions clear the gate criterion (sRSA > 0.5 at convergence). Notably, S1 (asymmetric) converges to the highest final sRSA despite having the most asymmetric landmarks, a pattern that sRSA alone cannot explain.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig1_srsa_curves.png}
+\caption{sRSA learning curves by arena condition. All conditions clear the gate criterion; S1 converges to the highest final sRSA despite the most asymmetric landmarks.}
+\label{fig:srsa_curves}
+\end{figure}
+\noindent The metric dashboard across conditions (Figure 4) shows a consistent pattern: stable global structure paired with symmetry-dependent local distortion. The rest of the results section documents each component of this pattern in turn.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig2_final_metrics.png}
+\caption{Final metric comparison by condition. Summary of population-level measures across symmetry conditions. Points indicate individual seeds; bars show mean and spread.}
+\label{fig:dashboard}
+\end{figure}
+\noindent These four metrics separate global orientational stability (PAA), unit-level aliasing (RA), population compression (SCI), and group structure (C2 Contrast). The pattern that emerges is case (4): global stability with local compression. The next page quantifies global alignment.
+
+\newpage
+
+\section*{HD input prevents global orientational degeneracy}
+
+This page rules out the first and most severe failure mode—global orientational degeneracy. Cross-seed RSA alignment is S4 0.977±0.002, S2 0.975±0.003, S1 0.974±0.001. PAA gain is S4 0.010±0.002, S2 0.008±0.002, S1 0.008±0.004 with p=0.786 and r=-0.200—values indistinguishable across conditions and all below the 0.05 degeneracy threshold.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig5_rsa_alignment.png}
+\includegraphics[width=0.75\textwidth]{fig6_cca_alignment.png}
+\caption{Global map orientation is reproducible across seeds (left, off-diagonal cross-seed RSA exceeds 0.97 in all conditions; PAA gain does not improve rotated alignment). Canonical correlations remain near ceiling (right), indicating aligned subspaces.}
+\label{fig:alignment_cca}
+\end{figure}
+\noindent Figure 5 confirms that the primary subspace aligns consistently even under C4 symmetry. The mechanistic explanation is that even with C4-symmetric observations, the input stream itself is not symmetric: moving north from position (r,c) and from its 90-degree equivalent (c,17-r) yields different head-direction-tagged transitions at different absolute orientations, which remain globally consistent across any path through the arena. To minimize multi-step prediction loss, the network must track global heading precisely, so global orientation locks in deterministically at training initialization. This closes the first failure mode: global degeneracy is ruled out definitively, but this tells us nothing about the local precision costs that symmetry imposes within each seed.
+
+\newpage
+
+\section*{Unit-level aliasing scales monotonically with symmetry order}
+
+This page documents the local cost that head-direction anchoring cannot prevent. RA is S4 0.223±0.003, S2 0.116±0.004, S1 0.098±0.002, precisely matching |C4|>|C2|>|C1| in size. Shuffle z-scores are S4 15.07, S2 7.83, S1 6.48, all p<0.0001; S4 versus S1 gives p=0.036 and r=-1.0. Spatially tuned units (EVS >0.93) comprise S4 1.8%, S2 3.7%, S1 4.7% of the population.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig_tuning_maps_annotated.png}
+\includegraphics[width=0.75\textwidth]{fig3_si_distribution.png}
+\caption{Unit tuning maps by rotational autocorrelation (left, cyan crosshairs mark quadrant boundaries; high autocorrelation indicates inability to distinguish quadrants). S4 shifts the distribution toward high autocorrelation. Spatial information distributions by condition (right, each panel shows distribution with mean dashed line).}
+\label{fig:tuning_si}
+\end{figure}
+\noindent Figure 6 shows high-RA units producing four distinct peaks across quadrants in S4—these units carry precise within-quadrant position information but cannot disambiguate which quadrant the agent currently occupies. Symmetric observations remove the prediction gradient that would otherwise push the network to differentiate rotationally equivalent positions, so aliasing accumulates proportionally to the number of equivalent positions in the symmetry group. Unit-level aliasing and population-level collapse are separable phenomena; the next page shows they can diverge significantly.
+
+\newpage
+
+\section*{Decoding degrades while population collapse stays partial}
+
+This page separates unit-level aliasing from population-level compression, revealing a key dissociation. SCI is S4 0.889±0.002, S2 0.892±0.000, S1 0.984±0.002; S4 versus S1 gives p=0.036 and r=-1.0, but S4 versus S2 is not significant at p=0.786. Linear decoding error is S4 0.524±0.014, S2 0.475±0.014, S1 0.365±0.012; S4 versus S1 gives p=0.036 and r=-1.0. S4 compresses symmetry-related pairs by 11% relative to random pairs, indicating graded compression rather than collapse.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig9_tuned_cells.png}
+\includegraphics[width=0.75\textwidth]{fig_sci_bar.png}
+\includegraphics[width=0.75\textwidth]{fig4_evs_decoding.png}
+\caption{Fraction of tuned cells by condition (left, spatially tuned fraction; middle, high-SI fraction). Symmetry Collapse Index by condition (center, SCI=1 indicates full disambiguation; S4 shows 11\% compression of symmetric pairs). EVS and decoding error by condition (right, quantify spatial precision from hidden states).}
+\label{fig:decode_collapse}
+\end{figure}
+\noindent The dissociation between RA and SCI is noteworthy: S4 and S2 show substantially different unit-level aliasing (RA: 0.223 versus 0.116) yet statistically indistinguishable population compression (p=0.786). This suggests the population code redistributes aliasing across units rather than concentrating it—a compensatory mechanism. The geometry of compression, not just its magnitude, changes under symmetry, which the next page reveals.
+
+\newpage
+
+\section*{Distance geometry shifts toward path-dependence under symmetry}
+
+This page shows that symmetry does not merely compress the map—it transforms what the map measures. DTG (Distance-Topology Gap) is S4 -0.052±0.003, S2 -0.011±0.003, S1 -0.020±0.004; S4 versus S1 gives p=0.036 and r=1.0. The gap is negative in all conditions, indicating that city-block distance structure dominates Euclidean structure throughout, but the gap widens in S4 and remains anomalously small in S2. S2 DTG of -0.011±0.003 is unexpectedly close to S1 and the difference is not significant at p=0.197—a preliminary finding requiring additional seeds.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{fig7_dtg_curves.png}
+\caption{Neural distance geometry becomes more city-block biased with symmetry. ΔTG diverges negatively in S4 throughout training.}
+\label{fig:dtg}
+\end{figure}
+\noindent Under C4 symmetry, inter-quadrant Euclidean structure collapses because identical observations push those positions toward similar hidden states, so path length within quadrants dominates the learned distance geometry. Critically, the 18×18 MiniGrid imposes a city-block navigation metric by construction, so this result requires replication in a continuous environment before representational geometry can be separated from environmental structure.
+
+\newpage
+
+\section*{C2 symmetry is encoded as group structure in the population code}
+
+This page shows the population code does not respond uniformly to all symmetries—it encodes the specific equivalence structure of the observation function itself. C2 Contrast is S2 +0.045±0.003, S4 -0.130±0.002, S1 -0.070±0.004; S4 versus S2 gives p=0.036 and r=1.0; S2 versus S1 gives p=0.100 and r=-1.0. In S2, the 180-degree-related positions are more similar to each other than 90-degree-related positions are similar—the population code explicitly groups positions according to the C2 subgroup. In S4, all quadrants are equally confusable under the C4 observation structure, so predictive learning compresses all inter-quadrant pairs identically and the C2 subgroup structure vanishes.
+
+The network learned this symmetry group structure from prediction error alone, without any explicit group objective function. The observation equivalence structure is directly reflected in representational similarity structure—a result linking algebra to neural coding. Taken together, results pages 6 through 10 establish that symmetry costs are local, graded, measurable, and architecturally constrained.
+
+\newpage
+
+\section*{Manifold geometry stays high-dimensional and folds along symmetry axes}
+
+This page shows the global geometry of the representation and confirms the partial folding account. TwoNN intrinsic dimensionality is S4 5.95±0.14, S2 5.78±0.23, S1 5.66±0.26.
+
+\needspace{10\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{fig8_manifold_curves.png}
+\includegraphics[width=0.75\textwidth]{image.png}
+\caption{Manifold dimensionality over training (left, online intrinsic dimensionality estimates show convergence trajectories by condition). Neural manifold geometry by condition (right, PCA to 64D then t-SNE 2D, each point is an arena position colored by location; S1: continuous smooth manifold; S4: fragmented multi-arm structure; S2: two-lobe structure).}
+\label{fig:manifold_geometry}
+\end{figure}
+\noindent The manifold retains extra dimensions rather than collapsing into a low-dimensional quotient space—partial folding does not simplify the geometry, it fragments it locally while preserving global structure. The network cannot fold symmetric positions onto a single point without destroying the within-quadrant structure it requires for multi-step prediction accuracy, so it maintains high dimensionality while tolerating inter-quadrant ambiguity. Taking all results pages together (pages 6–11), partial folding emerges as the consistent pattern: global degeneracy is ruled out, local aliasing scales with symmetry, population compression stays graded, distance geometry shifts toward path-dependence, the population code encodes group structure, and the manifold stays high-dimensional but fragments. The costs of symmetry are real but bounded and compensable.
+
+\newpage
+
+\section*{Biological predictions}
+
+Multi-field place cells in symmetric arenas arise from unit-level aliasing. Existing hippocampal recording datasets from symmetric arenas can be stratified by symmetry order and the fraction of multi-field units measured as a function of symmetry group order. The RA result predicts that multi-field fraction scales as |C4| > |C2| > |C1|, matching the symmetry groups: RA = 0.223, 0.116, 0.098 respectively. This prediction follows from the computational finding that high-RA units respond identically at rotationally equivalent positions and cannot disambiguate arena quadrant—precisely the dual-frequency structure of multi-field place cells recorded in symmetric arenas~\cite{muller1987, knierim1995}.
+
+Head-direction lesion effects on spatial codes predict a dissociation. Lesioning anterior thalamic nuclei, which provide HD input to hippocampal formation, should raise PAA gain above 0.05 in S4 arenas while RA remains at 0.223 or higher. This dissociation is the key prediction: global orientation becomes ambiguous between seeds (PAA broken) but local unit-level aliasing persists unchanged (RA unchanged), because HD input stabilises global phase through transition statistics without affecting the local observation equivalence driving aliasing. This dissociation cannot be predicted from the standard framework and is unique to the partial folding account.
+
+Population vector geometry in symmetric arenas tracks path length more strongly than Euclidean distance. Population vector distances measured from hippocampal place cell populations should correlate more strongly with path-length distance than with straight-line Euclidean distance, with the correlation bias largest in C4 arenas and intermediate in C2 arenas. The DTG result quantifies this: city-block bias is -0.052±0.003 in S4 versus -0.020±0.004 in S1. This prediction is directly testable in existing hippocampal recording data by computing pairwise population vector distances and analyzing their correlation with path-length versus Euclidean distance separately by arena symmetry order.
+
+\newpage
+
+\section*{Limitations and replication requirements}
+
+Sample sizes are at the statistical minimum. The sample sizes are S4 n=5, S2 n=3, S1 n=3, giving minimum uncorrected p-values of 0.036 and minimum Bonferroni-corrected p-values of 0.107 (correction factor = 3 comparisons). All main comparisons sit at the theoretical minimum uncorrected p and maximum effect size (r=-1.0), indicating the effects are as large as statistically observable at these sample sizes. Replication requires $n \geq 8$ seeds per condition to achieve corrected significance ($p < 0.05$ after Bonferroni correction for 3 metrics).
+
+The SCI and RA dissociation is unexplained. S4 and S2 show substantially different unit-level aliasing (RA: 0.223±0.003 versus 0.116±0.004) yet statistically indistinguishable population compression (SCI: p=0.786). This dissociation suggests the population code redistributes aliasing across units rather than concentrating it through compensatory coding strategies. The mechanistic cause of this redistribution remains unidentified and requires further investigation through analysis of learned weight matrices and representational geometry.
+
+Distance geometry results confound representation with environment. The 18×18 MiniGrid imposes a city-block navigation metric by construction—agents must move along grid lines. The DTG result showing larger negative gaps under symmetry may partially reflect this environmental structure rather than representational geometry alone. Replication in a continuous environment such as RatInABox is required before the representational geometry interpretation is secure and before the DTG result becomes a robust population-level prediction.
+
+Spatially tuned unit fraction is lower than typical recording values. The fraction of spatially tuned units at EVS >0.93 is S4 1.8%, S2 3.7%, S1 4.7%, substantially lower than values typically reported in hippocampal recordings at more lenient thresholds (EVS >0.5). The more conservative threshold (EVS >0.93) reflects position-averaged evaluation which removes within-position variability and raises the required threshold substantially. The ordering S4<S2<S1 is robust to threshold choice and the main conclusions rest on population-level metrics (RA, SCI, DTG, C2 Contrast) unaffected by this discrepancy.
+
+\newpage
+
+\section*{Conclusion}
+
+Symmetric landmarks do not destroy predictive maps—they impose a specific cost structure. Head-direction input prevents global orientational degeneracy through oriented transition statistics that anchor the global phase of the attractor, but landmark symmetry degrades local precision monotonically with symmetry group order. This dissociation emerges mechanistically: the transition function encodes directional information unambiguously even under symmetric observations, so the global frame stays locked in, while symmetric observations remove the prediction gradient that would push units to differentiate rotationally equivalent positions locally. The result is partial folding: stable global orientation paired with graded local compression.
+
+The three-metric framework (PAA, RA, C2 Contrast) is a diagnostic toolkit for any predictive system facing observation aliasing. These metrics separate global identifiability from local entanglement from group-theoretic population structure—distinctions that sRSA cannot make. Because sRSA is insensitive to permutations of the neural codes and indifferent to their content, it remains high even as local precision collapses under symmetry. PAA detects global degeneracy, RA detects unit-level aliasing, and C2 Contrast detects whether the population code encodes the symmetry group structure itself. This framework applies beyond spatial navigation to any predictive task where observations are partially aliased by symmetries, making it broadly useful for understanding representation learning under non-invertible observation functions.
+
+The dissociation between global stability and local precision is not a failure of predictive learning—it is a mechanistically interpretable consequence of the transition structure available to the learner. HD-anchored transitions stabilise global phase, but they cannot resolve local ambiguity created by observation aliasing. Future work should vary the oriented context signal directly: remove HD input entirely, degrade its signal-to-noise ratio, or replace it with a learned orientation signal. These manipulations will test how much of the global stability result depends on the specific form of the HD input versus the general principle that oriented transition statistics anchor global map phase in symmetric environments.
+
+\newpage
+
+\section*{References}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
