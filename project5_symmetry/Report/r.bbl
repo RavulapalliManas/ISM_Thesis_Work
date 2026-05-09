@@ -1,4 +1,4 @@
-\begin{thebibliography}{4}
+\begin{thebibliography}{5}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -19,6 +19,11 @@ Stefan Leutgeb, Michael~E. Ragozzino, and Sheri J.~Y. Mizumori.
 Robert~U. Muller and John~L. Kubie.
 \newblock Effects of changes in the environment on the spatial firing of hippocampal complex-spike cells.
 \newblock \emph{Journal of Neuroscience}, 7\penalty0 (7):\penalty0 1951--1968, 1987.
+
+\bibitem[Stachenfeld et~al.(2017)Stachenfeld, Botvinick, and Gershman]{stachenfeld2017}
+Kimberly~L. Stachenfeld, Matthew~M. Botvinick, and Samuel~J. Gershman.
+\newblock The hippocampus as a predictive map.
+\newblock \emph{Nature Neuroscience}, 20\penalty0 (11):\penalty0 1643--1653, 2017.
 
 \bibitem[Taube et~al.(1990)Taube, Muller, and Ranck]{taube1990}
 Jeffrey~S. Taube, Robert~U. Muller, and James~B. Ranck.

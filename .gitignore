@@ -32,3 +32,5 @@ build/
 *.pytest_cache/
 *.coverage
 .coverage.*
+gpu_manager_outputs/
+*.md

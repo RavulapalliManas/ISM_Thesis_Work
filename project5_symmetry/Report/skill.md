@@ -1,840 +1,480 @@
 ---
-name: academic-paper-composer
-description: Systematic writing framework for philosophy and interdisciplinary academic papers from optimized outline to submission-ready manuscript. Use when users want to: (1) write a paper from a detailed outline, (2) ensure quality control during writing, (3) maintain consistency across chapters, (4) prepare a submission-ready manuscript, or (5) systematically execute a planned paper. Triggered by phrases like 'write the paper from this outline,' 'compose the full manuscript,' 'execute the outline,' or when users have completed strategic planning (academic-paper-strategist skill) and are ready to write. Takes optimized outline as input; outputs complete manuscript with iterative quality checks.
+name: avoid-ai-writing
+description: Audit and rewrite content to remove AI writing patterns ("AI-isms"). Use this skill when asked to "remove AI-isms," "clean up AI writing," "edit writing for AI patterns," "audit writing for AI tells," or "make this sound less like AI." Supports a detection-only mode that flags patterns without rewriting.
+version: 3.3.1
+license: MIT
+compatibility: Any AI coding assistant that supports agentskills.io SKILL.md format (Claude Code, Cursor, VS Code Copilot, Hermes Agent, OpenHands, etc.) or OpenClaw. No external tools or APIs required.
+metadata:
+  author: Conor Bronsdon
+  tags: writing editing voice quality
+  agentskills_spec: "1.0"
+  openclaw:
+    emoji: "\u270D\uFE0F"
 ---
 
-# Academic Paper Composer
+# Avoid AI Writing — Audit & Rewrite
 
-## Overview
+You are editing content to remove AI writing patterns ("AI-isms") that make text sound machine-generated.
 
-This skill provides a systematic framework for writing academic papers from optimized outline to submission-ready manuscript. It implements iterative quality control at both chapter-level and paper-level, ensuring consistent high quality throughout the writing process.
+## Modes
 
-**Input**: Detailed, optimized paper outline (from academic-paper-strategist or equivalent)
+This skill operates in one of two modes:
 
-**Output**: Complete, submission-ready manuscript with quality validation reports
+**`rewrite`** (default) — Flag AI-isms and rewrite the text to fix them.
 
-**Prerequisite**: Use **academic-paper-strategist** skill first to create optimized outline (or provide equivalent detailed outline)
+**`detect`** — Flag AI-isms only. No rewriting. Use this mode when:
+- The writer wants to see what's flagged and decide what to fix themselves
+- The flagged patterns might be intentional (AI patterns aren't always bad — they can be effective in small doses)
+- You're auditing text you don't want altered (published content, someone else's writing, reference material)
+- You want a quick scan without waiting for a full rewrite
 
----
-
-## When to Use This Skill
-
-Use **academic-paper-composer** when you need to:
-
-**Writing Stage**:
-- Execute a detailed paper outline systematically
-- Write a complete academic paper chapter-by-chapter
-- Maintain quality control during writing process
-- Ensure consistency across all sections
-
-**Quality Assurance Stage**:
-- Validate each chapter before proceeding
-- Check cross-chapter coherence
-- Perform final quality assessment
-- Verify submission readiness
-
-**Submission Preparation Stage**:
-- Prepare manuscript for platform submission
-- Complete platform-specific checklists
-- Generate final submission package
-
-**Triggers**:
-- "Write the paper from this outline"
-- "Compose the full manuscript"
-- "Execute the outline systematically"
-- "I have an outline, help me write the paper"
-- After completing academic-paper-strategist skill
+Trigger detect mode when the user says "detect," "flag only," "audit only," "just flag," "scan," "what AI patterns are in this," or similar. Default to rewrite mode if not specified.
 
 ---
 
-## Workflow Overview
+In **rewrite** mode, your job is to:
 
-```
-Phase 4: SYSTEMATIC WRITING (Chapter-by-Chapter + Quality Gates)
-    ↓
-Phase 5: QUALITY CONTROL (Final Validation + Submission Prep)
-    ↓
-Output: Submission-Ready Manuscript + Quality Reports
-```
+1. **Audit it**: identify every AI-ism present, citing the specific text
+2. **Rewrite it**: return a clean version with all AI-isms removed
+3. **Show a diff summary**: briefly list what you changed and why
 
-**Quality Gates**: After each chapter + final paper evaluation
+In **detect** mode, your job is to:
 
----
-
-## Required Input
-
-Before using this skill, you must provide:
-
-### 1. Optimized Detailed Outline
-**Required structure**:
-```markdown
-## Abstract (250-300 words)
-- [Key points to cover]
-
-## 1. Introduction (1,500 words)
-### 1.1 Opening Puzzle (400 words)
-- [Content guidance]
-### 1.2 Literature Review (600 words)
-- [Theories to discuss]
-### 1.3 This Paper's Contribution (500 words)
-- [Specific claims]
-
-## 2. [Main Chapter Title] (1,200 words)
-### 2.1 [Section] (400 words)
-- [Argument structure]
-- [Key citations]
-...
-
-[Complete structure with word counts and content guidance]
-```
-
-**Quality check**: Outline should specify:
-- ✓ Chapter titles and word counts
-- ✓ Subsection structure (to 3rd level)
-- ✓ Content guidance for each section
-- ✓ Key citations to include
-- ✓ Argument structure notes
-
-If outline lacks these, consider using **academic-paper-strategist** first.
-
-### 2. Platform Writing Standards Guide
-**From academic-paper-strategist Phase 1**, or equivalent document specifying:
-- Platform style patterns (voice, terminology, citation format)
-- Structural conventions
-- Example papers for reference
-
-### 3. Literature Base (Optional but Recommended)
-- List of core papers to cite
-- Research gap analysis
-- Key concepts to emphasize
+1. **Audit it**: identify every AI-ism present, citing the specific text
+2. **Assess it**: note which flags are clear problems vs. patterns that may be intentional or effective in context
 
 ---
 
-## Phase 4: Systematic Writing
+## What to remove or fix
 
-### Goal
-Write complete manuscript chapter-by-chapter with iterative quality control.
+### Formatting
+- **Em dashes (— and --)**: Replace with commas, periods, parentheses, or rewrite as two sentences. Target: zero. Hard max: one per 1,000 words. This applies to headings and section titles too, not just body prose. Catch both the Unicode em dash (—) and the double-hyphen substitute (--).
+- **Bold overuse**: Strip bold from most phrases. One bolded phrase per major section at most, or none. If something's important enough to bold, restructure the sentence to lead with it instead.
+- **Emoji in headers**: Remove entirely. No `## 🚀 What This Means`. Exception: social posts may use one or two emoji sparingly — at the end of a line, never mid-sentence.
+- **Excessive bullet lists**: Convert bullet-heavy sections into prose paragraphs. Bullets only for genuinely list-like content (feature comparisons, step-by-step instructions, API parameters).
 
-### Workflow
+### Sentence structure
+- **"It's not X — it's Y" / "This isn't about X, it's about Y"**: Rewrite as a direct positive statement. Max one per piece, and only if it serves the argument.
+- **Hollow intensifiers**: Cut `genuine`, `real` (as in "a real improvement"), `truly`, `quite frankly`, `to be honest`, `let's be clear`, `it's worth noting that`. Just state the fact.
+- **Vague endorsement ("worth [verb]ing")**: Cut or replace `worth reading`, `worth paying attention to`, `worth a look`, `worth exploring`, `worth checking out`, `worth your time`. These substitute a generic thumbs-up for a specific reason. Say *why* something matters instead.
+- **Hedging**: Cut `perhaps`, `could potentially`, `it's important to note that`, `to be clear`. Make the point directly.
+- **Missing bridge sentences**: Each paragraph should connect to the last. If paragraphs could be rearranged without the reader noticing, add connective tissue.
+- **Compulsive rule of three**: Vary groupings. Use two items, four items, or a full sentence instead of triads. Max one "adjective, adjective, and adjective" pattern per piece.
 
-#### Step 4.1: Writing Environment Setup
+### Words and phrases to replace
 
-Before writing, I will:
+Words are organized into three tiers based on how reliably they signal AI-generated text. This tiered approach — adapted from [brandonwise/humanizer](https://github.com/brandonwise/humanizer)'s vocabulary research — reduces false positives on words that are fine in isolation but suspicious in clusters.
 
-1. **Verify outline completeness**:
-   - All chapters specified with word counts
-   - Content guidance provided
-   - Argument structure clear
+- **Tier 1 — Always flag.** These words appear 5–20x more often in AI text than human text. Replace on sight.
+- **Tier 2 — Flag in clusters.** Individually fine, but two or more in the same paragraph is a strong AI signal. Flag when they appear together.
+- **Tier 3 — Flag by density.** Common words that AI simply overuses. Only flag when they make up a noticeable fraction of the text (roughly 3%+ of total words).
 
-2. **Load reference documents**:
-   - Platform writing standards
-   - Section writing guides (`references/section_guides.md`)
-   - Quality standards (`references/writing_standards.md`)
+#### Tier 1 — Always replace
 
-3. **Create writing tracker**:
-   ```markdown
-   # Writing Progress Tracker
-   - [ ] Abstract (250 words)
-   - [ ] Chapter 1: Introduction (1,500 words)
-   - [ ] Chapter 2: [Title] (1,200 words)
-   ...
-   - [ ] Conclusion (1,000 words)
-   - [ ] References
-   ```
+| Replace | With |
+|---|---|
+| delve / delve into | explore, dig into, look at |
+| landscape (metaphor) | field, space, industry, world |
+| tapestry | (describe the actual complexity) |
+| realm | area, field, domain |
+| paradigm | model, approach, framework |
+| embark | start, begin |
+| beacon | (rewrite entirely) |
+| testament to | shows, proves, demonstrates |
+| robust | strong, reliable, solid |
+| comprehensive | thorough, complete, full |
+| cutting-edge | latest, newest, advanced |
+| leverage (verb) | use |
+| pivotal | important, key, critical |
+| underscores | highlights, shows |
+| meticulous / meticulously | careful, detailed, precise |
+| seamless / seamlessly | smooth, easy, without friction |
+| game-changer / game-changing | describe what specifically changed and why it matters |
+| hit differently / hits different | (say what specifically changed, or cut) |
+| utilize | use |
+| watershed moment | turning point, shift (or describe what changed) |
+| marking a pivotal moment | (state what happened) |
+| the future looks bright | (cut — say something specific or nothing) |
+| only time will tell | (cut — say something specific or nothing) |
+| nestled | is located, sits, is in |
+| vibrant | (describe what makes it active, or cut) |
+| thriving | growing, active (or cite a number) |
+| despite challenges… continues to thrive | (name the challenge and the response, or cut) |
+| showcasing | showing, demonstrating (or cut the clause) |
+| deep dive / dive into | look at, examine, explore |
+| unpack / unpacking | explain, break down, walk through |
+| bustling | busy, active (or cite what makes it busy) |
+| intricate / intricacies | complex, detailed (or name the specific complexity) |
+| complexities | (name the actual complexities, or use "problems" / "details") |
+| ever-evolving | changing, growing (or describe how) |
+| enduring | lasting, long-running (or cite how long) |
+| daunting | hard, difficult, challenging |
+| holistic / holistically | complete, full, whole (or describe what's included) |
+| actionable | practical, useful, concrete |
+| impactful | effective, significant (or describe the impact) |
+| learnings | lessons, findings, takeaways |
+| thought leader / thought leadership | expert, authority (or describe their actual contribution) |
+| best practices | what works, proven methods, standard approach |
+| at its core | (cut — just state the thing) |
+| synergy / synergies | (describe the actual combined effect) |
+| interplay | relationship, connection, interaction |
+| in order to | to |
+| due to the fact that | because |
+| serves as | is |
+| features (verb) | has, includes |
+| boasts | has |
+| presents (inflated) | is, shows, gives |
+| commence | start, begin |
+| ascertain | find out, determine, learn |
+| endeavor | effort, attempt, try |
+| keen (as intensifier) | interested, eager, enthusiastic (or cut — just state the interest) |
+| symphony (metaphor) | (describe the actual coordination or combination) |
+| embrace (metaphor) | adopt, accept, use, switch to |
 
-**Decision Point 1**: Confirm outline and standards loaded, ready to begin writing.
+#### Tier 2 — Flag when 2+ appear in the same paragraph
 
-#### Step 4.2: Chapter-by-Chapter Writing
+These words are legitimate on their own. When two or more show up together, the paragraph likely needs a rewrite.
 
-**For each chapter, I will follow this sequence**:
+| Replace | With |
+|---|---|
+| harness | use, take advantage of |
+| navigate / navigating | work through, handle, deal with |
+| foster | encourage, support, build |
+| elevate | improve, raise, strengthen |
+| unleash | release, enable, unlock |
+| streamline | simplify, speed up |
+| empower | enable, let, allow |
+| bolster | support, strengthen, back up |
+| spearhead | lead, drive, run |
+| resonate / resonates with | connect with, appeal to, matter to |
+| revolutionize | change, transform, reshape (or describe what changed) |
+| facilitate / facilitates | enable, help, allow, run |
+| underpin | support, form the basis of |
+| nuanced | specific, subtle, detailed (or name the actual nuance) |
+| crucial | important, key, necessary |
+| multifaceted | (describe the actual facets, or cut) |
+| ecosystem (metaphor) | system, community, network, market |
+| myriad | many, numerous (or give a number) |
+| plethora | many, a lot of (or give a number) |
+| encompass | include, cover, span |
+| catalyze | start, trigger, accelerate |
+| reimagine | rethink, redesign, rebuild |
+| galvanize | motivate, rally, push |
+| augment | add to, expand, supplement |
+| cultivate | build, develop, grow |
+| illuminate | clarify, explain, show |
+| elucidate | explain, clarify, spell out |
+| juxtapose | compare, contrast, set side by side |
+| paradigm-shifting | (describe what actually shifted) |
+| transformative / transformation | (describe what changed and how) |
+| cornerstone | foundation, basis, key part |
+| paramount | most important, top priority |
+| poised (to) | ready, set, about to |
+| burgeoning | growing, emerging (or cite a number) |
+| nascent | new, early-stage, emerging |
+| quintessential | typical, classic, defining |
+| overarching | main, central, broad |
+| underpinning / underpinnings | basis, foundation, what supports |
 
-##### A. Pre-Writing Review
-Before writing chapter N:
-1. **Review outline specification** for this chapter:
-   - Word count target
-   - Subsection structure
-   - Content guidance
-   - Key arguments/citations
+#### Tier 3 — Flag only at high density
 
-2. **Review previous chapter** (if N>1):
-   - Last paragraph of chapter N-1
-   - Key concepts introduced
-   - Promises to fulfill
+These are normal words. Only flag them when the text is saturated with them — a sign that AI filled space with vague praise instead of specifics.
 
-3. **Check section guide**:
-   - Load appropriate template from `references/section_guides.md`
-   - Review quality markers for this section type
+| Word | What to do |
+|---|---|
+| significant / significantly | Replace some with specifics: numbers, comparisons, examples |
+| innovative / innovation | Describe what's actually new |
+| effective / effectively | Say how or cite a metric |
+| dynamic / dynamics | Name the actual forces or changes |
+| scalable / scalability | Describe what scales and to what |
+| compelling | Say why it compels |
+| unprecedented | Name the precedent it breaks (or cut) |
+| exceptional / exceptionally | Cite what makes it an exception |
+| remarkable / remarkably | Say what's worth remarking on |
+| sophisticated | Describe the sophistication |
+| instrumental | Say what role it played |
+| world-class / state-of-the-art / best-in-class | Cite a benchmark or comparison |
 
-##### B. Writing Execution
+### Template phrases (avoid)
 
-I will write the chapter following:
+These slot-fill constructions signal that a sentence was generated, not written. If a phrase has a blank where a noun or adjective could go and still sound the same, it's too generic.
 
-**Content principles**:
-- **Follow outline exactly**: Respect structure and word counts
-- **Include specified citations**: Use literature from outline
-- **Maintain platform style**: Match voice and terminology
-- **Use section templates**: Follow appropriate guide from `section_guides.md`
+- "a [adjective] step towards [adjective] AI infrastructure" → describe the specific capability, benchmark, or outcome
+- "a [adjective] step forward for [noun]" → same rule: say what actually changed
+- "Whether you're [X] or [Y]" → false-breadth construction. Pick the audience you're actually addressing, or cut. "Whether you're a startup founder or an enterprise architect" means nothing — it's just "everyone."
+- "I recently had the pleasure of [verb]-ing" → review/social AI pattern. Just say what happened: "I talked to," "I read," "I attended."
 
-**Quality targets (pre-emptive)**:
-- Argument quality: Clear thesis, justified premises
-- Citation quality: All claims supported, proper format
-- Clarity: Precise prose, terms defined, good transitions
-- Structure: Logical flow, proper proportions
-- Style conformity: Match platform conventions
+### Transition phrases to remove or rewrite
+- "Moreover" / "Furthermore" / "Additionally" → restructure so the connection is obvious, or use "and," "also," "on top of that"
+- "In today's [X]" / "In an era where" → cut or state specific context
+- "It's worth noting that" / "Notably" → just state the fact
+- "Here's what's interesting" / "Here's what caught my eye" / "Here's what stood out" → reader-steering frames. Let the content signal its own importance. If you need a lead-in, make it specific: "The revenue number matters because..." not "Here's the interesting part."
+- "In conclusion" / "In summary" / "To summarize" → your conclusion should be obvious
+- "When it comes to" → just talk about the thing directly
+- "At the end of the day" → cut
+- "That said" / "That being said" → cut or use "but," "yet," or "however." Don't overuse any one of them.
 
-**Output**: Complete chapter draft
+### Structural issues
+- **Uniform paragraph length**: Vary deliberately. Include some 1-2 sentence paragraphs and some longer ones. If every paragraph is roughly the same size, fix it.
+- **Formulaic openings**: If the piece opens with broad context before getting to the point ("In the rapidly evolving world of..."), rewrite to lead with the news or the insight. Context can come second.
+- **Suspiciously clean grammar**: Don't sand away all personality. Deliberate fragments, sentences starting with "And" or "But," comma splices for effect: if the natural voice uses them, keep them.
 
-##### C. Post-Writing Evaluation
+### Significance inflation
+- Phrases like "marking a pivotal moment in the evolution of..." or "a watershed moment for the industry" inflate routine events into history-making ones. State what happened and let the reader judge significance.
+- If the sentence still works after you delete the inflation clause, delete it.
 
-After completing chapter draft, I will:
+### Copula avoidance
+- AI text avoids "is" and "has" by substituting fancier verbs: "serves as," "features," "boasts," "presents," "represents." These sound like a press release.
+- Default to "is" or "has" unless a more specific verb genuinely adds meaning.
 
-1. **Create evaluation document**:
-   ```bash
-   python scripts/chapter_quality_check.py
-   # Option 1: Create template for this chapter
-   ```
+### Synonym cycling
+- AI rotates synonyms to avoid repeating a word: "developers… engineers… practitioners… builders" in the same paragraph. Human writers repeat the clearest word.
+- If the same noun or verb appears three times in a paragraph and that's the right word, keep all three. Forced variation reads as thesaurus abuse.
 
-2. **Perform 5-dimension assessment**:
-   - **Argument Quality** (1-4): Thesis clear? Premises justified? Objections addressed?
-   - **Citation Quality** (1-4): All claims cited? Format consistent? Key literature included?
-   - **Clarity & Readability** (1-4): Prose clear? Terms defined? Transitions smooth?
-   - **Structure & Flow** (1-4): Logical progression? Proper proportions? Follows outline?
-   - **Platform Conformity** (1-4): Style match? Voice consistent? Format correct?
+### Vague attributions
+- "Experts believe," "Studies show," "Research suggests," "Industry leaders agree" — without naming the expert, study, or leader. Either cite a specific source or drop the attribution and state the claim directly.
 
-3. **Generate quality report**:
-   ```bash
-   python scripts/chapter_quality_check.py
-   # Option 2: Generate report from evaluation
-   ```
+### Filler phrases
+- Strip mechanical padding that adds words without meaning:
+  - "It is important to note that" → (just state it)
+  - "In terms of" → (rewrite)
+  - "The reality is that" → (cut or just state the claim)
+- Note: "In order to," "Due to the fact that," and "At the end of the day" are covered in the word/phrase table and transition sections above — don't duplicate rules.
 
-   This produces:
-   - Total score (X/20)
-   - Pass/fail (threshold: ≥16/20)
-   - Weak dimensions identified
-   - Specific revision recommendations
+### Generic conclusions
+- "The future looks bright," "Only time will tell," "One thing is certain," "As we move forward" — these are filler disguised as conclusions. Cut them. If the piece needs a closing thought, make it specific to the argument.
 
-**Quality Gate 4A** (After Each Chapter):
-- ✓ Score ≥16/20 (80%)
-- ✓ All dimensions ≥3/4 (or revisions implemented)
-- ✓ Word count within ±10% of target
+### Chatbot artifacts
+- "I hope this helps!", "Certainly!", "Absolutely!", "Great question!", "Feel free to reach out," "Let me know if you need anything else" — these are conversational tics from chat interfaces, not writing. Remove entirely.
+- Also watch for: "In this article, we will explore…" or "Let's dive in!" — these are AI-generated meta-narration. Cut or rewrite with a direct opening.
 
-**If Failed**: Implement revisions before proceeding to next chapter
+### "Let's" constructions
+- "Let's explore," "Let's take a look," "Let's break this down," "Let's examine" — AI uses "let's" as a false-collaborative opener to ease into a topic. It's filler that delays the actual point. Just start with the point. "Let's dive in" is covered above under chatbot artifacts, but the pattern is broader than that — flag any "let's + verb" that's functioning as a transition rather than a genuine invitation to act.
 
-##### D. Iteration (If Needed)
+### Notability name-dropping
+- AI text piles on prestigious citations to manufacture credibility: "cited in The New York Times, BBC, Financial Times, and The Hindu." If a source matters, use it with context: "In a 2024 NYT interview, she argued..." One specific reference beats four name-drops.
 
-If chapter scores <16/20:
+### Superficial -ing analyses
+- Strings of present participles used as pseudo-analysis: "symbolizing the region's commitment to progress, reflecting decades of investment, and showcasing a new era of collaboration." These say nothing. Replace with specific facts or cut entirely.
 
-1. **Identify weak dimension(s)**: Which scored <3/4?
+### Promotional language
+- AI defaults to tourism-brochure prose: "nestled within the breathtaking foothills," "a vibrant hub of innovation," "a thriving ecosystem." Replace with plain description: "is a town in the Gonder region," "has 12 startups." If you wouldn't say it in conversation, cut it.
 
-2. **Implement targeted revisions**:
-   - Argument quality issue → Add justifications, address objections
-   - Citation quality issue → Add supporting citations, fix format
-   - Clarity issue → Simplify prose, add definitions, improve transitions
-   - Structure issue → Reorganize paragraphs, adjust proportions
-   - Style issue → Adjust voice, terminology, format
+### Formulaic challenges
+- "Despite challenges, [subject] continues to thrive" or "While facing headwinds, the organization remains resilient." This is a non-statement. Name the actual challenge and the actual response, or cut the sentence.
 
-3. **Re-evaluate**: Generate new quality report
+### False ranges
+- AI creates false breadth by pairing unrelated extremes: "from the Big Bang to dark matter," "from ancient civilizations to modern startups." These sound sweeping but say nothing. List the actual topics or pick the one that matters.
 
-4. **Repeat until passing** (typically 1-2 iterations)
+### Inline-header lists
+- Bullet lists where each item starts with a bold header that repeats itself: "**Performance:** Performance improved by..." Strip the bold header and write the point directly. If the list items need headers, they should probably be paragraphs.
 
-**Important**: Do not proceed to next chapter until current chapter passes quality gate.
+### Title case headings
+- AI over-capitalizes headings: "Strategic Negotiations And Key Partnerships" instead of "Strategic negotiations and key partnerships." Use sentence case for subheadings. Title case only for the piece's main title, if at all.
 
-##### E. Chapter Completion
+### Cutoff disclaimers
+- "While specific details are limited based on available information," "As of my last update," "I don't have access to real-time data." These are model limitations leaking into prose. Either find the information or remove the hedge. Never publish a sentence that admits the writer didn't look something up.
 
-Once chapter passes quality gate:
+### Novelty inflation
+- AI text treats established concepts as if the speaker invented or discovered them: "He introduced a term," "She coined the phrase," "a concept nobody's naming," "a failure mode nobody talks about." In reality, most ideas in a conversation are applications of existing concepts, not inventions.
+- Two problems. First, it's factually risky: if the concept already has a Wikipedia page or conference talks from last year, claiming novelty makes the writer look uninformed. Second, it flatters the subject in a way that reads as promotional rather than analytical.
+- The fix: describe what the person *did with* the concept, not that they discovered it. "Michel walked through how context poisoning works in practice" instead of "Michel introduced a term I hadn't heard before: context poisoning." If you're unsure whether something is novel, assume it isn't and frame accordingly.
+- Related patterns to flag: "the failure mode nobody's naming," "a problem nobody talks about," "the insight everyone's missing," "what nobody tells you about." These are engagement-bait framings that claim scarcity of knowledge where none exists.
 
-1. **Mark chapter complete** in writing tracker
-2. **Save chapter with quality report**
-3. **Note key concepts introduced** (for coherence check later)
-4. **Preview next chapter** requirements
+### Emotional flatline
+- AI claims emotions as a structural crutch without conveying them through the writing: "What surprised me most," "I was fascinated to discover," "What struck me was," "I was excited to learn," "The most interesting part."
+- Two problems. First, it's tell-don't-show: if the thing is genuinely surprising, the reader should feel that from the content, not from the writer announcing it. Second, these phrases are massively overused as list introductions and transitions. They're filler wearing an emotion costume.
+- This pattern isn't always AI. It's also a sign of lazy human writing on autopilot. Flag it either way.
+- The fix isn't "never say surprised." It's: if you claim an emotion, the writing around it should earn it. Otherwise cut the claim and present the thing directly.
+- Related pattern: "hit differently" / "hits different." AI uses trendy colloquialisms as a shortcut to sound relatable without earning the emotional beat. If something genuinely affected you, describe how. Otherwise cut.
 
-**Decision Point 2** (After Major Chapters): After completing each main body chapter, I will:
-- Present completed chapter summary
-- Show quality score
-- Ask: Proceed to next chapter or revise further?
+### False concession structure
+- "While X is impressive, Y remains a challenge" or "Although X has made strides, Y is still an open question." AI uses this to sound balanced without actually weighing anything. Both halves are vague. Either make the concession specific (name what's impressive, name the actual challenge) or pick a side and argue it.
 
-#### Step 4.3: Writing Sequence
+### Rhetorical question openers
+- "But what does this mean for developers?" / "So why should you care?" / "What's next?" � AI uses rhetorical questions to stall before the actual point. If you know the answer, just say it. Rhetorical questions are earned by strong setup, not dropped as section transitions.
 
-**Recommended order**:
+### Parenthetical hedging
+- "(and, increasingly, Z)" / "(or, more precisely, Y)" / "(and perhaps more importantly, W)" � AI inserts parenthetical asides to sound nuanced without committing. If the aside matters, give it its own sentence. If it doesn't, cut it.
 
-1. **Introduction** (write first)
-   - Establishes thesis and roadmap
-   - Use introduction guide from `section_guides.md`
-   - Quality check: Abstract promises, literature coverage, clear contribution
+### Numbered list inflation
+- "Three key takeaways" / "Five things to know" / "Here are the top seven" � AI defaults to numbered lists because they're structurally safe. Only use numbered lists when the content genuinely has that many discrete, parallel items. If you're padding to hit a number, the list shouldn't exist.
 
-2. **Main Body Chapters** (in outline order)
-   - Follow outline sequence
-   - Quality check after each
-   - Build on previous chapters
+### Reasoning chain artifacts
+- "Let me think step by step," "Breaking this down," "To approach this systematically," "Step 1:," "Here's my thought process," "First, let's consider," "Working through this logically" — these are artifacts of chain-of-thought reasoning leaking into published prose. The reader doesn't need to see the scaffolding. State the conclusion, then the evidence.
+- Also watch for numbered reasoning steps that read like an internal monologue rather than an argument meant for an audience.
 
-3. **Conclusion** (write after main body)
-   - Synthesizes findings
-   - Addresses introduction promises
-   - Use conclusion guide from `section_guides.md`
+### Sycophantic tone
+- "Great question!", "Excellent point!", "You're absolutely right!", "That's a really insightful observation" — these are conversational rewards from chat interfaces, not writing. Remove entirely.
+- Distinct from chatbot artifacts: sycophancy specifically validates the reader/questioner rather than just performing helpfulness.
 
-4. **Abstract** (write last)
-   - Summarizes complete paper
-   - Use abstract guide from `section_guides.md`
-   - Quality check: Standalone, accurate, compelling
+### Acknowledgment loops
+- "You're asking about," "The question of whether," "To answer your question," "That's a great question. The..." — AI restates the prompt before answering. In writing, this is pure filler. The reader knows what they asked. Just answer.
+- Related pattern: opening a section by summarizing what the previous section said. If the structure is clear, the reader doesn't need a recap.
 
-5. **References** (compile throughout)
-   - Format according to platform standards
-   - Verify all citations present
+### Confidence calibration phrases
+- "It's worth noting that," "Interestingly," "Surprisingly," "Importantly," "Significantly," "Notably," "Certainly," "Undoubtedly," "Without a doubt" — AI uses these to signal how the reader should feel about a fact instead of letting the fact speak for itself.
+- "Here's what's interesting," "Here's the interesting part," "Here are the parts I found interesting" — reader-steering cue that pre-interprets importance. Works when followed by genuinely surprising data; fails when it introduces a restatement of something obvious (which is the AI default).
+- One "notably" in a 2,000-word piece is fine. Three in 500 words is AI-style emphasis stacking. Flag by density.
 
-#### Step 4.4: Cross-Chapter Coherence Check
+### Excessive structure
+- Too many headers in short text: more than 3 headings in under 300 words is almost always AI trying to look organized. Merge sections or use prose transitions instead.
+- Too many list items: 8+ bullet points in under 200 words means the content should be a paragraph, not a list.
+- Formulaic section headers: "Overview," "Key Points," "Summary," "Conclusion," "Introduction" — these are default AI scaffolding. Use headers that tell the reader something specific about what follows.
 
-After all chapters written, before final evaluation:
+### Rhythm and uniformity
 
-1. **Terminology consistency**:
-   - Extract key terms from each chapter
-   - Verify consistent usage throughout
-   - Check definitions consistent
+These aren't individual word or phrase problems — they're patterns in how the text flows as a whole. AI text is metronomic; human text has varied rhythm.
 
-2. **Argument flow**:
-   - Verify chapter N+1 builds on chapter N
-   - Check roadmap (intro) matches execution
-   - Ensure conclusion addresses introduction promises
+**Structure is the #1 detection signal.** AI detection tools (including Pangram, which trains a classifier on 28M human documents) weight structural regularity higher than vocabulary. Consistent sentence construction, uniform pacing, and symmetrical phrasing patterns are harder to mask than swapping out a few flagged words. If you fix every word on the Tier 1 list but leave the rhythm untouched, the text still reads as AI-generated.
 
-3. **Citation patterns**:
-   - Check for uneven citation distribution
-   - Verify key works cited where relevant
-   - Ensure bibliography complete
+- **Sentence length uniformity**: If most sentences are 15–25 words, the text sounds robotic. Mix short punchy sentences (3–8 words) with longer flowing ones (20+). Fragments work. Questions break the monotony.
+- **Paragraph length uniformity**: If every paragraph is 3–5 sentences and roughly the same size, vary deliberately. Some paragraphs should be one sentence. Some should be longer.
+- **Vocabulary repetition vs. synonym cycling**: AI either repeats the same word mechanically or cycles through synonyms conspicuously. Human writers repeat when the word is right and vary when it's natural — there's no formula.
+- **Read-aloud test**: If the text sounds like it could be read by a text-to-speech engine without sounding weird, it's probably too uniform. Human writing has rhythm that resists robotic delivery.
+- **Missing first-person perspective**: Where appropriate, the writer should have opinions, preferences, and reactions. AI is relentlessly neutral. If the piece is supposed to have a voice, the absence of "I think," "in my experience," or a stated preference is itself an AI tell.
+- **Over-polishing**: Aggressively editing out every irregularity can push human writing *toward* AI statistical profiles. Natural disfluency, idiosyncratic word choices, and uneven pacing are what keep text out of the "AI-generated" classification. Don't sand away all personality in pursuit of clean prose. This skill should make writing sound more human, not less — if you apply every rule at maximum strictness, you risk creating the very uniformity you're trying to avoid.
 
-**Output**: Cross-chapter coherence report identifying any inconsistencies
+### When to rewrite from scratch vs. patch
+
+If the text has 5+ flagged vocabulary hits across multiple categories, 3+ distinct pattern categories triggered, and uniform sentence/paragraph length, patching individual phrases won't fix it — the structure itself is AI-generated. Advise a full rewrite: state the core point in one sentence, then rebuild from there.
 
 ---
 
-## Phase 5: Quality Control
+## Severity tiers
 
-### Goal
-Perform comprehensive final evaluation and prepare submission-ready manuscript.
+Not all AI-isms are equal. When doing a quick pass or triaging a large document, prioritize by tier:
 
-### Workflow
+### P0 � Credibility killers (fix immediately)
+- Cutoff disclaimers ("As of my last update")
+- Chatbot artifacts ("I hope this helps!", "Great question!")
+- Vague attributions without sources ("Experts believe")
+- Significance inflation on routine events
 
-#### Step 5.1: Content Completeness Check
+### P1 � Obvious AI smell (fix before publishing)
+- Word-list violations (delve, leverage, harness, robust, etc.)
+- Template phrases and slot-fill constructions
+- "Let's" transition openers
+- Synonym cycling within a paragraph
+- Formulaic openings ("In the rapidly evolving world of...")
+- Bold overuse
+- Em dash frequency (above 1 per 1,000 words)
 
-Using structured checklist, verify:
+### P2 � Stylistic polish (fix when time allows)
+- Generic conclusions ("The future looks bright")
+- Compulsive rule of three
+- Uniform paragraph length
+- Copula avoidance (serves as, features, boasts)
+- Transition phrases (Moreover, Furthermore, Additionally)
 
-**Structural Completeness**:
-- [ ] Abstract (250-300 words)
-- [ ] Introduction with all required elements
-- [ ] All outlined main chapters present
-- [ ] Conclusion with all required elements
-- [ ] References section formatted correctly
-
-**Content Completeness**:
-- [ ] All introduction promises fulfilled
-- [ ] All claims supported by evidence or argument
-- [ ] All technical terms defined
-- [ ] All objections addressed
-- [ ] All limitations acknowledged
-
-**Citation Completeness**:
-- [ ] Every citation in text has bibliography entry
-- [ ] Every bibliography entry cited in text
-- [ ] Citation format consistent throughout
-- [ ] All citations include necessary information
-
-**Format Completeness**:
-- [ ] Title page (if required)
-- [ ] Section numbering consistent
-- [ ] Heading hierarchy logical
-- [ ] Figure/table captions (if applicable)
-
-**Output**: Completeness checklist report
-
-#### Step 5.2: Final 7-Dimension Evaluation
-
-I will perform comprehensive evaluation using:
-
-```bash
-python scripts/final_evaluation.py
-# Create evaluation template
-```
-
-**7 Dimensions** (10 points each, 70 total):
-
-1. **Overall Argument Quality** (1-10)
-   - Thesis clarity throughout
-   - Chapter integration
-   - Logical completeness
-   - Objections addressed
-
-2. **Literature Integration** (1-10)
-   - Citation count (40-60 typical for philosophy)
-   - Key literature covered
-   - Citations well-integrated
-   - Critical engagement present
-
-3. **Clarity & Accessibility** (1-10)
-   - Prose clarity
-   - Complex ideas explained
-   - Appropriate for audience
-   - Technical terms defined
-
-4. **Originality & Contribution** (1-10)
-   - Clear original contribution
-   - Advance over literature
-   - Significance established
-   - Innovation present
-
-5. **Methodological Rigor** (1-10)
-   - Method explicit and justified
-   - Consistently applied
-   - Appropriate for question
-   - Limitations acknowledged
-
-6. **Structure & Organization** (1-10)
-   - Logical flow
-   - Optimal organization
-   - Proportions balanced
-   - Transitions seamless
-
-7. **Platform & Style Conformity** (1-10)
-   - Style matches platform
-   - Format correct
-   - Voice consistent
-   - Citation format perfect
-
-**Scoring Process**:
-1. Evaluate each dimension (1-10)
-2. Provide detailed notes for each
-3. Complete completeness checklist
-4. List any specific issues
-
-**Generate report**:
-```bash
-python scripts/final_evaluation.py
-# Generate final report
-```
-
-This produces:
-- Total score (X/70)
-- Pass/fail (threshold: ≥56/70)
-- Weak dimensions identified
-- Completeness assessment
-- Prioritized revision recommendations
-- Submission readiness decision
-
-**Quality Gate 5** (Final):
-- ✓ Score ≥56/70 (80%)
-- ✓ All completeness checklist items complete
-- ✓ All high-priority issues addressed
-
-**If Failed**: Implement revisions and re-evaluate
-
-#### Step 5.3: Revision Implementation (If Needed)
-
-If final score <56/70 or completeness incomplete:
-
-1. **Prioritize revisions**:
-   - HIGH priority: All issues affecting score or completeness
-   - MEDIUM priority: Issues improving quality
-   - LOW priority: Optional enhancements
-
-2. **Implement systematically**:
-   - Address high-priority first
-   - Document changes
-   - Maintain style consistency
-
-3. **Re-evaluate**:
-   - Generate new final report
-   - Verify score ≥56/70
-   - Check completeness 100%
-
-4. **Iterate until passing**
-
-**Decision Point 3**: After final evaluation, I will:
-- Present final score and assessment
-- Show submission readiness status
-- Recommend: Submit immediately / Implement optional improvements / Required revisions
-- Ask: Proceed with submission or implement further improvements?
-
-#### Step 5.4: Submission Package Preparation
-
-Once final evaluation passes:
-
-1. **Platform-specific checklist**:
-   - **PhilArchive/PhilPapers**:
-     - [ ] PDF format
-     - [ ] Abstract <500 words
-     - [ ] Metadata (title, keywords, classification)
-     - [ ] Author information complete
-
-   - **arXiv**:
-     - [ ] LaTeX or PDF format
-     - [ ] Abstract <1920 characters
-     - [ ] Category selection correct
-     - [ ] No font embedding issues
-
-   - **PhilSci-Archive**:
-     - [ ] PDF format
-     - [ ] Subject classification
-     - [ ] Keywords (3-5)
-     - [ ] No copyright issues
-
-2. **Generate final outputs**:
-   - Formatted manuscript (PDF or LaTeX)
-   - Abstract (separate file if needed)
-   - Metadata file
-   - Cover letter (if applicable)
-
-3. **Pre-submission verification**:
-   - Re-read complete paper
-   - Check all formatting
-   - Verify all links/citations work
-   - Proofread for typos
-
-**Output**: Complete submission package ready for platform upload
+Use P0+P1 for quick passes. Full audit covers all three tiers.
 
 ---
 
-## Complete Output Package
+## Self-reference escape hatch
 
-Upon completion of both phases, you receive:
-
-### Quality Reports
-1. **Chapter Quality Reports** (one per chapter)
-   - 5-dimension scores
-   - Pass/fail status
-   - Revision recommendations implemented
-
-2. **Cross-Chapter Coherence Report**
-   - Terminology consistency check
-   - Argument flow verification
-   - Citation pattern analysis
-
-3. **Final Evaluation Report** ⭐ **Key Document**
-   - 7-dimension comprehensive assessment
-   - Completeness checklist (100%)
-   - Submission readiness decision
-   - Platform-specific checklist
-
-### Manuscript Files
-1. **Complete Manuscript** ⭐ **Main Deliverable**
-   - All chapters integrated
-   - Properly formatted
-   - Citations complete
-   - Submission-ready
-
-2. **Abstract** (separate file)
-   - Standalone 250-300 words
-   - Platform-formatted
-
-3. **Metadata Document**
-   - Title, keywords, classification
-   - Author information
-   - Platform-specific requirements
-
-### Supporting Documentation
-1. **Writing Progress Tracker**
-   - All chapters completed
-   - Quality scores logged
-   - Revision history
-
-2. **Citation List**
-   - All references used
-   - Formatted for platform
-   - Verified complete
+When writing *about* AI writing patterns (blog posts, tutorials, skill documentation like this file), quoted examples are exempt from flagging. Text inside quotation marks, code blocks, or explicitly marked as illustrative ("for example, AI might write...") should not be rewritten. Only flag patterns that appear in the author's own prose, not in cited examples of bad writing.
 
 ---
 
-## Quality Assurance System
+## Context profiles
 
-### Quality Standards Reference
+Pass an optional context hint to adjust rule strictness. If no context is specified, auto-detect from content cues (short + hashtags = social, code blocks = technical, salutation = email, default = blog).
 
-For detailed evaluation criteria, all standards are defined in:
-```markdown
-references/writing_standards.md
-```
+### Profile definitions
 
-This document provides:
-- Chapter-level quality standards (5 dimensions)
-- Final quality standards (7 dimensions)
-- Section-specific quality criteria
-- Scoring rubrics
-- Issue identification and fixes
+**`linkedin`** � Short-form social. Punchy fragments, visual formatting matter.
+**`blog`** � Default. Standard long-form prose. All rules apply at full strength.
+**`technical-blog`** � Long-form with code, architecture, APIs. Technical terms get a pass.
+**`investor-email`** � High-trust audience. Tighten everything; promotional language is the biggest risk.
+**`docs`** � Documentation, READMEs, guides. Clarity over voice.
+**`casual`** � Slack messages, internal notes, quick replies. Only catch the worst offenders.
 
-### Section Writing Guides
+### Tolerance matrix
 
-For guidance on writing each section type:
-```markdown
-references/section_guides.md
-```
+Rules not listed in the table apply at full strength across all profiles.
 
-This provides:
-- Abstract writing template and checklist
-- Introduction structure (6 subsections)
-- Main body chapter templates (4 types)
-- Conclusion structure
-- Transition strategies
-- Platform-specific style guidance
-- Common mistakes and fixes
+| Rule | linkedin | blog | technical-blog | investor-email | docs | casual |
+|------|----------|------|----------------|----------------|------|--------|
+| Em dashes | relaxed (2/post OK) | strict | strict | strict | relaxed | skip |
+| Bold overuse | relaxed (bold hooks OK) | strict | strict | strict | relaxed | skip |
+| Emoji in headers | relaxed (1-2 end-of-line OK) | strict | strict | strict | skip | skip |
+| Excessive bullets | skip (lists work on LinkedIn) | strict | relaxed (technical lists OK) | strict | skip (lists are docs) | skip |
+| Hedging | strict | strict | relaxed ("may" is accurate in technical) | strict | relaxed | skip |
+| Word table (full list) | strict | strict | **partial** (see below) | strict | relaxed | P0 only |
+| Promotional language | relaxed (some sell is expected) | strict | strict | **extra strict** | strict | skip |
+| Significance inflation | strict | strict | strict | **extra strict** | relaxed | skip |
+| Copula avoidance | skip | strict | relaxed | strict | skip | skip |
+| Uniform paragraph length | skip (short-form) | strict | strict | strict | relaxed | skip |
+| Numbered list inflation | relaxed | strict | relaxed | strict | skip | skip |
+| Rhetorical questions | relaxed (1 as hook OK) | strict | strict | strict | strict | skip |
+| Transition phrases | skip (short-form) | strict | strict | strict | relaxed | skip |
+| Generic conclusions | skip | strict | strict | **extra strict** | skip | skip |
 
-### Evaluation Scripts
+**Technical-blog word table exceptions:** These terms have legitimate technical meaning and should not be flagged in technical context: `robust`, `comprehensive`, `seamless`, `ecosystem`, `leverage` (when discussing actual platform leverage/APIs), `facilitate`, `underpin`, `streamline`. Still flag: `delve`, `tapestry`, `beacon`, `embark`, `testament to`, `game-changer`, `harness`.
 
-Two Python scripts support quality validation:
+**"Extra strict"** means: flag even borderline instances. In investor emails, a single "thriving ecosystem" can undermine the whole message.
 
-#### 1. Chapter Quality Check
-```bash
-python scripts/chapter_quality_check.py
-```
+**"Skip"** means: don't audit this category for this profile. The rule doesn't apply or isn't worth the edit.
 
-**Function**: Evaluates individual chapters against 5-dimension standards
-- Creates evaluation templates
-- Calculates scores and pass/fail
-- Identifies weak dimensions
-- Generates revision recommendations
-- Supports multi-chapter comparison
+### Auto-detection cues
 
-**When to Use**: After writing each chapter (Step 4.2.C)
+When no context is specified, infer from these signals:
 
-#### 2. Final Paper Evaluation
-```bash
-python scripts/final_evaluation.py
-```
+| Signal | Inferred context |
+|--------|-----------------|
+| Under 300 words + hashtags or mentions | `linkedin` |
+| Code blocks, API references, or technical architecture | `technical-blog` |
+| Salutation ("Hi [name]", "Dear") + investor/fundraising language | `investor-email` |
+| Step-by-step instructions, parameter docs, README structure | `docs` |
+| No strong signals | `blog` (safest default � all rules apply) |
 
-**Function**: Evaluates complete paper against 7-dimension standards
-- Comprehensive quality assessment
-- Completeness checklist validation
-- Submission readiness determination
-- Platform-specific preparation
-- Generates final report with recommendations
-
-**When to Use**: After all chapters complete (Step 5.2)
+If auto-detection feels wrong, say which profile you're using and why. The user can override.
 
 ---
 
-## Decision Points (Interactive)
 
-This skill has **3 key decision points** where I pause for your input:
+## Output format
 
-### Decision Point 1: Writing Commencement (Step 4.1)
-**I provide**: Loaded outline, standards, and writing plan
-**You confirm**: Ready to begin writing / Need adjustments
+### Rewrite mode (default)
 
-### Decision Point 2: Chapter Completion (Step 4.2.E)
-**I provide**: Completed chapter with quality score
-**You decide**: Proceed to next / Revise further / Adjust approach
+Return your response in four sections:
 
-**Frequency**: After each main body chapter (3-5 times typically)
+**1. Issues found**
+A bulleted list of every AI-ism identified, with the offending text quoted.
 
-### Decision Point 3: Final Submission (Step 5.3)
-**I provide**: Final evaluation report with score and readiness assessment
-**You decide**: Submit immediately / Implement optional improvements / Additional revisions
+**2. Rewritten version**
+The full rewritten content. Preserve the original structure, intent, and all specific technical details. Only change what the guidelines require.
 
----
+**3. What changed**
+A brief summary of the major edits made. Not every word, just the meaningful changes.
 
-## Example Usage
+**4. Second-pass audit**
+Re-read the rewritten version from section 2. Identify any remaining AI tells that survived the first pass — recycled transitions, lingering inflation, copula avoidance, filler phrases, or anything else from the categories above. Fix them, return the corrected text inline, and note what changed in this pass. If the rewrite is clean, say so.
 
-### User Request
-"I have the optimized outline from the strategist skill. Please write the complete paper on self-continuity during sleep."
+### Detect mode
 
-### Skill Response
+Return your response in two sections:
 
-**Phase 4: Systematic Writing**
+**1. Issues found**
+A bulleted list of every AI-ism identified, with the offending text quoted. Group by severity (P0, P1, P2).
 
-1. **Setup**: Outline loaded (6 chapters, 9,600 words total). Platform: PhilArchive. Standards loaded. ✓
-
-2. **Chapter 1 - Introduction (1,500 words)**:
-   - Writing... [follows outline structure]
-   - Self-evaluation: Argument 4/4, Citation 3/4, Clarity 4/4, Structure 3/4, Style 4/4
-   - Score: 18/20 ✓ PASS
-   - **Decision Point 2**: Proceed to Chapter 2?
-
-3. **Chapter 2 - Narrative Compression Framework (1,200 words)**:
-   - Writing... [develops theoretical framework]
-   - Self-evaluation: All dimensions 3-4
-   - Score: 17/20 ✓ PASS
-   - **Decision Point 2**: Proceed to Chapter 3?
-
-4. **Chapter 3-5**: [Similar process for each chapter]
-
-5. **Chapter 6 - Conclusion (1,000 words)**:
-   - Writing... [synthesizes findings]
-   - Score: 18/20 ✓ PASS
-
-6. **Abstract (280 words)**:
-   - Writing... [summarizes complete paper]
-   - Score: 19/20 ✓ PASS
-
-7. **Cross-Chapter Coherence**: Terminology consistent ✓, Argument flow verified ✓, Citations complete ✓
-
-**Phase 5: Quality Control**
-
-1. **Completeness Check**: All items complete ✓ (18/18)
-
-2. **Final Evaluation**:
-   - Overall Argument: 9/10
-   - Literature Integration: 8/10 (48 citations)
-   - Clarity: 9/10
-   - Originality: 8/10
-   - Methodology: 8/10
-   - Structure: 9/10
-   - Platform Fit: 9/10
-   - **Total: 60/70 (85.7%)** ✓ PASS
-
-3. **Decision Point 3**: Paper scored 60/70 (Good quality, ready for submission). Submit now or implement optional improvements?
-
-4. **Submission Package**: PDF generated, metadata prepared, PhilArchive checklist complete ✓
-
-**Output**: Submission-ready manuscript + comprehensive quality reports
+**2. Assessment**
+For each flag, note whether it's a clear problem or a judgment call. Some AI-associated patterns are effective writing techniques — uniform paragraph length is a problem, but a well-placed "however" isn't. Call out which flags the writer should definitely fix vs. which ones are worth a second look but might be fine in context. If the text is clean, say so.
 
 ---
 
-## Tips for Best Results
+## Tone calibration
 
-### Provide Complete Outline
-- The more detailed your outline, the better the writing quality
-- Include content guidance for each section
-- Specify key citations and argument structure
-- Indicate expected word counts
+The goal is writing that sounds like a person wrote it. Direct. Specific. The writing should demonstrate confidence, not assert it.
 
-### Trust the Iterative Process
-- Chapter-level quality gates ensure each section is solid
-- Don't skip quality checks (they prevent cascading problems)
-- Revisions at chapter-level are easier than whole-paper revisions
+Five principles for human-sounding rewrites:
+1. **Vary sentence length** — mix short with long. Fragments are fine.
+2. **Be concrete** — replace vague claims with numbers, names, dates, or examples.
+3. **Have a voice** — where appropriate, use first person, state preferences, show reactions.
+4. **Cut the neutrality** — humans have opinions. If the piece is supposed to take a position, take it.
+5. **Earn your emphasis** — don't tell the reader something is interesting. Make it interesting.
 
-### Engage at Decision Points
-- Your input at decision points shapes the final manuscript
-- Feel free to request additional revisions even if chapter passes
-- Provide feedback on style or emphasis
+If the original writing is already strong, say so and make only the necessary cuts. Don't over-edit for the sake of it.
 
-### Use Quality Reports
-- Chapter reports show specific weaknesses
-- Final report provides objective submission readiness assessment
-- Use reports to track improvement across chapters
-
-### Leverage Section Guides
-- I reference `section_guides.md` for each section type
-- You can review these guides directly if you want to understand the approach
-- Guides include templates, examples, and common mistakes
-
----
-
-## Integration with Academic-Paper-Strategist
-
-This skill is designed to work seamlessly with **academic-paper-strategist**:
-
-**Ideal workflow**:
-1. Use **academic-paper-strategist** to:
-   - Identify optimal platform
-   - Conduct literature search
-   - Identify research gaps
-   - Assess originality
-   - Generate optimized detailed outline
-
-2. Use **academic-paper-composer** (this skill) to:
-   - Execute the outline systematically
-   - Maintain quality control during writing
-   - Produce submission-ready manuscript
-
-**Can be used standalone**: If you already have a detailed outline from another source, you can use this skill directly (skip strategist).
-
----
-
-## Limitations and Notes
-
-- **Requires detailed outline**: Vague outlines produce lower-quality output; specificity is key
-- **Iterative process takes time**: Quality writing with validation requires patience; typical timeline: 1-2 days for 10,000-word paper
-- **Quality checks are systematic, not perfect**: Final human review recommended before submission
-- **Platform-specific formatting**: I adapt to platform standards, but you should verify final format
-- **Complementary to strategist skill**: Best results come from using both skills in sequence
-
----
-
-## Common Issues and Solutions
-
-### Issue 1: Chapter Fails Quality Gate
-
-**Symptom**: Score <16/20 after writing chapter
-
-**Solution**:
-1. Review weak dimension(s) from report
-2. Implement specific recommendations
-3. Re-evaluate chapter
-4. Typical fix time: 30-60 minutes
-
-**Prevention**: Follow section guides closely during initial writing
-
-### Issue 2: Inconsistent Style Across Chapters
-
-**Symptom**: Some chapters feel different in tone or voice
-
-**Solution**:
-1. Run cross-chapter coherence check (Step 4.4)
-2. Identify inconsistent terminology or voice
-3. Revise to match dominant style
-4. Re-run check to verify
-
-**Prevention**: Reference platform standards before writing each chapter
-
-### Issue 3: Low Final Score (<56/70)
-
-**Symptom**: Paper fails final quality gate
-
-**Solution**:
-1. Identify weak dimensions from final report
-2. Focus on dimensions scoring <7/10
-3. Implement high-priority revisions systematically
-4. Re-evaluate after revisions
-
-**Common causes**: Insufficient literature integration, unclear contribution, poor coherence
-
-### Issue 4: Completeness Checklist Incomplete
-
-**Symptom**: Missing required elements
-
-**Solution**:
-1. Review which category has incomplete items
-2. Add missing elements (e.g., missing objections section, incomplete references)
-3. Re-run completeness check
-
-**Prevention**: Use writing tracker throughout; check outline completeness before starting
-
----
-
-## Platform-Specific Notes
-
-### PhilArchive / PhilPapers
-- **Style**: First-person acceptable ("I argue")
-- **Length**: 5,000-12,000 words typical
-- **Citations**: APA or Chicago author-year
-- **Quality focus**: Philosophical rigor, argument clarity
-
-### arXiv (Philosophy-adjacent)
-- **Style**: More formal, passive voice common
-- **Length**: Varies widely (3,000-20,000)
-- **Citations**: Varies by subcategory
-- **Quality focus**: Interdisciplinary clarity, technical precision
-
-### PhilSci-Archive
-- **Style**: Bridges philosophical and scientific
-- **Length**: 6,000-15,000 words typical
-- **Citations**: Author-year typical
-- **Quality focus**: Integration of philosophy + science
-
----
-
-## Summary
-
-**academic-paper-composer** transforms an optimized outline into a submission-ready manuscript through:
-
-1. **Systematic Writing** (Phase 4): Chapter-by-chapter execution with 5-dimension quality checks after each (≥16/20 threshold)
-2. **Quality Control** (Phase 5): Final 7-dimension assessment (≥56/70 threshold) + completeness validation + submission preparation
-
-**Quality Assurance**: Iterative evaluation at chapter and paper levels ensures consistent quality throughout.
-
-**Output**: Submission-ready manuscript with comprehensive quality reports documenting systematic validation.
-
-**Estimated Time**: 1-2 days for systematic writing and validation of 8,000-12,000 word paper (varies with outline detail and revision needs).
-
----
-
-## Related Skills
-
-**Prerequisite**: academic-paper-strategist
-- Produces the optimized outline that this skill executes
-- Highly recommended to use first for best results
-
-**This skill can be used standalone**: If you have a detailed outline from another source, you can proceed directly with this skill.
+The replacement table provides defaults, not mandates. If a flagged word is clearly the right choice in context, preserve it.

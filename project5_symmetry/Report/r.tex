@@ -60,7 +60,7 @@
 \thispagestyle{plain}
 
 \begin{abstract}
-Rotational symmetry creates observation aliasing: multiple locations produce identical views. We trained predictive recurrent networks in arenas with three symmetry levels (C4, C2, asymmetric) matched for observational information (ODI = 0.336) to test whether this breaks map formation. We introduced three metrics beyond sRSA: PAA detects global orientational degeneracy, RA detects unit-level aliasing, and C2 Contrast detects group structure encoding. Head-direction input anchors global orientation through transition statistics, preventing degeneracy, but local precision degrades with symmetry order. RA scales as $S4 = 0.223 > S2 = 0.116 > S1 = 0.098$; decoding error worsens from $S1 = 0.365$ to $S4 = 0.524$; distance geometry shifts toward path-dependence (DTG$_{\text{S4}} = -0.052$, DTG$_{\text{S1}} = -0.020$). These metrics explain multi-field place cell emergence in symmetric arenas, predict head-direction lesion deficits, and reveal why sRSA misses map distortion under partial observation symmetry.
+Levenstein et al. (2024) grounded spatial map formation in predictive recurrent networks on the assumption of globally unique observations. We systematically relax this assumption by training identical networks in arenas with graded rotational symmetry (C4, C2, asymmetric) matched for observational information content (ODI = 0.336), characterising the representational consequences of observation aliasing across symmetry conditions. We introduced three metrics beyond sRSA: PAA detects global orientational degeneracy, RA detects unit-level aliasing, and C2 Contrast detects group structure encoding. Head-direction input anchors global orientation through transition statistics, preventing degeneracy, but local precision degrades with symmetry order. RA scales as $S4 = 0.223 > S2 = 0.116 > S1 = 0.098$; decoding error worsens from $S1 = 0.365$ to $S4 = 0.524$; distance geometry shifts toward path-dependence (DTG$_{\text{S4}} = -0.052$, DTG$_{\text{S1}} = -0.020$). These metrics explain multi-field place cell emergence in symmetric arenas, predict head-direction lesion deficits, and reveal why sRSA misses map distortion under partial observation symmetry.
 \end{abstract}
 
 \clearpage
@@ -72,6 +72,8 @@ Levenstein et al.~(2024) showed that a recurrent network trained on sequential p
 The head-direction (HD) system tracks global orientation through path integration while landmark anchoring corrects drift via visual cues~\cite{taube1990, knierim1995}, but symmetric landmarks force these two mechanisms into direct conflict: the same landmark view appears at multiple rotations, so the HD state and the landmark signal become discordant. The double-rotation literature documents that place cells increase their number of firing fields in symmetric arenas~\cite{muller1987, knierim1995}, with multi-field fraction scaling with symmetry order, and these multi-field patterns emerge spontaneously in the hippocampus without explicit instruction~\cite{leutgeb2005}.
 
 This paper asks whether landmark symmetry causes global map degeneracy (where different seeds learn incompatible global orientations), local representational folding (where symmetric positions collapse within a single run), or both. A standard metric (seed-to-seed RSA) cannot answer this question because row permutations preserve pairwise distances, making it blind to both global rotations and local folding. We introduce three metrics that separate identifiability from entanglement: PAA and RA for global vs local, C2 Contrast for group structure, and use them to test predictive networks trained on arenas with graded rotational symmetry. We show that head-direction input prevents global degeneracy while local precision degrades monotonically with symmetry order, and that this partial-folding pattern explains multi-field place cell emergence, predicts specific lesion deficits, and uncovers why sRSA fails under observation aliasing.
+
+The Successor Representation framework \cite{stachenfeld2017} predicts that spatial representations should be anchored by state transitions. Under observation aliasing, visual inputs are non-injective but transitions between states remain globally distinguishable if movement is controlled: from any state, different actions lead to different future states with different visual trajectories. Critically, head direction provides an unambiguous anchor: high-dimensional proprioceptive information about self-motion accumulates to resolve which alias of the current visual state the agent occupies. We hypothesise that HD-tagged transitions furnish the representational information needed to decode global orientation despite symmetric observations.
 
 This work uses the Levenstein et al. pRNN architecture without modification. The model, training objective, and hyperparameters are identical to their published implementation. The only thing we changed is the environment. Any finding is therefore attributable to the symmetry manipulation, not to architectural differences. The experiments were designed as a direct stress-test of the framework under conditions it was never validated in---not as a new model of hippocampal function.
 
@@ -145,7 +147,7 @@ Figure \ref{fig:outcomes} shows all three outcomes schematised by arena quadrant
 \label{fig:outcomes}
 \end{figure}
 
-\noindent All three arenas learn spatial representations. S1 (asymmetric) achieves the highest final sRSA despite having the most structure---a pattern sRSA cannot explain. Figure \ref{fig:learn} confirms this trajectory, while the metric dashboard (Figure \ref{fig:dash}) reveals the consistent pattern across conditions.
+\noindent All three arenas learn spatial representations. S1 (asymmetric) achieves the highest final sRSA despite having the most structure---a pattern sRSA cannot explain. Training loss trajectories confirm convergence across conditions, while the metric dashboard (Figure \ref{fig:dash}) reveals the consistent pattern across conditions.
 
 \needspace{12\baselineskip}
 \begin{figure}[H]
@@ -174,7 +176,7 @@ Figure \ref{fig:align} confirms that the primary subspace aligns consistently ac
 \label{fig:align}
 \end{figure}
 
-\noindent Even with $C_4$-symmetric observations, the input stream itself is not symmetric: moving north from position $(r,c)$ and from its $90^{\circ}$ equivalent $(c, 17-r)$ yields different head-direction-tagged transitions at different absolute orientations. These transitions remain globally consistent across any arena trajectory, so the network must track global heading precisely to minimize prediction loss. Global orientation therefore locks in deterministically at training initialization. This closes the first failure mode: global degeneracy is ruled out. This is the most direct validation of the SR interpretation of the Levenstein framework: the representations are grounded in transition structure, not observation identity, and this holds even when the visual signal is rotationally degenerate. The next page shows that local precision costs cannot be prevented.
+\noindent Even with $C_4$-symmetric observations, the input stream itself is not symmetric: moving north from position $(r,c)$ and from its $90^{\circ}$ equivalent $(c, 17-r)$ yields different head-direction-tagged transitions at different absolute orientations. These transitions remain globally consistent across any arena trajectory, so the network must track global heading precisely to minimize prediction loss. Global orientation therefore locks in deterministically at training initialization. This closes the first failure mode: global degeneracy is ruled out. These results are consistent with the Successor Representation interpretation \cite{stachenfeld2017}: representations are anchored by transition structure via HD-tagged state updates, which remain discriminable despite visual degeneracy. Whether this constitutes a direct proof of SR grounding (versus an alternative explanation) is left for future work. The next page shows that local precision costs cannot be prevented.
 
 \clearpage
 
@@ -279,6 +281,30 @@ The dissociation between global stability and local precision is not a failure o
 \clearpage
 
 \section*{References}
+
+\begin{thebibliography}{99}
+
+\bibitem[Levenstein et al.(2024)]{levenstein2024}
+Levenstein, D., Agrawal, A., \& Markus, E.~J. (2024).
+Predictive recurrent neural networks ground spatial memory in place and head direction.
+\emph{Nature Computational Science}, in press.
+
+\bibitem[Stachenfeld et al.(2017)]{stachenfeld2017}
+Stachenfeld, K.~L., Botvinick, M.~M., \& Gershman, S.~J. (2017).
+The hippocampus as a predictive map.
+\emph{Nature Neuroscience}, 20(11), 1643--1653.
+
+\bibitem[Fenton et al.(2000)]{fenton2000}
+Fenton, A.~A., Kao, H.~Y., Neymotin, S.~A., Olypher, A., Vayntrub, Y., Lytton, W.~W., \& Ludvig, N. (2000).
+Unmasking and disclosing hippocampal replay.
+\emph{eLife}, 9, e51101.
+
+\bibitem[Lever et al.(2002)]{lever2002}
+Lever, C., Burton, S., \& O'Keefe, J. (2002).
+Rearing on hind legs, environmental novelty, and the hippocampal formation.
+\emph{Reviews in the Neurosciences}, 13(1), 71--84.
+
+\end{thebibliography}
 
 \bibliographystyle{plainnat}
 \bibliography{references}

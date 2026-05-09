@@ -54,6 +54,10 @@ This path is more modular. Each experiment script assembles configs, builds envi
 
 This is the newest path for image-like egocentric visual observations rather than the older hand-crafted BVC/head-direction observation stream.
 
+### GPU Manager path
+
+`gpu_manager.py` → spawns any training script (e.g. `run_symmetry_sweep.py`, `trainNet.py`, `run_p5.py`) as subprocesses with parallel seed management, live GPU/VRAM monitoring, and an embedded scientific advisor for pRNN experiments.
+
 ## Top-Level Files And Folders
 
 ### Root files
@@ -67,6 +71,7 @@ This is the newest path for image-like egocentric visual observations rather tha
 - `trainNet.py`: legacy training entry point for one predictive-RNN experiment.
 - `run_analysis.py`: legacy analysis/reproduction script that loads one saved network and runs spatial tuning analysis.
 - `train_single_run.py`: new entry point for one visual predictive-RNN run from a JSON config.
+- `gpu_manager.py`: GPU experiment orchestrator with live Rich dashboard, hardware auto-detection, scientific advisor (statistical power, hyperparameter guidance), and parallel seed management. Wraps any training script as subprocesses.
 
 ### Root folders
 

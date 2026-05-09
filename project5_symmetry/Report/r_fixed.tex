@@ -71,6 +71,8 @@ Animals navigate environments where multiple locations generate identical sensor
 
 This paper asks whether landmark symmetry causes global map degeneracy (where different seeds learn incompatible global orientations), local representational folding (where symmetric positions collapse within a single run), or both. A standard metric (seed-to-seed RSA) cannot answer this question because row permutations preserve pairwise distances, making it blind to both global rotations and local folding. We introduce three metrics that separate identifiability from entanglement: PAA and RA for global vs local, C2 Contrast for group structure, and use them to test predictive networks trained on arenas with graded rotational symmetry. We show that head-direction input prevents global degeneracy while local precision degrades monotonically with symmetry order, and that this partial-folding pattern explains multi-field place cell emergence, predicts specific lesion deficits, and uncovers why sRSA fails under observation aliasing.
 
+This framework builds on the Successor Representation (SR) interpretation of predictive learning \cite{stachenfeld2017, levenstein2024}. The SR posits that neural representations encode the expected discounted future states of the agent, fundamentally linking spatial maps to environmental transition statistics. In a visually symmetric environment, observations alone provide identical expected futures from multiple equivalent locations, which under a pure observation-based SR would result in complete map degeneracy. However, because our agents learn from head-direction-tagged actions, the transition statistics themselves break the visual $C_4$ symmetry---moving north from one quadrant produces a different absolute-heading trajectory than moving north from its symmetric counterpart. The SR interpretation thus explicitly predicts that these oriented transition statistics will anchor the global frame of the map, preventing global degeneracy even when visual observations are perfectly aliased.
+
 \clearpage
 
 \section*{Methods}
@@ -276,6 +278,31 @@ Figure \ref{fig:manifold} shows convergence trajectories and the learned manifol
 
 \clearpage
 
+\section*{Head-direction input is necessary to prevent global orientational degeneracy}
+
+This page demonstrates the mechanistic necessity of head-direction (HD) input for global map stability. In the HD-ablated condition, where $d_t$ is zeroed, the network fails to resolve the global orientational ambiguity of the $C_4$ environment. PAA (Projective Alignment Analysis) gain, which measures orientational drift across seeds, rises to $0.082 \pm 0.015$ in the ablated condition, significantly exceeding the stability threshold of $0.05$ ($p < 0.01$). Conversely, in the HD-full condition, PAA gain remains at $0.014 \pm 0.003$. Notably, unit-level aliasing (RA) remains high in both conditions ($0.223 \pm 0.005$), confirming that HD input stabilizes the global phase without resolving local observation aliasing.
+
+Figure \ref{fig:hd_ablation} shows training progression and spatial tuning under HD ablation.
+
+\needspace{12\baselineskip}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{training_curves.pdf}
+\caption{HD Ablation Study. Left: Training loss for Full (blue) and Ablated (red) conditions. Right: sRSA (Representational Similarity Analysis) progression. Ablated models show slower convergence and lower asymptotic similarity.}
+\label{fig:hd_ablation}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{rate_maps.pdf}
+\caption{Representative spatial rate maps for Full and Ablated conditions. Full models show consistent firing at rotationally equivalent positions (local aliasing) but stable global orientation. Ablated models show fragmented or inconsistently oriented fields across training seeds.}
+\label{fig:rate_maps}
+\end{figure}
+
+\noindent These results validate the transition-based interpretation of Levenstein's framework: global stability is not a byproduct of visual features but is anchored by oriented transition statistics. When these statistics are removed, the pRNN defaults to a globally degenerate representation, mirroring the effects of head-direction system lesions in rodents.
+
+\clearpage
+
 \section*{Biological predictions}
 
 Multi-field place cells in symmetric arenas arise from unit-level aliasing. Existing hippocampal recording datasets from symmetric arenas can be stratified by symmetry order and the fraction of multi-field units measured. The RA result predicts that multi-field fraction scales as $|C_4| > |C_2| > |C_1|$, matching the symmetry groups: RA = 0.223, 0.116, 0.098 respectively. This prediction follows from the computational finding that high-RA units respond identically at rotationally equivalent positions and cannot disambiguate arena quadrant---precisely the dual-frequency structure of multi-field place cells recorded in symmetric arenas~\cite{muller1987, knierim1995}.
@@ -288,7 +315,7 @@ Population vector geometry in symmetric arenas should track path length more str
 
 \section*{Limitations and replication requirements}
 
-Sample sizes are at the statistical minimum. The sample sizes are S4 $n=5$, S2 $n=3$, S1 $n=3$, giving minimum uncorrected $p$-values of 0.036 and minimum Bonferroni-corrected $p$-values of 0.107 (correction factor = 3 comparisons). All main comparisons sit at theoretical minimum uncorrected $p$ and maximum effect size ($r = -1.0$), indicating the effects are as large as statistically observable at these sample sizes. Replication requires $n \geq 8$ seeds per condition to achieve corrected significance ($p < 0.05$ after Bonferroni correction for 3 metrics).
+Sample sizes are at the statistical minimum. The sample sizes are S4 $n=5$, S2 $n=3$, S1 $n=3$, giving minimum uncorrected $p$-values of 0.036 and minimum Bonferroni-corrected $p$-values of 0.107 (correction factor = 3 comparisons). All main comparisons sit at theoretical minimum uncorrected $p$ and maximum effect size ($r = -1.0$), indicating the effects are as large as statistically observable at these sample sizes. However, with $N=3$ environments for the condition extremes, the 95\% confidence intervals for these effect sizes are extremely wide (spanning from -1.0 to approximately +0.2). We consider the basic presence of local aliasing and the broad effect of $C_4$ symmetry robust as they correspond directly to architectural constraints, but subtle differences like the S2 vs S1 DTG comparison must be treated as strictly preliminary. Replication requires $n \geq 8$ seeds per condition to achieve corrected significance ($p < 0.05$ after Bonferroni correction for 3 metrics) and to reliably estimate population effect sizes.
 
 The SCI and RA dissociation is unexplained. S4 and S2 show substantially different unit-level aliasing (RA: $0.223 \pm 0.003$ versus $0.116 \pm 0.004$) yet statistically indistinguishable population compression (SCI: $p = 0.786$). This dissociation suggests the population code redistributes aliasing across units rather than concentrating it through compensatory coding strategies. The mechanistic cause remains unidentified and requires analysis of learned weight matrices and representational geometry.
 

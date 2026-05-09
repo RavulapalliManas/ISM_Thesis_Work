@@ -1,8 +1,8 @@
-PWD /Users/manasvenkatasairavulapalli/Desktop/ISM work/ISM_Code/ISM_Thesis_Work/.claude/worktrees/sad-ride/project5_symmetry/Report
+PWD /Users/manasvenkatasairavulapalli/Desktop/Research Work/ISM_Thesis_Work/project5_symmetry/Report
 INPUT /usr/local/texlive/2023/texmf.cnf
 INPUT /usr/local/texlive/2023/texmf-dist/web2c/texmf.cnf
 INPUT /usr/local/texlive/2023/texmf-var/web2c/pdftex/pdflatex.fmt
-INPUT /Users/manasvenkatasairavulapalli/Desktop/ISM work/ISM_Code/ISM_Thesis_Work/.claude/worktrees/sad-ride/project5_symmetry/Report/r.tex
+INPUT /Users/manasvenkatasairavulapalli/Desktop/Research Work/ISM_Thesis_Work/project5_symmetry/Report/r.tex
 OUTPUT r.log
 INPUT /usr/local/texlive/2023/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/local/texlive/2023/texmf-dist/tex/latex/base/article.cls
@@ -774,13 +774,10 @@ INPUT ./images//fig_failure_modes.png
 INPUT images//fig_failure_modes.png
 INPUT ./images//fig_failure_modes.png
 INPUT ./images//fig_failure_modes.png
-INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplb7t.tfm
 INPUT ./images//fig2_final_metrics.png
 INPUT images//fig2_final_metrics.png
 INPUT ./images//fig2_final_metrics.png
 INPUT ./images//fig2_final_metrics.png
-INPUT /usr/local/texlive/2023/texmf-dist/fonts/vf/adobe/palatino/pplb7t.vf
-INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplb8r.tfm
 INPUT ./images//fig5_rsa_alignment.png
 INPUT images//fig5_rsa_alignment.png
 INPUT ./images//fig5_rsa_alignment.png
@@ -797,6 +794,9 @@ INPUT ./images//fig3_si_distribution.png
 INPUT images//fig3_si_distribution.png
 INPUT ./images//fig3_si_distribution.png
 INPUT ./images//fig3_si_distribution.png
+INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplb7t.tfm
+INPUT /usr/local/texlive/2023/texmf-dist/fonts/vf/adobe/palatino/pplb7t.vf
+INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplb8r.tfm
 INPUT ./images//fig7_dtg_curves.png
 INPUT images//fig7_dtg_curves.png
 INPUT ./images//fig7_dtg_curves.png
@@ -809,11 +809,11 @@ INPUT ./images//image.png
 INPUT images//image.png
 INPUT ./images//image.png
 INPUT ./images//image.png
-INPUT ./r.bbl
-INPUT r.bbl
-INPUT ./r.bbl
-INPUT r.bbl
 INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplri7t.tfm
+INPUT ./r.bbl
+INPUT r.bbl
+INPUT ./r.bbl
+INPUT r.bbl
 INPUT /usr/local/texlive/2023/texmf-dist/fonts/vf/adobe/palatino/pplri7t.vf
 INPUT /usr/local/texlive/2023/texmf-dist/fonts/tfm/adobe/palatino/pplri8r.tfm
 INPUT r.aux
