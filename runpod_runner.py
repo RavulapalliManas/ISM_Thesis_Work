@@ -1812,6 +1812,10 @@ def _build_all_queues(dataset_workers: int):
         })
     symmetry_pbar.close()
 
+    if "s4" not in data_cache:
+        data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
+    s4_data_dir, s4_obs_size = data_cache["s4"]
+
     ablation_queue = []
     ablation_pbar = tqdm(
         total=len(ablation_seeds),
@@ -1825,9 +1829,6 @@ def _build_all_queues(dataset_workers: int):
         ablation_pbar.update(1)
         if check_existing(cond, seed_idx, hd_mode):
             continue
-        if cond not in data_cache:
-            data_cache[cond] = _ensure_condition_data(cond, dataset_workers=dataset_workers)
-        data_dir, obs_size = data_cache[cond]
         ablation_queue.append({
             "queue": "ablation",
             "condition": cond,
@@ -1836,17 +1837,13 @@ def _build_all_queues(dataset_workers: int):
             "max_steps": max_steps,
             "checkpoint_steps": ABLATION_CHECKPOINTS,
             "output_dir": str(_ablation_run_dir(hd_mode, seed_idx)),
-            "data_dir": str(data_dir),
-            "obs_size": obs_size,
+            "data_dir": str(s4_data_dir),
+            "obs_size": s4_obs_size,
             "gpu_id": 0,
             "k": 5,
             "trunc": 200,
         })
     ablation_pbar.close()
-
-    if "s4" not in data_cache:
-        data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
-    s4_data_dir, s4_obs_size = data_cache["s4"]
 
     epsilon_queue = []
     epsilon_pbar = tqdm(
