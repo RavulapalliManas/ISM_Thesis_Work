@@ -31,7 +31,7 @@ import numpy as np
 
 PER_SEED_VRAM_GB = 2.0
 VRAM_HEADROOM_GB = 1.0
-MAX_PARALLEL_CAP = 12
+MAX_PARALLEL_CAP = 8
 RUNPOD_A5000_USD_PER_HOUR = 0.27
 
 SYMMETRY_CHECKPOINTS = [5000, 10000, 20000, 40000, 60000, 80000]
@@ -877,6 +877,8 @@ def _write_latex_tables(tables_dir: Path, rows: list[dict[str, Any]]):
 
 
 def run_posthoc_outputs() -> dict[str, Any]:
+    from tqdm import tqdm
+
     print("\n" + "=" * 60)
     print("POST-HOC ANALYSIS - evaluations, statistics, figures")
     print("=" * 60)
@@ -889,7 +891,17 @@ def run_posthoc_outputs() -> dict[str, Any]:
     tables_dir.mkdir(parents=True, exist_ok=True)
 
     symmetry_evals: dict[tuple[str, int], dict[str, Any]] = {}
-    for condition, seed, run_dir in _discover_symmetry_seed_dirs():
+    symmetry_dirs = list(_discover_symmetry_seed_dirs())
+    sym_pbar = tqdm(
+        total=len(symmetry_dirs),
+        desc="[EVAL] Symmetry runs",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
+    for condition, seed, run_dir in symmetry_dirs:
+        sym_pbar.update(1)
         try:
             data_dir, obs_size = _condition_data_dir_for_eval(condition)
             print(f"Evaluating symmetry {condition} seed_{seed:02d}")
@@ -898,9 +910,20 @@ def run_posthoc_outputs() -> dict[str, Any]:
             )
         except Exception as exc:
             print(f"WARNING: symmetry evaluation failed for {condition} seed_{seed:02d}: {exc}")
+    sym_pbar.close()
 
     ablation_evals: dict[tuple[str, int], dict[str, Any]] = {}
-    for hd_mode, seed, run_dir in _discover_ablation_seed_dirs():
+    ablation_dirs = list(_discover_ablation_seed_dirs())
+    abl_pbar = tqdm(
+        total=len(ablation_dirs),
+        desc="[EVAL] Ablation runs",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
+    for hd_mode, seed, run_dir in ablation_dirs:
+        abl_pbar.update(1)
         try:
             data_dir, obs_size = _condition_data_dir_for_eval("s4")
             print(f"Evaluating HD ablation {hd_mode} seed_{seed:02d}")
@@ -909,6 +932,7 @@ def run_posthoc_outputs() -> dict[str, Any]:
             )
         except Exception as exc:
             print(f"WARNING: ablation evaluation failed for {hd_mode} seed_{seed:02d}: {exc}")
+    abl_pbar.close()
 
     condition_summaries = _build_condition_summaries(symmetry_evals) if symmetry_evals else {}
     _save_pickle(metrics_dir / "runpod_symmetry_evaluations.pkl", symmetry_evals)
@@ -1282,12 +1306,16 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     metric_n = int(getattr(train_mod, "SUBSAMPLE_N", 5000))
     metric_repeats = int(getattr(train_mod, "SRSA_EVAL_RUNS", 3))
 
+    queue_label = args.get("queue", "unknown")
     pbar = tqdm(
         total=max_steps - latest_step,
-        desc=f"{condition} seed{seed_idx} eps{epsilon:.1f} {hd_mode}",
+        desc=f"[{queue_label}] {condition} s{seed_idx:02d} eps{epsilon:.1f} hd={hd_mode}",
         unit="step",
+        unit_scale=1,
         dynamic_ncols=True,
         leave=True,
+        position=2,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] {postfix}",
     )
 
     def train_step(step: int):
@@ -1333,7 +1361,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
         writer.add_scalar("loss/train", current_loss, step)
         pbar.update(1)
         if step % 100 == 0 or step == latest_step + 1:
-            pbar.set_postfix({"loss": f"{current_loss:.4f}", "anchors": n_anchors, "B": batch_size})
+            pbar.set_postfix_str(f"loss={current_loss:.4f} anchors={n_anchors} B={batch_size}")
 
         if step == latest_step + 500 and initial_loss is not None:
             loss_delta = current_loss - initial_loss
@@ -1355,6 +1383,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
                 n=metric_n,
                 repeats=metric_repeats,
             )
+            gc.collect()
             train_mod._write_live_metrics(
                 writer,
                 step,
@@ -1406,6 +1435,8 @@ def _run_seed_worker_inner(args: dict[str, Any]):
             h_path = output_dir / f"H_{step}.npy"
             np.save(h_path, H)
             log_dict["H_paths"].append(str(h_path))
+            del H
+            gc.collect()
 
             if device.type == "cuda":
                 vram_gb = torch.cuda.memory_allocated() / 1e9
@@ -1441,6 +1472,8 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     final_h_path = output_dir / f"H_{max_steps}.npy"
     np.save(final_h_path, final_H)
     log_dict["H_paths"].append(str(final_h_path))
+    del final_H
+    gc.collect()
 
     if max_steps % SRSA_LOG_EVERY != 0:
         srsa_e, srsa_c, geometry_metrics = evaluate_srsa_and_geometry_hd(
@@ -1452,6 +1485,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
             n=metric_n,
             repeats=metric_repeats,
         )
+        gc.collect()
         train_mod._write_live_metrics(
             writer,
             max_steps,
@@ -1495,18 +1529,42 @@ def _run_seed_worker_inner(args: dict[str, Any]):
 
 
 def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
+    from tqdm import tqdm
+
     ctx = multiprocessing.get_context("spawn")
     pending = list(queue)
     results = []
     current_parallelism = max(1, parallelism)
     oom_reductions = 0
 
+    total_runs = len(queue)
+    completed_runs = 0
+    main_pbar = tqdm(
+        total=total_runs,
+        desc="[QUEUE] Overall progress",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
+
     while pending:
         print(f"\nLaunching {len(pending)} runs with parallelism={current_parallelism}")
         batch_results = []
+        batch_pbar = tqdm(
+            total=len(pending),
+            desc=f"[BATCH] parallel={current_parallelism}",
+            unit="run",
+            position=1,
+            leave=True,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+        )
         with ctx.Pool(processes=current_parallelism) as pool:
             for result in pool.imap_unordered(run_seed_worker, pending):
                 batch_results.append(result)
+                batch_pbar.update(1)
+                completed_runs += 1
+                main_pbar.update(1)
                 if result is None:
                     print("Completed: worker returned None")
                 elif result.get("error"):
@@ -1519,6 +1577,8 @@ def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
                         f'Completed: {result["condition"]} seed_{result["seed"]:02d} '
                         f'hd={result["hd_mode"]} loss={result["final_loss"]:.4f}'
                     )
+
+        batch_pbar.close()
 
         oom_count = sum(1 for r in batch_results if r and r.get("oom"))
         results.extend(batch_results)
@@ -1543,34 +1603,67 @@ def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
         else:
             pending = []
 
+    main_pbar.close()
     return results, current_parallelism, oom_reductions
 
 
 def _check_existing_runs():
     """Check what experiments have been completed."""
+    from tqdm import tqdm
+
     print("\n" + "=" * 60)
     print("CHECKING EXISTING RUNS")
     print("=" * 60)
-    
+
     symmetry_conditions = ["s1", "s2", "s4"]
     ablation_modes = ["full", "ablated", "degraded"]
-    
+
     symmetry_completed = {}
+    all_check_pairs = []
     for cond in symmetry_conditions:
-        count = 0
         for seed in range(10):
-            if _symmetry_run_dir(cond, seed).joinpath("ckpt_final.pt").exists():
-                count += 1
-        symmetry_completed[cond] = count
-    
-    ablation_completed = {}
+            all_check_pairs.append(("symmetry", cond, seed))
+
     for mode in ablation_modes:
-        count = 0
         for seed in range(10):
+            all_check_pairs.append(("ablation", mode, seed))
+
+    for eps in EPSILON_LEVELS:
+        for seed in range(10):
+            all_check_pairs.append(("epsilon", eps, seed))
+
+    pbar = tqdm(
+        total=len(all_check_pairs),
+        desc="[CHECK] Verifying existing runs",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
+
+    for kind, key1, key2 in all_check_pairs:
+        pbar.update(1)
+        if kind == "symmetry":
+            cond, seed = key1, key2
+            if _symmetry_run_dir(cond, seed).joinpath("ckpt_final.pt").exists():
+                symmetry_completed[cond] = symmetry_completed.get(cond, 0) + 1
+        elif kind == "ablation":
+            mode, seed = key1, key2
             if _ablation_run_dir(mode, seed).joinpath("ckpt_final.pt").exists():
-                count += 1
-        ablation_completed[mode] = count
-    
+                ablation_completed[mode] = ablation_completed.get(mode, 0) + 1
+        else:
+            eps, seed = key1, key2
+            if _epsilon_run_dir(eps, seed).joinpath("ckpt_final.pt").exists():
+                epsilon_completed[eps] = epsilon_completed.get(eps, 0) + 1
+
+    pbar.close()
+
+    for cond in symmetry_conditions:
+        symmetry_completed[cond] = symmetry_completed.get(cond, 0)
+
+    for mode in ablation_modes:
+        ablation_completed[mode] = ablation_completed.get(mode, 0)
+
     epsilon_completed = {}
     for eps in EPSILON_LEVELS:
         count = 0
@@ -1578,19 +1671,19 @@ def _check_existing_runs():
             if _epsilon_run_dir(eps, seed).joinpath("ckpt_final.pt").exists():
                 count += 1
         epsilon_completed[eps] = count
-    
-    print(f"Symmetry sweeps completed:")
+
+    print(f"\nSymmetry sweeps completed:")
     for cond, count in symmetry_completed.items():
         print(f"  {cond}: {count} seeds")
-    
+
     print(f"\nHD ablation completed:")
     for mode, count in ablation_completed.items():
         print(f"  {mode}: {count} seeds")
-    
+
     print(f"\nEpsilon sweep completed:")
     for eps, count in epsilon_completed.items():
         print(f"  eps_{eps}: {count} seeds")
-    
+
     return {
         "symmetry": symmetry_completed,
         "ablation": ablation_completed,
@@ -1600,6 +1693,8 @@ def _check_existing_runs():
 
 def _build_all_queues(dataset_workers: int):
     """Build all three queues separately."""
+    from tqdm import tqdm
+
     new_seeds = [
         ("s1", 3, "full", 80000),
         ("s1", 4, "full", 80000),
@@ -1626,11 +1721,20 @@ def _build_all_queues(dataset_workers: int):
         (0.7, 0, 80000), (0.7, 1, 80000), (0.7, 2, 80000),
         (1.0, 0, 80000), (1.0, 1, 80000), (1.0, 2, 80000),
     ]
-    
+
     data_cache: dict[str, tuple[Path, int]] = {}
-    
+
     symmetry_queue = []
+    symmetry_pbar = tqdm(
+        total=len(new_seeds),
+        desc="[BUILD] Symmetry queue",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
     for cond, seed_idx, hd_mode, max_steps in new_seeds:
+        symmetry_pbar.update(1)
         if check_existing(cond, seed_idx, None):
             continue
         if cond not in data_cache:
@@ -1650,9 +1754,19 @@ def _build_all_queues(dataset_workers: int):
             "k": 5,
             "trunc": 200,
         })
-    
+    symmetry_pbar.close()
+
     ablation_queue = []
+    ablation_pbar = tqdm(
+        total=len(ablation_seeds),
+        desc="[BUILD] Ablation queue",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
     for cond, seed_idx, hd_mode, max_steps in ablation_seeds:
+        ablation_pbar.update(1)
         if check_existing(cond, seed_idx, hd_mode):
             continue
         if cond not in data_cache:
@@ -1672,13 +1786,23 @@ def _build_all_queues(dataset_workers: int):
             "k": 5,
             "trunc": 200,
         })
-    
+    ablation_pbar.close()
+
     if "s4" not in data_cache:
         data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
     s4_data_dir, s4_obs_size = data_cache["s4"]
-    
+
     epsilon_queue = []
+    epsilon_pbar = tqdm(
+        total=len(epsilon_seeds),
+        desc="[BUILD] Epsilon queue",
+        unit="run",
+        position=0,
+        leave=True,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
+    )
     for epsilon, seed_idx, max_steps in epsilon_seeds:
+        epsilon_pbar.update(1)
         if check_existing("s4", seed_idx, None, epsilon):
             continue
         epsilon_queue.append({
@@ -1696,7 +1820,8 @@ def _build_all_queues(dataset_workers: int):
             "k": 5,
             "trunc": 200,
         })
-    
+    epsilon_pbar.close()
+
     return symmetry_queue, ablation_queue, epsilon_queue
 
 
