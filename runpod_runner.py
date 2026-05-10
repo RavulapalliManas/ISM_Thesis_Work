@@ -15,6 +15,7 @@ import json
 import math
 import multiprocessing
 import os
+import pickle
 import platform
 import socket
 import sys
@@ -35,6 +36,9 @@ RUNPOD_A5000_USD_PER_HOUR = 0.27
 
 SYMMETRY_CHECKPOINTS = [5000, 10000, 20000, 40000, 60000, 80000]
 ABLATION_CHECKPOINTS = [10000, 20000, 30000, 40000]
+SRSA_LOG_EVERY = 1000
+GEOMETRY_LOG_EVERY = 5000
+EVS_THRESHOLD = 0.10
 
 
 @dataclass(frozen=True)
@@ -342,10 +346,771 @@ def extract_H_matrix_compatible(model, eval_dataset, device, condition: str, hd_
     return aggregated["hidden"]
 
 
+def evaluate_srsa_and_geometry_hd(
+    model,
+    eval_dataset,
+    device,
+    hd_mode: str,
+    need_geometry: bool,
+    n: int,
+    repeats: int,
+) -> tuple[float, float, dict[str, float] | None]:
+    """Evaluate sRSA and, optionally, slower geometry metrics with HD substitution applied."""
+    metrics = importlib.import_module("project5_symmetry.evaluation.metrics")
+    srsa_e = []
+    srsa_c = []
+    geometry_source = None
+
+    for rep in range(max(1, repeats)):
+        hidden, positions = _collect_hidden_states_hd(model, eval_dataset, n=n, device=device, hd_mode=hd_mode)
+        srsa_e.append(float(metrics.srsa(hidden, positions, space_metric="euclidean", max_n=n)))
+        srsa_c.append(float(metrics.srsa(hidden, positions, space_metric="cityblock", max_n=n)))
+        if rep == 0:
+            geometry_source = (hidden, positions)
+
+    geometry_metrics = None
+    if need_geometry and geometry_source is not None:
+        hidden, positions = geometry_source
+        arena_size = int(np.max(np.rint(positions))) if positions.size else 0
+        aggregated = metrics.aggregate_hidden_by_position(hidden, positions)
+        position_hidden = aggregated["hidden"]
+        rgc = metrics.representational_geometry_consistency(position_hidden)
+        coherence = metrics.place_field_spatial_coherence(
+            hidden,
+            positions,
+            arena_size=arena_size,
+        )
+        geometry_metrics = {
+            "manifold_id": float(metrics.manifold_id(position_hidden)),
+            "pca_variance_2d": float(rgc["pca_var_2d"]),
+            "mds_stress": float(rgc["stress"]),
+            "mean_field_coherence": float(coherence["mean_score"]),
+        }
+
+    return float(np.mean(srsa_e)), float(np.mean(srsa_c)), geometry_metrics
+
+
 def _save_json(path: Path, payload: Any):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(payload, f, indent=2, default=_json_default)
+
+
+def _save_pickle(path: Path, payload: Any):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump(payload, f)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _load_final_model_for_eval(run_dir: Path, data_dir: Path, obs_size: int, device):
+    import torch
+
+    train_mod = importlib.import_module("project5_symmetry.training.train")
+    model, _compiled = train_mod._build_model(
+        obs_size=obs_size,
+        act_size=5,
+        k=5,
+        trunc=200,
+        device=device,
+        compile_cell=False,
+    )
+    ckpt_path = run_dir / "ckpt_final.pt"
+    ckpt = torch.load(ckpt_path, map_location=device)
+    state = ckpt.get("model") or ckpt.get("model_state_dict") or ckpt.get("model_state")
+    if state is None:
+        raise KeyError(f"No model state found in {ckpt_path}")
+    fixed_state = {key.replace("rnn.cell._orig_mod.", "rnn.cell."): value for key, value in state.items()}
+    model.load_state_dict(fixed_state, strict=False)
+    model.to(device).eval()
+    return model
+
+
+def _evaluate_completed_run(
+    condition: str,
+    seed: int,
+    run_dir: Path,
+    data_dir: Path,
+    obs_size: int,
+    hd_mode: str,
+) -> dict[str, Any]:
+    import torch
+
+    metrics = importlib.import_module("project5_symmetry.evaluation.metrics")
+    dataset_mod = importlib.import_module("project5_symmetry.training.dataset")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dataset = dataset_mod.TrajectoryDataset(str(data_dir))
+    model = _load_final_model_for_eval(run_dir, data_dir, obs_size, device)
+
+    hidden, positions = _collect_hidden_states_hd(model, dataset, n=5000, device=device, hd_mode=hd_mode)
+    aggregated = metrics.aggregate_hidden_by_position(hidden, positions)
+    position_hidden = aggregated["hidden"]
+    position_array = aggregated["positions"]
+    srsa_value, rsa_matrix = metrics.srsa(
+        position_hidden,
+        position_array,
+        space_metric="euclidean",
+        return_matrix=True,
+    )
+    arena_size = int(np.max(np.rint(positions))) if positions.size else 18
+    place_field = metrics.place_field_spatial_coherence(
+        hidden,
+        positions,
+        arena_size=arena_size,
+    )
+    rgc = metrics.representational_geometry_consistency(position_hidden)
+
+    result = {
+        "condition": condition,
+        "seed": seed,
+        "hd_mode": hd_mode,
+        "srsa": float(srsa_value),
+        "rsa_matrix": rsa_matrix,
+        "position_hidden": position_hidden,
+        "position_array": position_array,
+        "position_counts": aggregated["counts"],
+        "place_field_coherence": place_field,
+        "rgc": rgc,
+    }
+    _save_pickle(run_dir / "evaluation.pkl", result)
+    _save_json(
+        run_dir / "evaluation.json",
+        {
+            "condition": condition,
+            "seed": seed,
+            "hd_mode": hd_mode,
+            "srsa": result["srsa"],
+            "n_positions": int(position_array.shape[0]),
+            "position_hidden_shape": list(position_hidden.shape),
+            "rsa_matrix_shape": list(rsa_matrix.shape),
+            "place_field_coherence": {
+                "mean_score": result["place_field_coherence"]["mean_score"],
+                "std_score": result["place_field_coherence"]["std_score"],
+                "n_valid_units": result["place_field_coherence"]["n_valid_units"],
+                "evs_threshold": result["place_field_coherence"]["evs_threshold"],
+            },
+            "rgc": result["rgc"],
+            "pickle_path": str(run_dir / "evaluation.pkl"),
+        },
+    )
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    del model, dataset
+    gc.collect()
+    return result
+
+
+def _discover_symmetry_seed_dirs() -> list[tuple[str, int, Path]]:
+    sweep_root = PATHS.results_root / "symmetry_sweep"
+    records = []
+    for condition in ("s1", "s2", "s4"):
+        cond_dir = sweep_root / condition
+        if not cond_dir.exists():
+            continue
+        for seed_dir in sorted(cond_dir.glob("seed_*")):
+            if not (seed_dir / "ckpt_final.pt").exists():
+                continue
+            try:
+                seed = int(seed_dir.name.split("_")[-1])
+            except ValueError:
+                continue
+            records.append((condition, seed, seed_dir))
+    return records
+
+
+def _discover_ablation_seed_dirs() -> list[tuple[str, int, Path]]:
+    ablation_root = PATHS.results_root / "ablation"
+    records = []
+    for hd_mode in ("full", "ablated", "degraded"):
+        mode_dir = ablation_root / hd_mode
+        if not mode_dir.exists():
+            continue
+        for seed_dir in sorted(mode_dir.glob("seed_*")):
+            if not (seed_dir / "ckpt_final.pt").exists():
+                continue
+            try:
+                seed = int(seed_dir.name.split("_")[-1])
+            except ValueError:
+                continue
+            records.append((hd_mode, seed, seed_dir))
+    return records
+
+
+def _condition_data_dir_for_eval(condition: str) -> tuple[Path, int]:
+    return _ensure_condition_data(condition, dataset_workers=1)
+
+
+def _build_condition_summaries(evaluations: dict[tuple[str, int], dict[str, Any]]) -> dict[str, Any]:
+    metrics = importlib.import_module("project5_symmetry.evaluation.metrics")
+    summary = {}
+    for condition in sorted({key[0] for key in evaluations}):
+        cond_evals = [evaluations[key] for key in sorted(evaluations) if key[0] == condition]
+        if not cond_evals:
+            continue
+        rsa_matrices = [e["rsa_matrix"] for e in cond_evals]
+        position_hidden = [e["position_hidden"] for e in cond_evals]
+        srsa_values = [float(e["srsa"]) for e in cond_evals]
+        coherence_values = [float(e["place_field_coherence"]["mean_score"]) for e in cond_evals]
+        rgc_values = [float(e["rgc"]["stress"]) for e in cond_evals]
+        rgc_pca_values = [float(e["rgc"]["stress_pca"]) for e in cond_evals]
+        cond_summary = {
+            "condition": condition,
+            "n_seeds": len(cond_evals),
+            "seeds": [int(e["seed"]) for e in cond_evals],
+            "srsa_per_seed": srsa_values,
+            "srsa_mean": float(np.nanmean(srsa_values)),
+            "srsa_std": float(np.nanstd(srsa_values)),
+            "alignment": metrics.cross_seed_rsa_alignment(rsa_matrices) if len(rsa_matrices) > 1 else None,
+            "cca_alignment": metrics.cross_seed_cca_alignment(position_hidden) if len(position_hidden) > 1 else None,
+            "place_field_coherence_per_seed": coherence_values,
+            "place_field_coherence_mean": float(np.nanmean(coherence_values)),
+            "place_field_coherence_std": float(np.nanstd(coherence_values)),
+            "rgc_stress_per_seed": rgc_values,
+            "rgc_stress_mean": float(np.nanmean(rgc_values)),
+            "rgc_stress_std": float(np.nanstd(rgc_values)),
+            "rgc_pca_stress_per_seed": rgc_pca_values,
+            "rgc_pca_stress_mean": float(np.nanmean(rgc_pca_values)),
+            "rgc_pca_stress_std": float(np.nanstd(rgc_pca_values)),
+        }
+        cond_dir = PATHS.results_root / "symmetry_sweep" / condition
+        _save_pickle(cond_dir / "condition_summary.pkl", cond_summary)
+        _save_json(cond_dir / "condition_summary.json", cond_summary)
+        summary[condition] = cond_summary
+    _save_pickle(PATHS.results_root / "symmetry_sweep" / "symmetry_sweep_raw.pkl", evaluations)
+    _save_pickle(PATHS.results_root / "symmetry_sweep" / "symmetry_sweep_summary.pkl", summary)
+    _save_json(
+        PATHS.results_root / "symmetry_sweep" / "symmetry_sweep_manifest.json",
+        {
+            "conditions": sorted(summary),
+            "n_seeds_by_condition": {c: s["n_seeds"] for c, s in summary.items()},
+            "results_root": str(PATHS.results_root / "symmetry_sweep"),
+        },
+    )
+    return summary
+
+
+def _as_position_grid(H: np.ndarray, positions: np.ndarray, arena_size: int = 18) -> np.ndarray:
+    grid = np.full((arena_size, arena_size, H.shape[1]), np.nan, dtype=float)
+    for h, (col, row) in zip(H, np.rint(positions).astype(int)):
+        if 1 <= col <= arena_size and 1 <= row <= arena_size:
+            grid[row - 1, col - 1] = h
+    return grid
+
+
+def _compute_ra_from_position_hidden(H: np.ndarray, positions: np.ndarray, evs: np.ndarray) -> tuple[float, np.ndarray]:
+    grid = _as_position_grid(H, positions, arena_size=18)
+    ra = np.full(H.shape[1], np.nan, dtype=float)
+    valid = np.where(np.isfinite(evs) & (evs > EVS_THRESHOLD))[0]
+    for unit in valid:
+        field = grid[:, :, unit]
+        if not np.isfinite(field).all():
+            continue
+        src = field.reshape(-1)
+        rot = np.rot90(field).reshape(-1)
+        if np.std(src) <= 1e-8 or np.std(rot) <= 1e-8:
+            continue
+        ra[unit] = float(np.corrcoef(src, rot)[0, 1])
+    return float(np.nanmean(ra)) if np.isfinite(ra).any() else float("nan"), ra
+
+
+def _rotation_permutation(positions: np.ndarray, rotation: int, arena_size: int = 18) -> np.ndarray:
+    pos = np.rint(positions).astype(int)
+    mapping = {tuple(p): i for i, p in enumerate(pos)}
+    order = []
+    for col, row in pos:
+        c0, r0 = col - 1, row - 1
+        for _ in range((rotation // 90) % 4):
+            c0, r0 = arena_size - 1 - r0, c0
+        order.append(mapping.get((c0 + 1, r0 + 1), -1))
+    return np.asarray(order, dtype=int)
+
+
+def _compute_paa_by_condition(eval_rows: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
+    from scipy.stats import spearmanr
+
+    out = {}
+    for condition in sorted({row["condition"] for row in eval_rows}):
+        rows = [row for row in eval_rows if row["condition"] == condition]
+        gains = []
+        for i in range(len(rows)):
+            for j in range(i + 1, len(rows)):
+                rsa_i = rows[i]["rsa_matrix"]
+                rsa_j = rows[j]["rsa_matrix"]
+                tri = np.triu_indices(rsa_i.shape[0], k=1)
+                base = float(spearmanr(rsa_i[tri], rsa_j[tri]).correlation)
+                best = base
+                rotations = (180,) if condition in {"s1", "s2"} else (90, 180, 270)
+                for rotation in rotations:
+                    perm = _rotation_permutation(rows[j]["position_array"], rotation)
+                    if np.any(perm < 0):
+                        continue
+                    rotated = rsa_j[perm, :][:, perm]
+                    best = max(best, float(spearmanr(rsa_i[tri], rotated[tri]).correlation))
+                gains.append(best - base)
+        out[condition] = {
+            "PAA_gain_mean": float(np.nanmean(gains)) if gains else float("nan"),
+            "PAA_gain_std": float(np.nanstd(gains)) if gains else float("nan"),
+            "n_pairs": len(gains),
+        }
+    return out
+
+
+def _compute_sci(H: np.ndarray, positions: np.ndarray, condition: str) -> float:
+    H_norm = H / np.clip(np.linalg.norm(H, axis=1, keepdims=True), 1e-8, None)
+    n = H_norm.shape[0]
+    perm_90 = _rotation_permutation(positions, 90)
+    perm_180 = _rotation_permutation(positions, 180)
+    perm_270 = _rotation_permutation(positions, 270)
+    if condition == "s4":
+        pairs = {
+            (min(i, int(p)), max(i, int(p)))
+            for perm in (perm_90, perm_180, perm_270)
+            for i, p in enumerate(perm)
+            if int(p) >= 0
+        }
+    elif condition == "s2":
+        pairs = {(min(i, int(p)), max(i, int(p))) for i, p in enumerate(perm_180) if int(p) >= 0}
+    else:
+        rng = np.random.default_rng(10)
+        pairs = set()
+        while len(pairs) < 486 and len(pairs) < n * (n - 1) // 2:
+            a, b = int(rng.integers(n)), int(rng.integers(n))
+            if a != b:
+                pairs.add((min(a, b), max(a, b)))
+    pairs = sorted((a, b) for a, b in pairs if a != b and a < n and b < n)
+    rng = np.random.default_rng(42)
+    random_pairs = set()
+    while len(random_pairs) < max(1, len(pairs)):
+        a, b = int(rng.integers(n)), int(rng.integers(n))
+        if a != b:
+            random_pairs.add((min(a, b), max(a, b)))
+    sym_d = [np.linalg.norm(H_norm[a] - H_norm[b]) for a, b in pairs]
+    rand_d = [np.linalg.norm(H_norm[a] - H_norm[b]) for a, b in random_pairs]
+    return float(np.mean(sym_d) / np.clip(np.mean(rand_d), 1e-8, None))
+
+
+def _compute_c2_contrast(H: np.ndarray, positions: np.ndarray) -> float:
+    H_norm = H / np.clip(np.linalg.norm(H, axis=1, keepdims=True), 1e-8, None)
+    perm_90 = _rotation_permutation(positions, 90)
+    perm_180 = _rotation_permutation(positions, 180)
+    perm_270 = _rotation_permutation(positions, 270)
+
+    def mean_cosine_distance(pairs):
+        vals = []
+        for a, b in pairs:
+            if b >= 0 and a != b:
+                vals.append(1.0 - float(np.dot(H_norm[a], H_norm[b])))
+        return float(np.nanmean(vals)) if vals else float("nan")
+
+    c2_pairs = [(i, int(j)) for i, j in enumerate(perm_180)]
+    c4_pairs = [(i, int(j)) for perm in (perm_90, perm_270) for i, j in enumerate(perm)]
+    return mean_cosine_distance(c2_pairs) - mean_cosine_distance(c4_pairs)
+
+
+def _compute_decode_err(H: np.ndarray, positions: np.ndarray) -> float:
+    try:
+        from sklearn.linear_model import RidgeCV
+        from sklearn.model_selection import KFold
+        from sklearn.preprocessing import StandardScaler
+    except Exception as exc:
+        print(f"WARNING: sklearn unavailable for decode error: {exc}")
+        return float("nan")
+
+    if H.shape[0] < 3:
+        return float("nan")
+    X = StandardScaler().fit_transform(H)
+    y = np.asarray(positions, dtype=float)
+    n_splits = min(5, H.shape[0])
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    errors = []
+    for train_idx, test_idx in kf.split(X):
+        model = RidgeCV(alphas=[0.1, 1.0, 10.0, 100.0])
+        model.fit(X[train_idx], y[train_idx])
+        pred = model.predict(X[test_idx])
+        errors.append(float(np.mean((pred - y[test_idx]) ** 2) / (18 ** 2)))
+    return float(np.nanmean(errors))
+
+
+def _mann_whitney_rows(master_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from scipy.stats import mannwhitneyu
+
+    metrics = [
+        "srsa_euclid",
+        "srsa_city",
+        "DTG",
+        "manifold_id",
+        "RA",
+        "PAA_gain",
+        "SCI",
+        "C2_Contrast",
+        "DecodeErr",
+    ]
+    comparisons = [("s4", "s1"), ("s4", "s2"), ("s2", "s1")]
+    rows = []
+    for metric in metrics:
+        for a, b in comparisons:
+            av = np.asarray([r[metric] for r in master_rows if r["condition"] == a], dtype=float)
+            bv = np.asarray([r[metric] for r in master_rows if r["condition"] == b], dtype=float)
+            av = av[np.isfinite(av)]
+            bv = bv[np.isfinite(bv)]
+            row = {
+                "metric": metric,
+                "comparison": f"{a.upper()}_vs_{b.upper()}",
+                "n_a": int(av.size),
+                "n_b": int(bv.size),
+                "mean_a": float(np.nanmean(av)) if av.size else float("nan"),
+                "mean_b": float(np.nanmean(bv)) if bv.size else float("nan"),
+                "U": float("nan"),
+                "p": float("nan"),
+            }
+            if av.size and bv.size:
+                stat = mannwhitneyu(av, bv, alternative="two-sided")
+                row["U"] = float(stat.statistic)
+                row["p"] = float(stat.pvalue)
+            rows.append(row)
+    return rows
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]]):
+    import csv
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("")
+        return
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_latex_tables(tables_dir: Path, rows: list[dict[str, Any]]):
+    def fmt(vals):
+        arr = np.asarray(vals, dtype=float)
+        arr = arr[np.isfinite(arr)]
+        if arr.size == 0:
+            return "NA"
+        if arr.size == 1:
+            return f"{arr[0]:.3f}"
+        return f"{arr.mean():.3f} $\\pm$ {arr.std(ddof=1):.3f}"
+
+    metrics = ["srsa_euclid", "RA", "PAA_gain", "SCI", "C2_Contrast", "DecodeErr", "DTG"]
+    symmetry = [r for r in rows if r["kind"] == "symmetry"]
+    lines = [
+        "\\begin{tabular}{lccc}",
+        "\\toprule",
+        "Metric & S4 & S2 & S1 \\\\",
+        "\\midrule",
+    ]
+    for metric in metrics:
+        vals = {
+            cond: [r[metric] for r in symmetry if r["condition"] == cond]
+            for cond in ("s4", "s2", "s1")
+        }
+        lines.append(f"{metric} & {fmt(vals['s4'])} & {fmt(vals['s2'])} & {fmt(vals['s1'])} \\\\")
+    lines.extend(["\\bottomrule", "\\end{tabular}", ""])
+    (tables_dir / "runpod_main_results_table.tex").write_text("\n".join(lines), encoding="utf-8")
+
+    ablation = [r for r in rows if r["kind"] == "ablation"]
+    lines = [
+        "\\begin{tabular}{lccc}",
+        "\\toprule",
+        "Metric & HD\\_FULL & HD\\_ABLATED & HD\\_DEGRADED \\\\",
+        "\\midrule",
+    ]
+    for metric in metrics:
+        vals = {
+            mode: [r[metric] for r in ablation if r["hd_mode"] == mode]
+            for mode in ("full", "ablated", "degraded")
+        }
+        lines.append(
+            f"{metric} & {fmt(vals['full'])} & {fmt(vals['ablated'])} & {fmt(vals['degraded'])} \\\\"
+        )
+    lines.extend(["\\bottomrule", "\\end{tabular}", ""])
+    (tables_dir / "runpod_hd_ablation_table.tex").write_text("\n".join(lines), encoding="utf-8")
+
+
+def run_posthoc_outputs() -> dict[str, Any]:
+    print("\n" + "=" * 60)
+    print("POST-HOC ANALYSIS - evaluations, statistics, figures")
+    print("=" * 60)
+
+    metrics_dir = PATHS.results_root / "metrics"
+    figures_dir = PATHS.results_root / "figures"
+    tables_dir = PATHS.results_root / "tables"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    symmetry_evals: dict[tuple[str, int], dict[str, Any]] = {}
+    for condition, seed, run_dir in _discover_symmetry_seed_dirs():
+        try:
+            data_dir, obs_size = _condition_data_dir_for_eval(condition)
+            print(f"Evaluating symmetry {condition} seed_{seed:02d}")
+            symmetry_evals[(condition, seed)] = _evaluate_completed_run(
+                condition, seed, run_dir, data_dir, obs_size, hd_mode="full"
+            )
+        except Exception as exc:
+            print(f"WARNING: symmetry evaluation failed for {condition} seed_{seed:02d}: {exc}")
+
+    ablation_evals: dict[tuple[str, int], dict[str, Any]] = {}
+    for hd_mode, seed, run_dir in _discover_ablation_seed_dirs():
+        try:
+            data_dir, obs_size = _condition_data_dir_for_eval("s4")
+            print(f"Evaluating HD ablation {hd_mode} seed_{seed:02d}")
+            ablation_evals[(hd_mode, seed)] = _evaluate_completed_run(
+                "s4", seed, run_dir, data_dir, obs_size, hd_mode=hd_mode
+            )
+        except Exception as exc:
+            print(f"WARNING: ablation evaluation failed for {hd_mode} seed_{seed:02d}: {exc}")
+
+    condition_summaries = _build_condition_summaries(symmetry_evals) if symmetry_evals else {}
+    _save_pickle(metrics_dir / "runpod_symmetry_evaluations.pkl", symmetry_evals)
+    _save_pickle(metrics_dir / "runpod_ablation_evaluations.pkl", ablation_evals)
+
+    eval_rows = []
+    for (condition, seed), ev in sorted(symmetry_evals.items()):
+        H = np.asarray(ev["position_hidden"], dtype=float)
+        pos = np.asarray(ev["position_array"], dtype=float)
+        evs = np.asarray(ev["place_field_coherence"]["evs"], dtype=float)
+        ra_mean, ra_per_unit = _compute_ra_from_position_hidden(H, pos, evs)
+        np.save(metrics_dir / f"{condition}_seed{seed:02d}_RA_per_unit.npy", ra_per_unit)
+        np.save(metrics_dir / f"{condition}_seed{seed:02d}_EVS_per_unit.npy", evs)
+        eval_rows.append(
+            {
+                "kind": "symmetry",
+                "condition": condition,
+                "seed": seed,
+                "hd_mode": "full",
+                "srsa_euclid": float(ev["srsa"]),
+                "srsa_city": float("nan"),
+                "DTG": float("nan"),
+                "manifold_id": float("nan"),
+                "RA": ra_mean,
+                "PAA_gain": float("nan"),
+                "SCI": _compute_sci(H, pos, condition),
+                "C2_Contrast": _compute_c2_contrast(H, pos),
+                "DecodeErr": _compute_decode_err(H, pos),
+                "mean_field_coherence": float(ev["place_field_coherence"]["mean_score"]),
+                "mds_stress": float(ev["rgc"]["stress"]),
+                "pca_variance_2d": float(ev["rgc"]["pca_var_2d"]),
+            }
+        )
+
+    paa = _compute_paa_by_condition(list(symmetry_evals.values())) if symmetry_evals else {}
+    for row in eval_rows:
+        if row["kind"] == "symmetry":
+            row["PAA_gain"] = paa.get(row["condition"], {}).get("PAA_gain_mean", float("nan"))
+        log_path = _symmetry_run_dir(row["condition"], row["seed"]) / "training_log.json"
+        if log_path.exists():
+            log = _load_json(log_path)
+            if log.get("srsa_city"):
+                row["srsa_city"] = float(log["srsa_city"][-1])
+            if log.get("srsa_euclid"):
+                row["srsa_euclid"] = float(log["srsa_euclid"][-1])
+            if np.isfinite(row["srsa_euclid"]) and np.isfinite(row["srsa_city"]):
+                row["DTG"] = row["srsa_euclid"] - row["srsa_city"]
+            for key in ("manifold_id", "mean_field_coherence", "mds_stress", "pca_variance_2d"):
+                vals = [float(v) for v in log.get(key, []) if np.isfinite(float(v))]
+                if vals:
+                    row[key] = vals[-1]
+
+    ablation_rows = []
+    for (hd_mode, seed), ev in sorted(ablation_evals.items()):
+        H = np.asarray(ev["position_hidden"], dtype=float)
+        pos = np.asarray(ev["position_array"], dtype=float)
+        evs = np.asarray(ev["place_field_coherence"]["evs"], dtype=float)
+        ra_mean, ra_per_unit = _compute_ra_from_position_hidden(H, pos, evs)
+        np.save(metrics_dir / f"ablation_{hd_mode}_seed{seed:02d}_RA_per_unit.npy", ra_per_unit)
+        np.save(metrics_dir / f"ablation_{hd_mode}_seed{seed:02d}_EVS_per_unit.npy", evs)
+        row = {
+            "kind": "ablation",
+            "condition": "s4",
+            "seed": seed,
+            "hd_mode": hd_mode,
+            "srsa_euclid": float(ev["srsa"]),
+            "srsa_city": float("nan"),
+            "DTG": float("nan"),
+            "manifold_id": float("nan"),
+            "RA": ra_mean,
+            "PAA_gain": float("nan"),
+            "SCI": _compute_sci(H, pos, "s4"),
+            "C2_Contrast": _compute_c2_contrast(H, pos),
+            "DecodeErr": _compute_decode_err(H, pos),
+            "mean_field_coherence": float(ev["place_field_coherence"]["mean_score"]),
+            "mds_stress": float(ev["rgc"]["stress"]),
+            "pca_variance_2d": float(ev["rgc"]["pca_var_2d"]),
+        }
+        log_path = _ablation_run_dir(hd_mode, seed) / "training_log.json"
+        if log_path.exists():
+            log = _load_json(log_path)
+            if log.get("srsa_city"):
+                row["srsa_city"] = float(log["srsa_city"][-1])
+            if log.get("srsa_euclid"):
+                row["srsa_euclid"] = float(log["srsa_euclid"][-1])
+            if np.isfinite(row["srsa_euclid"]) and np.isfinite(row["srsa_city"]):
+                row["DTG"] = row["srsa_euclid"] - row["srsa_city"]
+            for key in ("manifold_id", "mean_field_coherence", "mds_stress", "pca_variance_2d"):
+                vals = [float(v) for v in log.get(key, []) if np.isfinite(float(v))]
+                if vals:
+                    row[key] = vals[-1]
+        ablation_rows.append(row)
+
+    master_rows = eval_rows + ablation_rows
+    _write_csv(tables_dir / "runpod_master_metrics.csv", master_rows)
+    _write_csv(tables_dir / "runpod_statistical_tests.csv", _mann_whitney_rows(eval_rows))
+    _write_latex_tables(tables_dir, master_rows)
+    _save_json(metrics_dir / "runpod_PAA_gains.json", paa)
+
+    try:
+        _make_runpod_figures(figures_dir, master_rows)
+    except Exception as exc:
+        print(f"WARNING: figure generation failed: {exc}")
+
+    output_manifest = {
+        "symmetry_evaluations": len(symmetry_evals),
+        "ablation_evaluations": len(ablation_evals),
+        "condition_summaries": condition_summaries,
+        "tables": [
+            str(tables_dir / "runpod_master_metrics.csv"),
+            str(tables_dir / "runpod_statistical_tests.csv"),
+            str(tables_dir / "runpod_main_results_table.tex"),
+            str(tables_dir / "runpod_hd_ablation_table.tex"),
+        ],
+        "figures_dir": str(figures_dir),
+        "metrics_dir": str(metrics_dir),
+    }
+    _save_json(PATHS.results_root / "runpod_posthoc_manifest.json", output_manifest)
+    print(f"Post-hoc outputs written under {PATHS.results_root}")
+    return output_manifest
+
+
+def _make_runpod_figures(figures_dir: Path, rows: list[dict[str, Any]]):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if not rows:
+        return
+    colors = {"s4": "#2166ac", "s2": "#f4a582", "s1": "#4daf4a"}
+    symmetry = [r for r in rows if r["kind"] == "symmetry"]
+    ablation = [r for r in rows if r["kind"] == "ablation"]
+
+    if symmetry:
+        metrics_to_plot = [
+            ("srsa_euclid", "sRSA Euclid"),
+            ("RA", "RA"),
+            ("SCI", "SCI"),
+            ("C2_Contrast", "C2 Contrast"),
+            ("DecodeErr", "Decode Err"),
+            ("DTG", "DTG"),
+        ]
+        fig, axes = plt.subplots(1, len(metrics_to_plot), figsize=(15, 3))
+        for ax, (metric, label) in zip(axes, metrics_to_plot):
+            conds = ["s4", "s2", "s1"]
+            means = []
+            sems = []
+            for cond in conds:
+                vals = np.asarray([r[metric] for r in symmetry if r["condition"] == cond], dtype=float)
+                vals = vals[np.isfinite(vals)]
+                means.append(float(np.mean(vals)) if vals.size else np.nan)
+                sems.append(float(np.std(vals, ddof=1) / math.sqrt(vals.size)) if vals.size > 1 else 0.0)
+            ax.bar(range(len(conds)), means, yerr=sems, color=[colors[c] for c in conds], capsize=3)
+            for idx, cond in enumerate(conds):
+                vals = np.asarray([r[metric] for r in symmetry if r["condition"] == cond], dtype=float)
+                vals = vals[np.isfinite(vals)]
+                if vals.size:
+                    ax.scatter(np.full(vals.size, idx), vals, color="black", s=10, zorder=3)
+            ax.set_xticks(range(len(conds)), [c.upper() for c in conds])
+            ax.set_ylabel(label)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(figures_dir / "runpod_final_metric_summary.png", dpi=200, bbox_inches="tight")
+        fig.savefig(figures_dir / "runpod_final_metric_summary.pdf", bbox_inches="tight")
+        plt.close(fig)
+
+    if ablation:
+        metrics_to_plot = [
+            ("srsa_euclid", "sRSA Euclid"),
+            ("RA", "RA"),
+            ("SCI", "SCI"),
+            ("C2_Contrast", "C2 Contrast"),
+            ("DecodeErr", "Decode Err"),
+            ("DTG", "DTG"),
+        ]
+        modes = ["full", "ablated", "degraded"]
+        fig, axes = plt.subplots(1, len(metrics_to_plot), figsize=(15, 3))
+        for ax, (metric, label) in zip(axes, metrics_to_plot):
+            means = []
+            sems = []
+            for mode in modes:
+                vals = np.asarray([r[metric] for r in ablation if r["hd_mode"] == mode], dtype=float)
+                vals = vals[np.isfinite(vals)]
+                means.append(float(np.mean(vals)) if vals.size else np.nan)
+                sems.append(float(np.std(vals, ddof=1) / math.sqrt(vals.size)) if vals.size > 1 else 0.0)
+            ax.bar(range(len(modes)), means, yerr=sems, color=["#5ab4ac", "#d8b365", "#998ec3"], capsize=3)
+            for idx, mode in enumerate(modes):
+                vals = np.asarray([r[metric] for r in ablation if r["hd_mode"] == mode], dtype=float)
+                vals = vals[np.isfinite(vals)]
+                if vals.size:
+                    ax.scatter(np.full(vals.size, idx), vals, color="black", s=10, zorder=3)
+            ax.set_xticks(range(len(modes)), ["FULL", "ABLATED", "DEGRADED"], rotation=20)
+            ax.set_ylabel(label)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+        fig.tight_layout()
+        fig.savefig(figures_dir / "runpod_hd_ablation_summary.png", dpi=200, bbox_inches="tight")
+        fig.savefig(figures_dir / "runpod_hd_ablation_summary.pdf", bbox_inches="tight")
+        plt.close(fig)
+
+    _make_training_curve_figure(figures_dir)
+
+
+def _make_training_curve_figure(figures_dir: Path):
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    log_records = []
+    for condition, seed, run_dir in _discover_symmetry_seed_dirs():
+        log_path = run_dir / "training_log.json"
+        if log_path.exists():
+            log_records.append((condition, "full", _load_json(log_path)))
+    for hd_mode, seed, run_dir in _discover_ablation_seed_dirs():
+        log_path = run_dir / "training_log.json"
+        if log_path.exists():
+            log_records.append((f"ablation_{hd_mode}", hd_mode, _load_json(log_path)))
+    if not log_records:
+        return
+
+    fig, axes = plt.subplots(1, 3, figsize=(11, 3))
+    for label, _mode, log in log_records:
+        steps = np.asarray(log.get("steps", []), dtype=float)
+        if not steps.size:
+            continue
+        axes[0].plot(steps, log.get("loss", []), alpha=0.35, linewidth=0.8, label=label)
+        axes[1].plot(steps, log.get("srsa_euclid", []), alpha=0.35, linewidth=0.8)
+        axes[1].plot(steps, log.get("srsa_city", []), alpha=0.25, linewidth=0.8, linestyle="--")
+        dtg = np.asarray(log.get("srsa_euclid", []), dtype=float) - np.asarray(log.get("srsa_city", []), dtype=float)
+        axes[2].plot(steps, dtg, alpha=0.35, linewidth=0.8)
+    axes[0].set_ylabel("loss")
+    axes[1].set_ylabel("sRSA")
+    axes[2].set_ylabel("DTG")
+    for ax in axes:
+        ax.set_xlabel("step")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(figures_dir / "runpod_training_curves.png", dpi=200, bbox_inches="tight")
+    fig.savefig(figures_dir / "runpod_training_curves.pdf", bbox_inches="tight")
+    plt.close(fig)
 
 
 def run_seed_worker(args: dict[str, Any]):
@@ -452,6 +1217,8 @@ def _run_seed_worker_inner(args: dict[str, Any]):
             "hd_mode": hd_mode,
             "condition": condition,
             "seed": seed_idx,
+            "srsa_log_every": SRSA_LOG_EVERY,
+            "geometry_log_every": GEOMETRY_LOG_EVERY,
             "ckpt_paths": [],
             "H_paths": [],
             "runner": "runpod_runner",
@@ -467,6 +1234,8 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     last_hidden_std = float("nan")
     verified = False
     stream = torch.cuda.Stream(device=device) if device.type == "cuda" else None
+    metric_n = int(getattr(train_mod, "SUBSAMPLE_N", 5000))
+    metric_repeats = int(getattr(train_mod, "SRSA_EVAL_RUNS", 3))
 
     pbar = tqdm(
         total=max_steps - latest_step,
@@ -529,6 +1298,44 @@ def _run_seed_worker_inner(args: dict[str, Any]):
             if last_hidden_std < 0.01:
                 raise RuntimeError(f"HIDDEN STATE COLLAPSED at step {step}")
 
+        if step % SRSA_LOG_EVERY == 0:
+            need_geometry = step % GEOMETRY_LOG_EVERY == 0
+            srsa_e, srsa_c, geometry_metrics = evaluate_srsa_and_geometry_hd(
+                model,
+                eval_dataset,
+                device,
+                hd_mode=hd_mode,
+                need_geometry=need_geometry,
+                n=metric_n,
+                repeats=metric_repeats,
+            )
+            train_mod._write_live_metrics(
+                writer,
+                step,
+                srsa_e,
+                srsa_c,
+                geometry_metrics=geometry_metrics,
+            )
+            train_mod._append_live_metrics(
+                log_dict,
+                step,
+                current_loss,
+                srsa_e,
+                srsa_c,
+                geometry_metrics=geometry_metrics,
+            )
+            if geometry_metrics is not None:
+                train_mod._print_live_geometry_metrics(
+                    f"{condition} seed{seed_idx} {hd_mode}",
+                    step,
+                    geometry_metrics,
+                )
+            print(
+                f"  [Metrics step {step}] loss={current_loss:.4f} "
+                f"srsa_euclid={srsa_e:.4f} srsa_city={srsa_c:.4f}",
+                flush=True,
+            )
+
         if step in checkpoint_steps:
             ckpt_path = output_dir / f"ckpt_{step}.pt"
             train_mod._save_checkpoint(
@@ -589,8 +1396,31 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     np.save(final_h_path, final_H)
     log_dict["H_paths"].append(str(final_h_path))
 
-    log_dict["steps"].append(max_steps)
-    log_dict["loss"].append(float(current_loss))
+    if max_steps % SRSA_LOG_EVERY != 0:
+        srsa_e, srsa_c, geometry_metrics = evaluate_srsa_and_geometry_hd(
+            model,
+            eval_dataset,
+            device,
+            hd_mode=hd_mode,
+            need_geometry=(max_steps % GEOMETRY_LOG_EVERY == 0),
+            n=metric_n,
+            repeats=metric_repeats,
+        )
+        train_mod._write_live_metrics(
+            writer,
+            max_steps,
+            srsa_e,
+            srsa_c,
+            geometry_metrics=geometry_metrics,
+        )
+        train_mod._append_live_metrics(
+            log_dict,
+            max_steps,
+            current_loss,
+            srsa_e,
+            srsa_c,
+            geometry_metrics=geometry_metrics,
+        )
     _save_json(output_dir / "training_log.json", log_dict)
     writer.close()
     pbar.close()
@@ -792,6 +1622,14 @@ def main():
         for r in errors:
             print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]}: {r["error"]}')
 
+    posthoc_manifest = {}
+    try:
+        posthoc_manifest = run_posthoc_outputs()
+    except Exception as exc:
+        posthoc_manifest = {"error": str(exc)}
+        print(f"WARNING: post-hoc analysis phase failed: {exc}")
+        traceback.print_exc()
+
     summary = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "hardware_profile": profile,
@@ -816,6 +1654,7 @@ def main():
         "estimated_hours": est_hours,
         "estimated_cost_usd": estimated_cost,
         "actual_cost_usd_at_0_27_per_hour": elapsed_hours * RUNPOD_A5000_USD_PER_HOUR,
+        "posthoc_outputs": posthoc_manifest,
     }
     summary_path = PATHS.results_root / "runpod_run_summary.json"
     _save_json(summary_path, summary)
