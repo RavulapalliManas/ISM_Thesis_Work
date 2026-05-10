@@ -29,6 +29,67 @@ from typing import Any
 import numpy as np
 
 
+class Colors:
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+
+    BLACK = "\033[30m"
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    WHITE = "\033[37m"
+
+    BG_RED = "\033[41m"
+    BG_GREEN = "\033[42m"
+    BG_YELLOW = "\033[43m"
+    BG_BLUE = "\033[44m"
+
+    @staticmethod
+    def ok(msg: str) -> str:
+        return f"{Colors.GREEN}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def error(msg: str) -> str:
+        return f"{Colors.RED}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def warn(msg: str) -> str:
+        return f"{Colors.YELLOW}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def info(msg: str) -> str:
+        return f"{Colors.CYAN}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def success(msg: str) -> str:
+        return f"{Colors.GREEN}{Colors.BOLD}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def header(msg: str) -> str:
+        return f"{Colors.CYAN}{Colors.BOLD}{msg}{Colors.RESET}"
+
+    @staticmethod
+    def dim(msg: str) -> str:
+        return f"{Colors.DIM}{msg}{Colors.RESET}"
+
+
+def cprint(msg: str, style: str = "info", end: str = "\n"):
+    styles = {
+        "ok": Colors.ok,
+        "error": Colors.error,
+        "warn": Colors.warn,
+        "info": Colors.info,
+        "success": Colors.success,
+        "header": Colors.header,
+        "dim": Colors.dim,
+    }
+    print(styles.get(style, styles["info"])(msg), end=end)
+
+
 PER_SEED_VRAM_GB = 2.0
 VRAM_HEADROOM_GB = 1.0
 MAX_PARALLEL_CAP = 8
@@ -879,9 +940,9 @@ def _write_latex_tables(tables_dir: Path, rows: list[dict[str, Any]]):
 def run_posthoc_outputs() -> dict[str, Any]:
     from tqdm import tqdm
 
-    print("\n" + "=" * 60)
-    print("POST-HOC ANALYSIS - evaluations, statistics, figures")
-    print("=" * 60)
+    cprint("\n" + "=" * 60, "info")
+    cprint("POST-HOC ANALYSIS - evaluations, statistics, figures", "info")
+    cprint("=" * 60, "info")
 
     metrics_dir = PATHS.results_root / "metrics"
     figures_dir = PATHS.results_root / "figures"
@@ -1549,7 +1610,7 @@ def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
     )
 
     while pending:
-        print(f"\nLaunching {len(pending)} runs with parallelism={current_parallelism}")
+        cprint(f"\n>>> Launching {len(pending)} runs with parallelism={current_parallelism}", "info")
         batch_results = []
         batch_pbar = tqdm(
             total=len(pending),
@@ -1566,16 +1627,16 @@ def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
                 completed_runs += 1
                 main_pbar.update(1)
                 if result is None:
-                    print("Completed: worker returned None")
+                    cprint("Completed: worker returned None", "warn")
                 elif result.get("error"):
-                    print(
+                    cprint(
                         f'Completed with error: {result["condition"]} seed_{result["seed"]:02d} '
-                        f'hd={result["hd_mode"]} error={result["error"]}'
+                        f'hd={result["hd_mode"]} error={result["error"]}', "error"
                     )
                 else:
-                    print(
+                    cprint(
                         f'Completed: {result["condition"]} seed_{result["seed"]:02d} '
-                        f'hd={result["hd_mode"]} loss={result["final_loss"]:.4f}'
+                        f'hd={result["hd_mode"]} loss={result["final_loss"]:.4f}', "ok"
                     )
 
         batch_pbar.close()
@@ -1611,14 +1672,16 @@ def _check_existing_runs():
     """Check what experiments have been completed."""
     from tqdm import tqdm
 
-    print("\n" + "=" * 60)
-    print("CHECKING EXISTING RUNS")
-    print("=" * 60)
+    cprint("\n" + "=" * 60, "info")
+    cprint("CHECKING EXISTING RUNS", "info")
+    cprint("=" * 60, "info")
 
     symmetry_conditions = ["s1", "s2", "s4"]
     ablation_modes = ["full", "ablated", "degraded"]
 
     symmetry_completed = {}
+    ablation_completed = {}
+    epsilon_completed = {}
     all_check_pairs = []
     for cond in symmetry_conditions:
         for seed in range(10):
@@ -1660,17 +1723,10 @@ def _check_existing_runs():
 
     for cond in symmetry_conditions:
         symmetry_completed[cond] = symmetry_completed.get(cond, 0)
-
     for mode in ablation_modes:
         ablation_completed[mode] = ablation_completed.get(mode, 0)
-
-    epsilon_completed = {}
     for eps in EPSILON_LEVELS:
-        count = 0
-        for seed in range(10):
-            if _epsilon_run_dir(eps, seed).joinpath("ckpt_final.pt").exists():
-                count += 1
-        epsilon_completed[eps] = count
+        epsilon_completed[eps] = epsilon_completed.get(eps, 0)
 
     print(f"\nSymmetry sweeps completed:")
     for cond, count in symmetry_completed.items():
@@ -1864,9 +1920,9 @@ def _prompt_user_for_queues(symmetry_queue, ablation_queue, epsilon_queue):
 
 def main():
     start_time = time.time()
-    print("=" * 60)
-    print("RUNPOD AUTO-RUNNER")
-    print("=" * 60)
+    cprint("=" * 60, "header")
+    cprint("RUNPOD AUTO-RUNNER", "header")
+    cprint("=" * 60, "header")
     print(f"Launch dir: {PATHS.launch_dir}")
     print(f"Repo root: {PATHS.repo_root}")
     print(f"Package dir: {PATHS.package_dir}")
@@ -1875,13 +1931,13 @@ def main():
     profile = detect_hardware()
     optimal_parallel = int(profile["optimal_parallel"])
     dataset_workers = max(1, min(12, int(profile["cpu_count"]) // 2))
-    
-    print(f"\nDetected hardware:")
-    print(f"  GPU: {profile['gpu_name']}")
-    print(f"  Available VRAM: {profile['available_vram_gb']:.2f} GB")
-    print(f"  CPU cores: {profile['cpu_count']}")
-    print(f"  Max parallelism: {optimal_parallel} seeds")
-    print(f"  Dataset workers: {dataset_workers}")
+
+    cprint("\nDetected hardware:", "info")
+    print(f"  {Colors.BOLD}GPU:{Colors.RESET} {profile['gpu_name']}")
+    print(f"  {Colors.BOLD}VRAM:{Colors.RESET} {profile['available_vram_gb']:.2f} GB")
+    print(f"  {Colors.BOLD}CPU:{Colors.RESET} {profile['cpu_count']} cores")
+    print(f"  {Colors.BOLD}Max parallel:{Colors.RESET} {optimal_parallel} seeds")
+    print(f"  {Colors.BOLD}Dataset workers:{Colors.RESET} {dataset_workers}")
 
     _check_existing_runs()
     
@@ -1935,10 +1991,10 @@ def main():
     successful = [r for r in results if r and not r.get("error") and r.get("final_loss") is not None]
     errors = [r for r in results if r and r.get("error")]
 
-    print("\n" + "=" * 60)
-    print("ALL RUNS COMPLETE")
-    print("=" * 60)
-    print(f"Successful: {len(successful)}/{len(queue)}")
+    cprint("\n" + "=" * 60, "success")
+    cprint("ALL RUNS COMPLETE", "success")
+    cprint("=" * 60, "success")
+    cprint(f"Successful: {len(successful)}/{len(queue)}", "ok" if len(successful) == len(queue) else "warn")
     for r in sorted(successful, key=lambda x: (x.get("queue", ""), x["condition"], x.get("epsilon", 0.0), x["hd_mode"], x["seed"])):
         queue_name = r.get("queue", "unknown")
         if queue_name == "epsilon_sweep":
@@ -1947,13 +2003,13 @@ def main():
             print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]} loss={r["final_loss"]:.4f}')
 
     if errors:
-        print("\nErrors:")
+        cprint("\nErrors:", "error")
         for r in errors:
             queue_name = r.get("queue", "")
             if queue_name == "epsilon_sweep":
-                print(f'  eps_{r.get("epsilon", 0.0):.1f} seed_{r["seed"]:02d}: {r["error"]}')
+                cprint(f'  eps_{r.get("epsilon", 0.0):.1f} seed_{r["seed"]:02d}: {r["error"]}', "error")
             else:
-                print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]}: {r["error"]}')
+                cprint(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]}: {r["error"]}', "error")
 
     posthoc_manifest = {}
     try:
