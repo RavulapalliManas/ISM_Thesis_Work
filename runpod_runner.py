@@ -36,6 +36,10 @@ RUNPOD_A5000_USD_PER_HOUR = 0.27
 
 SYMMETRY_CHECKPOINTS = [5000, 10000, 20000, 40000, 60000, 80000]
 ABLATION_CHECKPOINTS = [10000, 20000, 30000, 40000]
+EPSILON_CHECKPOINTS = [5000, 10000, 20000, 40000, 60000, 80000]
+EPSILON_LEVELS = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+EPSILON_BASELINE_S4_SRSA = 0.707
+EPSILON_VALIDATION_THRESHOLD = 0.05
 SRSA_LOG_EVERY = 1000
 GEOMETRY_LOG_EVERY = 5000
 EVS_THRESHOLD = 0.10
@@ -203,12 +207,43 @@ def _ablation_run_dir(hd_mode: str, seed: int) -> Path:
     return PATHS.results_root / "ablation" / hd_mode / f"seed_{seed:02d}"
 
 
-def check_existing(condition: str, seed: int, hd_mode: str | None = None) -> bool:
+def _epsilon_run_dir(epsilon: float, seed: int) -> Path:
+    return PATHS.results_root / "epsilon_sweep" / f"eps_{epsilon}" / f"seed_{seed:02d}"
+
+
+def corrupt_observation(obs, epsilon: float, rng):
+    """
+    Apply epsilon corruption to observations.
+    
+    obs:     (B, T, obs_size) float32
+    epsilon: float in [0, 1]
+    rng:     RandomState for reproducibility
+    
+    Returns corrupted observations of same shape.
+    """
+    import torch
+    
+    if epsilon == 0.0:
+        return obs
+    
+    obs_min = obs.min().item()
+    obs_max = obs.max().item()
+    
+    obs_random = torch.from_numpy(
+        rng.uniform(low=obs_min, high=obs_max, size=obs.shape)
+    ).to(obs.device, obs.dtype)
+    
+    return (1 - epsilon) * obs + epsilon * obs_random
+
+
+def check_existing(condition: str, seed: int, hd_mode: str | None = None, epsilon: float | None = None) -> bool:
     """Return True if ckpt_final.pt exists for this run."""
-    if hd_mode is None:
-        path = _symmetry_run_dir(condition, seed) / "ckpt_final.pt"
-    else:
+    if epsilon is not None:
+        path = _epsilon_run_dir(epsilon, seed) / "ckpt_final.pt"
+    elif hd_mode is not None:
         path = _ablation_run_dir(hd_mode, seed) / "ckpt_final.pt"
+    else:
+        path = _symmetry_run_dir(condition, seed) / "ckpt_final.pt"
     return path.exists()
 
 
@@ -1173,6 +1208,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     condition = args["condition"]
     seed_idx = int(args["seed_idx"])
     hd_mode = args["hd_mode"]
+    epsilon = float(args.get("epsilon", 0.0))
     max_steps = int(args["max_steps"])
     checkpoint_steps = [int(x) for x in args["checkpoint_steps"] if int(x) <= max_steps]
     output_dir = Path(args["output_dir"])
@@ -1184,7 +1220,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     train_mod._enable_tf32(device)
 
     print(
-        f"[Worker] {condition} seed_{seed_idx:02d} hd={hd_mode} on GPU {args['gpu_id']}",
+        f"[Worker] {condition} seed_{seed_idx:02d} eps={epsilon:.1f} hd={hd_mode} on GPU {args['gpu_id']}",
         flush=True,
     )
     if device.type == "cuda":
@@ -1193,6 +1229,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(seed_idx)
     np.random.seed(seed_idx)
+    corruption_rng = np.random.RandomState(seed_idx)
 
     batch_size = int(os.getenv("PRNN_PER_SEED_BATCH", getattr(train_mod, "FAST_BATCH_SIZE", 16)))
     k = int(args.get("k", 5))
@@ -1222,6 +1259,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     log_dict.update(
         {
             "hd_mode": hd_mode,
+            "epsilon": epsilon,
             "condition": condition,
             "seed": seed_idx,
             "srsa_log_every": SRSA_LOG_EVERY,
@@ -1246,7 +1284,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
 
     pbar = tqdm(
         total=max_steps - latest_step,
-        desc=f"{condition} seed{seed_idx} {hd_mode}",
+        desc=f"{condition} seed{seed_idx} eps{epsilon:.1f} {hd_mode}",
         unit="step",
         dynamic_ncols=True,
         leave=True,
@@ -1256,6 +1294,7 @@ def _run_seed_worker_inner(args: dict[str, Any]):
         nonlocal initial_loss, current_loss, last_hidden_std, verified
 
         obs_b, act_b = packed.sample_batch(batch_size)
+        obs_b = corrupt_observation(obs_b, epsilon, corruption_rng)
         act_b = apply_hd_mode(act_b, hd_mode)
         if not verified:
             verify_hd_substitution(act_b, hd_mode)
@@ -1473,6 +1512,29 @@ def _build_queue(dataset_workers: int) -> list[dict[str, Any]]:
         ("s4", 0, "degraded", 40000),
         ("s4", 1, "degraded", 40000),
     ]
+    epsilon_seeds = [
+        (0.0, 0, 80000),
+        (0.0, 1, 80000),
+        (0.0, 2, 80000),
+        (0.1, 0, 80000),
+        (0.1, 1, 80000),
+        (0.1, 2, 80000),
+        (0.2, 0, 80000),
+        (0.2, 1, 80000),
+        (0.2, 2, 80000),
+        (0.3, 0, 80000),
+        (0.3, 1, 80000),
+        (0.3, 2, 80000),
+        (0.5, 0, 80000),
+        (0.5, 1, 80000),
+        (0.5, 2, 80000),
+        (0.7, 0, 80000),
+        (0.7, 1, 80000),
+        (0.7, 2, 80000),
+        (1.0, 0, 80000),
+        (1.0, 1, 80000),
+        (1.0, 2, 80000),
+    ]
 
     data_cache: dict[str, tuple[Path, int]] = {}
     queue = []
@@ -1523,6 +1585,33 @@ def _build_queue(dataset_workers: int) -> list[dict[str, Any]]:
                 "trunc": 200,
             }
         )
+
+    if "s4" not in data_cache:
+        data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
+    s4_data_dir, s4_obs_size = data_cache["s4"]
+
+    for epsilon, seed_idx, max_steps in epsilon_seeds:
+        if check_existing("s4", seed_idx, None, epsilon):
+            print(f"  SKIP (exists): eps_{epsilon} seed_{seed_idx:02d}")
+            continue
+        queue.append(
+            {
+                "queue": "epsilon_sweep",
+                "condition": "s4",
+                "seed_idx": seed_idx,
+                "hd_mode": "full",
+                "epsilon": epsilon,
+                "max_steps": max_steps,
+                "checkpoint_steps": EPSILON_CHECKPOINTS,
+                "output_dir": str(_epsilon_run_dir(epsilon, seed_idx)),
+                "data_dir": str(s4_data_dir),
+                "obs_size": s4_obs_size,
+                "gpu_id": 0,
+                "k": 5,
+                "trunc": 200,
+            }
+        )
+
     return queue
 
 
