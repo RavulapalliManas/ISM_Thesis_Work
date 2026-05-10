@@ -1494,127 +1494,6 @@ def _run_seed_worker_inner(args: dict[str, Any]):
     }
 
 
-def _build_queue(dataset_workers: int) -> list[dict[str, Any]]:
-    new_seeds = [
-        ("s1", 3, "full", 80000),
-        ("s1", 4, "full", 80000),
-        ("s2", 3, "full", 80000),
-        ("s2", 4, "full", 80000),
-        ("s4", 5, "full", 80000),
-        ("s4", 6, "full", 80000),
-        ("s4", 7, "full", 80000),
-    ]
-    ablation_seeds = [
-        ("s4", 0, "full", 40000),
-        ("s4", 1, "full", 40000),
-        ("s4", 0, "ablated", 40000),
-        ("s4", 1, "ablated", 40000),
-        ("s4", 0, "degraded", 40000),
-        ("s4", 1, "degraded", 40000),
-    ]
-    epsilon_seeds = [
-        (0.0, 0, 80000),
-        (0.0, 1, 80000),
-        (0.0, 2, 80000),
-        (0.1, 0, 80000),
-        (0.1, 1, 80000),
-        (0.1, 2, 80000),
-        (0.2, 0, 80000),
-        (0.2, 1, 80000),
-        (0.2, 2, 80000),
-        (0.3, 0, 80000),
-        (0.3, 1, 80000),
-        (0.3, 2, 80000),
-        (0.5, 0, 80000),
-        (0.5, 1, 80000),
-        (0.5, 2, 80000),
-        (0.7, 0, 80000),
-        (0.7, 1, 80000),
-        (0.7, 2, 80000),
-        (1.0, 0, 80000),
-        (1.0, 1, 80000),
-        (1.0, 2, 80000),
-    ]
-
-    data_cache: dict[str, tuple[Path, int]] = {}
-    queue = []
-    for cond, seed_idx, hd_mode, max_steps in new_seeds:
-        if check_existing(cond, seed_idx, None):
-            print(f"  SKIP (exists): {cond} seed_{seed_idx:02d} hd={hd_mode}")
-            continue
-        if cond not in data_cache:
-            data_cache[cond] = _ensure_condition_data(cond, dataset_workers=dataset_workers)
-        data_dir, obs_size = data_cache[cond]
-        queue.append(
-            {
-                "queue": "symmetry_sweep",
-                "condition": cond,
-                "seed_idx": seed_idx,
-                "hd_mode": hd_mode,
-                "max_steps": max_steps,
-                "checkpoint_steps": SYMMETRY_CHECKPOINTS,
-                "output_dir": str(_symmetry_run_dir(cond, seed_idx)),
-                "data_dir": str(data_dir),
-                "obs_size": obs_size,
-                "gpu_id": 0,
-                "k": 5,
-                "trunc": 200,
-            }
-        )
-
-    for cond, seed_idx, hd_mode, max_steps in ablation_seeds:
-        if check_existing(cond, seed_idx, hd_mode):
-            print(f"  SKIP (exists): {cond} seed_{seed_idx:02d} hd={hd_mode}")
-            continue
-        if cond not in data_cache:
-            data_cache[cond] = _ensure_condition_data(cond, dataset_workers=dataset_workers)
-        data_dir, obs_size = data_cache[cond]
-        queue.append(
-            {
-                "queue": "ablation",
-                "condition": cond,
-                "seed_idx": seed_idx,
-                "hd_mode": hd_mode,
-                "max_steps": max_steps,
-                "checkpoint_steps": ABLATION_CHECKPOINTS,
-                "output_dir": str(_ablation_run_dir(hd_mode, seed_idx)),
-                "data_dir": str(data_dir),
-                "obs_size": obs_size,
-                "gpu_id": 0,
-                "k": 5,
-                "trunc": 200,
-            }
-        )
-
-    if "s4" not in data_cache:
-        data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
-    s4_data_dir, s4_obs_size = data_cache["s4"]
-
-    for epsilon, seed_idx, max_steps in epsilon_seeds:
-        if check_existing("s4", seed_idx, None, epsilon):
-            print(f"  SKIP (exists): eps_{epsilon} seed_{seed_idx:02d}")
-            continue
-        queue.append(
-            {
-                "queue": "epsilon_sweep",
-                "condition": "s4",
-                "seed_idx": seed_idx,
-                "hd_mode": "full",
-                "epsilon": epsilon,
-                "max_steps": max_steps,
-                "checkpoint_steps": EPSILON_CHECKPOINTS,
-                "output_dir": str(_epsilon_run_dir(epsilon, seed_idx)),
-                "data_dir": str(s4_data_dir),
-                "obs_size": s4_obs_size,
-                "gpu_id": 0,
-                "k": 5,
-                "trunc": 200,
-            }
-        )
-
-    return queue
-
-
 def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
     ctx = multiprocessing.get_context("spawn")
     pending = list(queue)
@@ -1667,10 +1546,201 @@ def _run_queue_with_retries(queue: list[dict[str, Any]], parallelism: int):
     return results, current_parallelism, oom_reductions
 
 
+def _check_existing_runs():
+    """Check what experiments have been completed."""
+    print("\n" + "=" * 60)
+    print("CHECKING EXISTING RUNS")
+    print("=" * 60)
+    
+    symmetry_conditions = ["s1", "s2", "s4"]
+    ablation_modes = ["full", "ablated", "degraded"]
+    
+    symmetry_completed = {}
+    for cond in symmetry_conditions:
+        count = 0
+        for seed in range(10):
+            if _symmetry_run_dir(cond, seed).joinpath("ckpt_final.pt").exists():
+                count += 1
+        symmetry_completed[cond] = count
+    
+    ablation_completed = {}
+    for mode in ablation_modes:
+        count = 0
+        for seed in range(10):
+            if _ablation_run_dir(mode, seed).joinpath("ckpt_final.pt").exists():
+                count += 1
+        ablation_completed[mode] = count
+    
+    epsilon_completed = {}
+    for eps in EPSILON_LEVELS:
+        count = 0
+        for seed in range(10):
+            if _epsilon_run_dir(eps, seed).joinpath("ckpt_final.pt").exists():
+                count += 1
+        epsilon_completed[eps] = count
+    
+    print(f"Symmetry sweeps completed:")
+    for cond, count in symmetry_completed.items():
+        print(f"  {cond}: {count} seeds")
+    
+    print(f"\nHD ablation completed:")
+    for mode, count in ablation_completed.items():
+        print(f"  {mode}: {count} seeds")
+    
+    print(f"\nEpsilon sweep completed:")
+    for eps, count in epsilon_completed.items():
+        print(f"  eps_{eps}: {count} seeds")
+    
+    return {
+        "symmetry": symmetry_completed,
+        "ablation": ablation_completed,
+        "epsilon": epsilon_completed,
+    }
+
+
+def _build_all_queues(dataset_workers: int):
+    """Build all three queues separately."""
+    new_seeds = [
+        ("s1", 3, "full", 80000),
+        ("s1", 4, "full", 80000),
+        ("s2", 3, "full", 80000),
+        ("s2", 4, "full", 80000),
+        ("s4", 5, "full", 80000),
+        ("s4", 6, "full", 80000),
+        ("s4", 7, "full", 80000),
+    ]
+    ablation_seeds = [
+        ("s4", 0, "full", 40000),
+        ("s4", 1, "full", 40000),
+        ("s4", 0, "ablated", 40000),
+        ("s4", 1, "ablated", 40000),
+        ("s4", 0, "degraded", 40000),
+        ("s4", 1, "degraded", 40000),
+    ]
+    epsilon_seeds = [
+        (0.0, 0, 80000), (0.0, 1, 80000), (0.0, 2, 80000),
+        (0.1, 0, 80000), (0.1, 1, 80000), (0.1, 2, 80000),
+        (0.2, 0, 80000), (0.2, 1, 80000), (0.2, 2, 80000),
+        (0.3, 0, 80000), (0.3, 1, 80000), (0.3, 2, 80000),
+        (0.5, 0, 80000), (0.5, 1, 80000), (0.5, 2, 80000),
+        (0.7, 0, 80000), (0.7, 1, 80000), (0.7, 2, 80000),
+        (1.0, 0, 80000), (1.0, 1, 80000), (1.0, 2, 80000),
+    ]
+    
+    data_cache: dict[str, tuple[Path, int]] = {}
+    
+    symmetry_queue = []
+    for cond, seed_idx, hd_mode, max_steps in new_seeds:
+        if check_existing(cond, seed_idx, None):
+            continue
+        if cond not in data_cache:
+            data_cache[cond] = _ensure_condition_data(cond, dataset_workers=dataset_workers)
+        data_dir, obs_size = data_cache[cond]
+        symmetry_queue.append({
+            "queue": "symmetry_sweep",
+            "condition": cond,
+            "seed_idx": seed_idx,
+            "hd_mode": hd_mode,
+            "max_steps": max_steps,
+            "checkpoint_steps": SYMMETRY_CHECKPOINTS,
+            "output_dir": str(_symmetry_run_dir(cond, seed_idx)),
+            "data_dir": str(data_dir),
+            "obs_size": obs_size,
+            "gpu_id": 0,
+            "k": 5,
+            "trunc": 200,
+        })
+    
+    ablation_queue = []
+    for cond, seed_idx, hd_mode, max_steps in ablation_seeds:
+        if check_existing(cond, seed_idx, hd_mode):
+            continue
+        if cond not in data_cache:
+            data_cache[cond] = _ensure_condition_data(cond, dataset_workers=dataset_workers)
+        data_dir, obs_size = data_cache[cond]
+        ablation_queue.append({
+            "queue": "ablation",
+            "condition": cond,
+            "seed_idx": seed_idx,
+            "hd_mode": hd_mode,
+            "max_steps": max_steps,
+            "checkpoint_steps": ABLATION_CHECKPOINTS,
+            "output_dir": str(_ablation_run_dir(hd_mode, seed_idx)),
+            "data_dir": str(data_dir),
+            "obs_size": obs_size,
+            "gpu_id": 0,
+            "k": 5,
+            "trunc": 200,
+        })
+    
+    if "s4" not in data_cache:
+        data_cache["s4"] = _ensure_condition_data("s4", dataset_workers=dataset_workers)
+    s4_data_dir, s4_obs_size = data_cache["s4"]
+    
+    epsilon_queue = []
+    for epsilon, seed_idx, max_steps in epsilon_seeds:
+        if check_existing("s4", seed_idx, None, epsilon):
+            continue
+        epsilon_queue.append({
+            "queue": "epsilon_sweep",
+            "condition": "s4",
+            "seed_idx": seed_idx,
+            "hd_mode": "full",
+            "epsilon": epsilon,
+            "max_steps": max_steps,
+            "checkpoint_steps": EPSILON_CHECKPOINTS,
+            "output_dir": str(_epsilon_run_dir(epsilon, seed_idx)),
+            "data_dir": str(s4_data_dir),
+            "obs_size": s4_obs_size,
+            "gpu_id": 0,
+            "k": 5,
+            "trunc": 200,
+        })
+    
+    return symmetry_queue, ablation_queue, epsilon_queue
+
+
+def _prompt_user_for_queues(symmetry_queue, ablation_queue, epsilon_queue):
+    """Prompt user to select which queues to run."""
+    print("\n" + "=" * 60)
+    print("QUEUE SELECTION")
+    print("=" * 60)
+    
+    print(f"\nAvailable runs:")
+    print(f"  [1] Symmetry Sweep:   {len(symmetry_queue)} runs pending")
+    print(f"  [2] HD Ablation:      {len(ablation_queue)} runs pending")
+    print(f"  [3] Epsilon Sweep:    {len(epsilon_queue)} runs pending")
+    print(f"  [4] Run ALL (1+2+3)")
+    print(f"  [5] Custom selection")
+    
+    while True:
+        choice = input("\nEnter choice [1-5]: ").strip()
+        
+        if choice == "1":
+            return {"symmetry": True, "ablation": False, "epsilon": False}
+        elif choice == "2":
+            return {"symmetry": False, "ablation": True, "epsilon": False}
+        elif choice == "3":
+            return {"symmetry": False, "ablation": False, "epsilon": True}
+        elif choice == "4":
+            return {"symmetry": True, "ablation": True, "epsilon": True}
+        elif choice == "5":
+            print("\nSelect queues to run (y/n for each):")
+            sym = input("  Symmetry Sweep? [y/n]: ").strip().lower() == "y"
+            abl = input("  HD Ablation?    [y/n]: ").strip().lower() == "y"
+            eps = input("  Epsilon Sweep?  [y/n]: ").strip().lower() == "y"
+            if not (sym or abl or eps):
+                print("  Must select at least one queue!")
+                continue
+            return {"symmetry": sym, "ablation": abl, "epsilon": eps}
+        else:
+            print("Invalid choice. Enter 1, 2, 3, 4, or 5.")
+
+
 def main():
     start_time = time.time()
     print("=" * 60)
-    print("RUNPOD AUTO-RUNNER - Reading hardware and building queue")
+    print("RUNPOD AUTO-RUNNER")
     print("=" * 60)
     print(f"Launch dir: {PATHS.launch_dir}")
     print(f"Repo root: {PATHS.repo_root}")
@@ -1680,27 +1750,61 @@ def main():
     profile = detect_hardware()
     optimal_parallel = int(profile["optimal_parallel"])
     dataset_workers = max(1, min(12, int(profile["cpu_count"]) // 2))
+    
+    print(f"\nDetected hardware:")
+    print(f"  GPU: {profile['gpu_name']}")
+    print(f"  Available VRAM: {profile['available_vram_gb']:.2f} GB")
+    print(f"  CPU cores: {profile['cpu_count']}")
+    print(f"  Max parallelism: {optimal_parallel} seeds")
+    print(f"  Dataset workers: {dataset_workers}")
 
-    queue = _build_queue(dataset_workers=dataset_workers)
-    print(f"\nQueue built: {len(queue)} runs to execute")
-    print(f"Running {optimal_parallel} seeds in parallel")
-
-    total_steps = sum(r["max_steps"] for r in queue)
-    if queue:
-        steps_per_hour = 40000 / 0.6
-        est_hours = total_steps / steps_per_hour / max(1, optimal_parallel)
+    _check_existing_runs()
+    
+    symmetry_queue, ablation_queue, epsilon_queue = _build_all_queues(dataset_workers=dataset_workers)
+    
+    results = []
+    final_parallelism = optimal_parallel
+    oom_reductions = 0
+    queue = []
+    
+    if not symmetry_queue and not ablation_queue and not epsilon_queue:
+        print("\nNo pending runs! All experiments completed.")
+        print("Run post-hoc analysis or terminate the pod.")
     else:
-        est_hours = 0.0
-    estimated_cost = est_hours * RUNPOD_A5000_USD_PER_HOUR
-    print(f"Estimated wall time: {est_hours:.1f} hours")
-    print(f"Estimated cost: ${estimated_cost:.2f}")
+        selection = _prompt_user_for_queues(symmetry_queue, ablation_queue, epsilon_queue)
+        
+        queue = []
+        if selection["symmetry"]:
+            queue.extend(symmetry_queue)
+            print(f"\nAdded {len(symmetry_queue)} symmetry sweep runs")
+        if selection["ablation"]:
+            queue.extend(ablation_queue)
+            print(f"Added {len(ablation_queue)} HD ablation runs")
+        if selection["epsilon"]:
+            queue.extend(epsilon_queue)
+            print(f"Added {len(epsilon_queue)} epsilon sweep runs")
+        
+        if not queue:
+            print("\nNo runs selected. Exiting.")
+        else:
+            print(f"\nQueue built: {len(queue)} runs to execute")
+            print(f"Running {optimal_parallel} seeds in parallel (MAX POTENTIAL)")
 
-    if not queue:
-        results = []
-        final_parallelism = optimal_parallel
-        oom_reductions = 0
-    else:
-        results, final_parallelism, oom_reductions = _run_queue_with_retries(queue, optimal_parallel)
+            total_steps = sum(r["max_steps"] for r in queue)
+            if queue:
+                steps_per_hour = 40000 / 0.6
+                est_hours = total_steps / steps_per_hour / max(1, optimal_parallel)
+            else:
+                est_hours = 0.0
+            estimated_cost = est_hours * RUNPOD_A5000_USD_PER_HOUR
+            print(f"Estimated wall time: {est_hours:.1f} hours")
+            print(f"Estimated cost: ${estimated_cost:.2f}")
+            
+            confirm = input("\nProceed? [y/n]: ").strip().lower()
+            if confirm != "y":
+                print("Aborted.")
+            else:
+                results, final_parallelism, oom_reductions = _run_queue_with_retries(queue, optimal_parallel)
 
     elapsed_hours = (time.time() - start_time) / 3600.0
     successful = [r for r in results if r and not r.get("error") and r.get("final_loss") is not None]
@@ -1710,13 +1814,21 @@ def main():
     print("ALL RUNS COMPLETE")
     print("=" * 60)
     print(f"Successful: {len(successful)}/{len(queue)}")
-    for r in sorted(successful, key=lambda x: (x["condition"], x["hd_mode"], x["seed"])):
-        print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]} loss={r["final_loss"]:.4f}')
+    for r in sorted(successful, key=lambda x: (x.get("queue", ""), x["condition"], x.get("epsilon", 0.0), x["hd_mode"], x["seed"])):
+        queue_name = r.get("queue", "unknown")
+        if queue_name == "epsilon_sweep":
+            print(f'  eps_{r.get("epsilon", 0.0):.1f} seed_{r["seed"]:02d} sRSA={r.get("final_srsa", r.get("final_loss")):.4f}')
+        else:
+            print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]} loss={r["final_loss"]:.4f}')
 
     if errors:
         print("\nErrors:")
         for r in errors:
-            print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]}: {r["error"]}')
+            queue_name = r.get("queue", "")
+            if queue_name == "epsilon_sweep":
+                print(f'  eps_{r.get("epsilon", 0.0):.1f} seed_{r["seed"]:02d}: {r["error"]}')
+            else:
+                print(f'  {r["condition"]} seed_{r["seed"]:02d} hd={r["hd_mode"]}: {r["error"]}')
 
     posthoc_manifest = {}
     try:
