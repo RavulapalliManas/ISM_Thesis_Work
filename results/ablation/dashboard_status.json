@@ -1,0 +1,209 @@
+{
+  "updated_at": "2026-05-10 02:53:00",
+  "gpu": {
+    "available": true,
+    "name": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "util_percent": 5.0,
+    "memory_used_mb": 2803.0,
+    "memory_total_mb": 6144.0,
+    "temperature_c": 69.0,
+    "power_w": "30.36"
+  },
+  "runs": [
+    {
+      "run": "hd_full\\seed_00",
+      "status": "running",
+      "step": 1,
+      "total": 40000,
+      "loss": 0.07857797294855118,
+      "gpu_mb": 451.244544,
+      "gpu_reserved_mb": 587.20256,
+      "spatial_sRSA": null,
+      "last_event": "progress",
+      "last_time": "2026-05-10 02:53:00",
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": {
+        "time": "2026-05-10 02:52:57",
+        "event": "hd_check",
+        "d_t_dim": 3,
+        "d_t_shape": [
+          32,
+          200,
+          5
+        ],
+        "heading_sum_mean": 1.0,
+        "heading_max": 1.0,
+        "speed_mean": 0.5903124809265137,
+        "h_shape": [
+          32,
+          32,
+          500
+        ],
+        "h_std": 0.6972899436950684,
+        "loss_step0": 0.07904460281133652,
+        "param_count": 400500,
+        "gpu_mb": 422.725632,
+        "gpu_reserved_mb": 471.8592,
+        "compiled_cell": true
+      },
+      "training_check": {
+        "time": "2026-05-10 02:45:18",
+        "event": "training_check",
+        "step": 500,
+        "loss": 0.02836325392127037,
+        "loss_delta": -0.05068134889006615,
+        "h_std": 0.5513583421707153
+      }
+    },
+    {
+      "run": "hd_full\\seed_01",
+      "status": "running",
+      "step": 1,
+      "total": 40000,
+      "loss": 0.08157689869403839,
+      "gpu_mb": 451.244544,
+      "gpu_reserved_mb": 587.20256,
+      "spatial_sRSA": null,
+      "last_event": "progress",
+      "last_time": "2026-05-10 02:53:00",
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": {
+        "time": "2026-05-10 02:52:57",
+        "event": "hd_check",
+        "d_t_dim": 3,
+        "d_t_shape": [
+          32,
+          200,
+          5
+        ],
+        "heading_sum_mean": 1.0,
+        "heading_max": 1.0,
+        "speed_mean": 0.600781261920929,
+        "h_shape": [
+          32,
+          32,
+          500
+        ],
+        "h_std": 0.7015148997306824,
+        "loss_step0": 0.0808190256357193,
+        "param_count": 400500,
+        "gpu_mb": 422.725632,
+        "gpu_reserved_mb": 471.8592,
+        "compiled_cell": true
+      },
+      "training_check": null
+    },
+    {
+      "run": "hd_ablated\\seed_00",
+      "status": "running",
+      "step": 1,
+      "total": 40000,
+      "loss": 0.07817420363426208,
+      "gpu_mb": 451.244544,
+      "gpu_reserved_mb": 587.20256,
+      "spatial_sRSA": null,
+      "last_event": "progress",
+      "last_time": "2026-05-10 02:53:00",
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": {
+        "time": "2026-05-10 02:52:57",
+        "event": "hd_check",
+        "d_t_dim": 3,
+        "d_t_shape": [
+          32,
+          200,
+          5
+        ],
+        "heading_sum_mean": 0.0,
+        "heading_max": 0.0,
+        "speed_mean": 0.5903124809265137,
+        "h_shape": [
+          32,
+          32,
+          500
+        ],
+        "h_std": 0.6980382204055786,
+        "loss_step0": 0.07870634645223618,
+        "param_count": 400500,
+        "gpu_mb": 422.725632,
+        "gpu_reserved_mb": 471.8592,
+        "compiled_cell": true
+      },
+      "training_check": null
+    },
+    {
+      "run": "hd_ablated\\seed_01",
+      "status": "running",
+      "step": 1,
+      "total": 40000,
+      "loss": 0.08163782954216003,
+      "gpu_mb": 451.244544,
+      "gpu_reserved_mb": 587.20256,
+      "spatial_sRSA": null,
+      "last_event": "progress",
+      "last_time": "2026-05-10 02:53:00",
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": {
+        "time": "2026-05-10 02:52:57",
+        "event": "hd_check",
+        "d_t_dim": 3,
+        "d_t_shape": [
+          32,
+          200,
+          5
+        ],
+        "heading_sum_mean": 0.0,
+        "heading_max": 0.0,
+        "speed_mean": 0.600781261920929,
+        "h_shape": [
+          32,
+          32,
+          500
+        ],
+        "h_std": 0.7022602558135986,
+        "loss_step0": 0.08088500797748566,
+        "param_count": 400500,
+        "gpu_mb": 422.725632,
+        "gpu_reserved_mb": 471.8592,
+        "compiled_cell": true
+      },
+      "training_check": null
+    },
+    {
+      "run": "hd_degraded\\seed_00",
+      "status": "not_started",
+      "step": 0,
+      "total": null,
+      "loss": null,
+      "gpu_mb": null,
+      "gpu_reserved_mb": null,
+      "spatial_sRSA": null,
+      "last_event": null,
+      "last_time": null,
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": null,
+      "training_check": null
+    },
+    {
+      "run": "hd_degraded\\seed_01",
+      "status": "not_started",
+      "step": 0,
+      "total": null,
+      "loss": null,
+      "gpu_mb": null,
+      "gpu_reserved_mb": null,
+      "spatial_sRSA": null,
+      "last_event": null,
+      "last_time": null,
+      "flags": [],
+      "checkpoints": [],
+      "hd_check": null,
+      "training_check": null
+    }
+  ]
+}

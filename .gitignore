@@ -34,3 +34,4 @@ build/
 .coverage.*
 gpu_manager_outputs/
 *.md
+.brain/

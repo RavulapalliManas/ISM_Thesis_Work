@@ -1,0 +1,186 @@
+{
+  "rsa_matrix_diagnostic": {
+    "S2_seed00_RSA_vs_Euclidean_spearman_rho": 0.711318,
+    "interpretation": "rsa_matrix stores distances. Larger values mean more different."
+  },
+  "c2_contrast_definition": {
+    "formula": "mean_C2_distance - mean_C4_distance",
+    "interpretation": "negative means C2-related positions are more similar than 90-degree-related positions",
+    "condition_values": {
+      "S1": {
+        "mean": 0.03877072532971696,
+        "std": 0.006076332685125313,
+        "count": 3
+      },
+      "S2": {
+        "mean": -0.07164222002029413,
+        "std": 0.005223559485639982,
+        "count": 3
+      },
+      "S4": {
+        "mean": 0.0545366823673248,
+        "std": 0.006129848588874489,
+        "count": 5
+      }
+    },
+    "paper_implication": "The S2 negative value supports C2-related compression under this distance-contrast definition. The prior paper text saying positive supports C2 structure should be corrected."
+  },
+  "qdm_status": {
+    "expected_pattern_detected": false,
+    "actual_s2_checks": {
+      "Q1_Q3": 0.552712599436442,
+      "Q1_Q2": 0.5484121243158976,
+      "Q2_Q4": 0.5511954625447592,
+      "Q2_Q3": 0.5252703428268433
+    },
+    "interpretation": "QDM does not show the requested quadrant-level S2 relation, even though pointwise C2 distance contrast is negative. Treat QDM as a separate coarse quadrant diagnostic, not as proof that the pointwise C2 contrast is wrong."
+  },
+  "speedhd_status": {
+    "encoding": "SpeedHD 5D [speed, hd_0, hd_1, hd_2, hd_3]",
+    "ablation_rule": "preserve speed column 0; zero or uniformize heading columns 1:5",
+    "preflight_mode_checks": {
+      "full": {
+        "hd_sum_first_step": 1.0,
+        "hd_values_first_step": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "speed_first_step": 1.0,
+        "total_hd_sum_sequence": 200.0
+      },
+      "ablated": {
+        "hd_sum_first_step": 0.0,
+        "hd_values_first_step": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "speed_first_step": 1.0,
+        "total_hd_sum_sequence": 0.0
+      },
+      "degraded": {
+        "hd_sum_first_step": 1.0,
+        "hd_values_first_step": [
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "speed_first_step": 1.0,
+        "total_hd_sum_sequence": 200.0
+      }
+    }
+  },
+  "cuda_status": {
+    "torch_version": "2.11.0+cpu",
+    "torch_cuda_available": false,
+    "nvidia_smi": "NVIDIA GeForce RTX 3060 Laptop GPU, 6144, 0, 5996",
+    "status": "blocked until CUDA-enabled torch is installed in .brain"
+  },
+  "figure_status": {
+    "fig_training_curves": {
+      "pdf": {
+        "path": "results\\figures\\fig_training_curves.pdf",
+        "exists": true,
+        "bytes": 51231
+      },
+      "png": {
+        "path": "results\\figures\\fig_training_curves.png",
+        "exists": true,
+        "bytes": 358113
+      }
+    },
+    "fig_rate_maps": {
+      "pdf": {
+        "path": "results\\figures\\fig_rate_maps.pdf",
+        "exists": true,
+        "bytes": 43843
+      },
+      "png": {
+        "path": "results\\figures\\fig_rate_maps.png",
+        "exists": true,
+        "bytes": 87006
+      }
+    },
+    "fig_population_geometry": {
+      "pdf": {
+        "path": "results\\figures\\fig_population_geometry.pdf",
+        "exists": true,
+        "bytes": 25071
+      },
+      "png": {
+        "path": "results\\figures\\fig_population_geometry.png",
+        "exists": true,
+        "bytes": 269918
+      }
+    },
+    "fig_quadrant_distances": {
+      "pdf": {
+        "path": "results\\figures\\fig_quadrant_distances.pdf",
+        "exists": true,
+        "bytes": 17864
+      },
+      "png": {
+        "path": "results\\figures\\fig_quadrant_distances.png",
+        "exists": true,
+        "bytes": 69521
+      }
+    },
+    "fig_metric_trajectories": {
+      "pdf": {
+        "path": "results\\figures\\fig_metric_trajectories.pdf",
+        "exists": true,
+        "bytes": 24031
+      },
+      "png": {
+        "path": "results\\figures\\fig_metric_trajectories.png",
+        "exists": true,
+        "bytes": 148463
+      }
+    },
+    "fig_coverage_and_heading": {
+      "pdf": {
+        "path": "results\\figures\\fig_coverage_and_heading.pdf",
+        "exists": true,
+        "bytes": 21361
+      },
+      "png": {
+        "path": "results\\figures\\fig_coverage_and_heading.png",
+        "exists": true,
+        "bytes": 134498
+      }
+    },
+    "fig_hd_ablation": {
+      "pdf": {
+        "path": "results\\figures\\fig_hd_ablation.pdf",
+        "exists": false,
+        "bytes": 0
+      },
+      "png": {
+        "path": "results\\figures\\fig_hd_ablation.png",
+        "exists": false,
+        "bytes": 0
+      }
+    },
+    "fig_decode_summary": {
+      "pdf": {
+        "path": "results\\figures\\fig_decode_summary.pdf",
+        "exists": true,
+        "bytes": 19400
+      },
+      "png": {
+        "path": "results\\figures\\fig_decode_summary.png",
+        "exists": true,
+        "bytes": 99965
+      }
+    }
+  },
+  "figure_limitations": [
+    "fig_hd_ablation is missing because Part E training has not run.",
+    "fig_metric_trajectories has final-only RA, not checkpoint RA trajectories, because S1/S2 trajectory folders are absent.",
+    "fig_quadrant_distances is intentionally marked unexpected for the requested S2 QDM pattern."
+  ]
+}

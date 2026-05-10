@@ -1,0 +1,12 @@
+{
+  "D1_status": "limited",
+  "reason": "Checkpoint hidden-state extraction for all three seed_00 runs requires the condition trajectory folders or systematic environment observations. The current sweep contains trajectories only for S4; S1 and S2 trajectory folders are absent. Therefore no checkpoint H matrices were inferred for S1/S2. Final H from evaluation.pkl is used for final-step RA/sRSA/DTG, and training_log.json is used for dense sRSA trajectories.",
+  "checkpoint_keys_confirmed": [
+    "step",
+    "model",
+    "optimizer",
+    "meta"
+  ],
+  "model_load_status": "s4 seed_00 ckpt_final loads into pRNN_th with no missing/unexpected keys",
+  "architecture_note": "SpeedHD action input is 5D [speed, hd_0, hd_1, hd_2, hd_3], no separate Wd."
+}

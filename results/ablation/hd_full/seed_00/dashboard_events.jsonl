@@ -1,0 +1,13 @@
+{"time": "2026-05-10 02:27:44", "event": "run_start", "hd_mode": "full", "seed": 0, "max_steps": 1000, "device": "NVIDIA GeForce RTX 3060 Laptop GPU", "torch": "2.5.1+cu124"}
+{"time": "2026-05-10 02:29:04", "event": "hd_check", "d_t_dim": 3, "d_t_shape": [8, 200, 5], "heading_sum_mean": 1.0, "heading_max": 1.0, "speed_mean": 0.6043750047683716, "h_shape": [8, 32, 500], "h_std": 0.6961531639099121, "loss_step0": 0.0809219554066658, "param_count": 400500, "gpu_mb": 351.100928, "gpu_reserved_mb": 367.0016, "compiled_cell": true}
+{"time": "2026-05-10 02:29:07", "event": "progress", "step": 1, "total": 1000, "loss": 0.08495720475912094, "gpu_mb": 367.463424, "gpu_reserved_mb": 415.236096}
+{"time": "2026-05-10 02:33:28", "event": "training_check", "step": 500, "loss": 0.027409473434090614, "loss_delta": -0.05351248197257519, "h_std": 0.5361649394035339}
+{"time": "2026-05-10 02:38:22", "event": "run_complete", "hd_mode": "full", "seed": 0, "loss": 0.027730846777558327}
+{"time": "2026-05-10 02:39:01", "event": "run_start", "hd_mode": "full", "seed": 0, "max_steps": 600, "device": "NVIDIA GeForce RTX 3060 Laptop GPU", "torch": "2.5.1+cu124"}
+{"time": "2026-05-10 02:40:14", "event": "hd_check", "d_t_dim": 3, "d_t_shape": [32, 200, 5], "heading_sum_mean": 1.0, "heading_max": 1.0, "speed_mean": 0.5903124809265137, "h_shape": [32, 32, 500], "h_std": 0.6972899436950684, "loss_step0": 0.07904460281133652, "param_count": 400500, "gpu_mb": 422.725632, "gpu_reserved_mb": 471.8592, "compiled_cell": true}
+{"time": "2026-05-10 02:40:17", "event": "progress", "step": 1, "total": 600, "loss": 0.07857797294855118, "gpu_mb": 451.244544, "gpu_reserved_mb": 587.20256}
+{"time": "2026-05-10 02:45:18", "event": "training_check", "step": 500, "loss": 0.02836325392127037, "loss_delta": -0.05068134889006615, "h_std": 0.5513583421707153}
+{"time": "2026-05-10 02:46:19", "event": "run_complete", "hd_mode": "full", "seed": 0, "loss": 0.02871435135602951}
+{"time": "2026-05-10 02:51:19", "event": "run_start", "hd_mode": "full", "seed": 0, "max_steps": 40000, "device": "NVIDIA GeForce RTX 3060 Laptop GPU", "torch": "2.5.1+cu124"}
+{"time": "2026-05-10 02:52:57", "event": "hd_check", "d_t_dim": 3, "d_t_shape": [32, 200, 5], "heading_sum_mean": 1.0, "heading_max": 1.0, "speed_mean": 0.5903124809265137, "h_shape": [32, 32, 500], "h_std": 0.6972899436950684, "loss_step0": 0.07904460281133652, "param_count": 400500, "gpu_mb": 422.725632, "gpu_reserved_mb": 471.8592, "compiled_cell": true}
+{"time": "2026-05-10 02:53:00", "event": "progress", "step": 1, "total": 40000, "loss": 0.07857797294855118, "gpu_mb": 451.244544, "gpu_reserved_mb": 587.20256}

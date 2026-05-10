@@ -1,0 +1,64 @@
+{
+  "torch_version": "2.5.1+cu124",
+  "torch_cuda_available": true,
+  "torch_cuda_memory_allocated_bytes": 0,
+  "nvidia_smi": "NVIDIA GeForce RTX 3060 Laptop GPU, 6144, 0, 5996",
+  "model_param_count": 400500,
+  "forward_h_t_shape": [
+    1,
+    195,
+    500
+  ],
+  "forward_pred_shape": [
+    1,
+    6,
+    195,
+    147
+  ],
+  "forward_target_shape": [
+    1,
+    6,
+    195,
+    147
+  ],
+  "input_encoding": "SpeedHD 5D [speed, hd_0, hd_1, hd_2, hd_3]",
+  "hd_ablation_target": "act_enc[..., 1:5]",
+  "separate_Wd_present": false,
+  "mode_checks": {
+    "full": {
+      "hd_sum_first_step": 1.0,
+      "hd_values_first_step": [
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "speed_first_step": 1.0,
+      "total_hd_sum_sequence": 200.0
+    },
+    "ablated": {
+      "hd_sum_first_step": 0.0,
+      "hd_values_first_step": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "speed_first_step": 1.0,
+      "total_hd_sum_sequence": 0.0
+    },
+    "degraded": {
+      "hd_sum_first_step": 1.0,
+      "hd_values_first_step": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ],
+      "speed_first_step": 1.0,
+      "total_hd_sum_sequence": 200.0
+    }
+  },
+  "training_status": "not_started",
+  "training_blocker": "Current .brain PyTorch runtime is CPU-only. Full Part E requires long-running 6-run training and should be launched only from a CUDA-enabled torch runtime."
+}

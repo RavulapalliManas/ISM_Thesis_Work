@@ -1,0 +1,3 @@
+{"time": "2026-05-10 02:51:19", "event": "run_start", "hd_mode": "ablated", "seed": 1, "max_steps": 40000, "device": "NVIDIA GeForce RTX 3060 Laptop GPU", "torch": "2.5.1+cu124"}
+{"time": "2026-05-10 02:52:57", "event": "hd_check", "d_t_dim": 3, "d_t_shape": [32, 200, 5], "heading_sum_mean": 0.0, "heading_max": 0.0, "speed_mean": 0.600781261920929, "h_shape": [32, 32, 500], "h_std": 0.7022602558135986, "loss_step0": 0.08088500797748566, "param_count": 400500, "gpu_mb": 422.725632, "gpu_reserved_mb": 471.8592, "compiled_cell": true}
+{"time": "2026-05-10 02:53:00", "event": "progress", "step": 1, "total": 40000, "loss": 0.08163782954216003, "gpu_mb": 451.244544, "gpu_reserved_mb": 587.20256}

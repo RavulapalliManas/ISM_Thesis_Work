@@ -1,0 +1,24 @@
+Architecture note: current codebase uses SpeedHD act_enc with 5 dimensions [speed, hd_0, hd_1, hd_2, hd_3], not a separate 12-bin HD input/Wd.
+C2 Contrast note: computed contrast is mean_C2_distance - mean_C4_distance. Because RSA is a distance matrix (S2 seed_00 RSA vs Euclidean rho = +0.711), negative values mean C2 pairs are more similar than C4 pairs.
+DecodeErr note: current computation follows B7 normalization and yields very small values because coordinates are decoded almost exactly from H; paper values appear to use a different scale or error definition.
+Paper should report S4 spatial_sRSA. Computed value = 0.706092. Action: UPDATE
+Paper should report S2 spatial_sRSA. Computed value = 0.725330. Action: UPDATE
+Paper should report S1 spatial_sRSA. Computed value = 0.830082. Action: UPDATE
+Paper states S4 RA = 0.223. Computed value = 0.217294. Action: CONFIRMED
+Paper states S2 RA = 0.116. Computed value = 0.113815. Action: CONFIRMED
+Paper states S1 RA = 0.098. Computed value = 0.097460. Action: CONFIRMED
+Paper should report S4 PAA gain. Computed value = 0.001459. Action: UPDATE
+Paper should report S2 PAA gain. Computed value = 0.002099. Action: UPDATE
+Paper should report S1 PAA gain. Computed value = 0.000000. Action: UPDATE
+Paper states S4 SCI = 0.889. Computed value = 0.806191. Action: UPDATE
+Paper states S2 SCI = 0.892. Computed value = 0.816198. Action: UPDATE
+Paper states S1 SCI = 0.984. Computed value = 1.005164. Action: CONFIRMED
+Paper states S4 C2 Contrast = -0.130. Computed value = 0.054537. Action: UPDATE
+Paper states S2 C2 Contrast = 0.045. Computed value = -0.071642. Action: UPDATE
+Paper states S1 C2 Contrast = -0.070. Computed value = 0.038771. Action: UPDATE
+Paper states S4 DTG = -0.052. Computed value = -0.049403. Action: CONFIRMED
+Paper states S2 DTG = -0.011. Computed value = 0.011692. Action: UPDATE
+Paper states S1 DTG = -0.020. Computed value = -0.001344. Action: UPDATE
+Paper states S4 DecodeErr = 0.524. Computed value = 0.000332. Action: UPDATE
+Paper states S2 DecodeErr = 0.475. Computed value = 0.000275. Action: UPDATE
+Paper states S1 DecodeErr = 0.365. Computed value = 0.000167. Action: UPDATE

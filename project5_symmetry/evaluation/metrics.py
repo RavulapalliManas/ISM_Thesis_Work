@@ -18,7 +18,10 @@ Paper metrics (re-implemented to avoid class dependency):
 
 import numpy as np
 import torch
-import pynapple as nap
+try:
+    import pynapple as nap
+except ModuleNotFoundError:
+    nap = None
 from scipy.spatial.distance import pdist, cdist
 from scipy.signal import correlate2d
 from scipy.stats import spearmanr
@@ -430,6 +433,11 @@ def compute_tuning_curves(
     tc  : dict {unit_id: (nb_bins, nb_bins) ndarray}  — tuning curves
     occ : (nb_bins, nb_bins) ndarray                  — occupancy map
     """
+    if nap is None:
+        raise ModuleNotFoundError(
+            "pynapple is required for compute_tuning_curves(), but it is not installed. "
+            "Other project5_symmetry metrics remain available."
+        )
     T = hidden.shape[0]
     ts = np.arange(T, dtype=np.float64)
 
