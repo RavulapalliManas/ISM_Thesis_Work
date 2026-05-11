@@ -36,3 +36,34 @@ gpu_manager_outputs/
 *.md
 hd_ablation_results/
 *.zip 
+# ML artifacts
+*.pt
+*.ckpt
+*.npy
+*.npz
+*.log
+
+# Tensorboard
+events.out.tfevents.*
+
+# Experiment outputs
+results/
+trajectories/
+project5_symmetry/results2/
+
+# Ignore all trajectories folders
+**/trajectories/
+
+# Ignore tensorboard logs
+**/tb/
+
+# Ignore all results folders
+**/results/
+**/results2/
+
+# Ignore checkpoints
+*.pt
+*.ckpt
+
+# Mac
+.DS_Store
