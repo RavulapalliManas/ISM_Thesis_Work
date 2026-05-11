@@ -33,7 +33,6 @@ build/
 *.coverage
 .coverage.*
 gpu_manager_outputs/
-*.md
 hd_ablation_results/
 *.zip 
 # ML artifacts
@@ -66,4 +65,4 @@ project5_symmetry/results2/
 *.ckpt
 
 # Mac
-.DS_Store
+.DS_Store.minimax-skills/ 
