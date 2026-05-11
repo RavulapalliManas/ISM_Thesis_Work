@@ -1,6 +1,6 @@
 \documentclass[11pt, a4paper]{article}
 \usepackage[top=2.5cm, bottom=2.5cm, left=2.8cm, right=2.8cm]{geometry}
-\usepackage{mathpazo}
+\usepackage{palatino}
 \usepackage{setspace}
 \singlespacing
 \usepackage{graphicx}
@@ -157,8 +157,8 @@ over 80,000 training steps. A total of 17 seeds were run across all conditions (
 \begin{minipage}{0.48\textwidth}
   \centering
   \includegraphics[width=\textwidth]{images/fig_srsa_invariance.png}
-\caption{Why sRSA is invariant to permutations. Row permutations of the neural population matrix leave all pairwise distances unchanged, so rotated maps yield identical sRSA values.}
-\label{fig:srsa}
+  \caption{Why sRSA is invariant to permutations. Both maps yield identical pairwise distances.}
+  \label{fig:srsa}
 \end{minipage}
 \end{figure}
 
@@ -282,7 +282,7 @@ The network maintains high dimensionality despite symmetry. TwoNN intrinsic dime
 \label{fig:spectral}
 \end{figure}
 
-\noindent The manifold fragments locally while preserving global structure---partial folding. The network cannot fold symmetric positions onto a single point without destroying within-quadrant structure for multi-step prediction, so it maintains high dimensionality while tolerating inter-quadrant ambiguity. The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but higher spectral gap goes with worse spatial maps --- the opposite of what a stronger attractor would predict. Symmetry costs are real but bounded and compensable.
+\noindent The manifold fragments locally while preserving global structure---partial folding. The network cannot fold symmetric positions onto a single point without destroying within-quadrant structure for multi-step prediction, so it maintains high dimensionality while tolerating inter-quadrant ambiguity. The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but higher spectral gap goes with worse spatial maps --- the opposite of what a stronger attractor would predict. Across all results: global degeneracy is ruled out, local aliasing scales with symmetry, population compression stays graded, distance geometry shifts toward path-dependence, the population code encodes group structure, and the manifold stays high-dimensional but fragments. Symmetry costs are real but bounded and compensable.
 
 \section*{Heading Direction Input is Necessary for Global Map Stability}
 \label{sec:hdablation}

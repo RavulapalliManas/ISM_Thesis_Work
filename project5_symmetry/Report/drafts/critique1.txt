@@ -1,0 +1,77 @@
+ACADEMIC CRITIQUE OF r_draft1.tex — Phase 2
+============================================
+
+CRITIQUE CHECKLIST:
+
+[1] SCIENTIFIC ACCURACY
+
+ISSUE 1: [INCONSISTENT RA VALUES - Predictions vs Results]
+Location: Lines 344, 346 (Predictions section) vs Lines 224, 82-83 (Results/Abstract)
+Quote: "RA = 0.223, 0.116, 0.098 respectively" in Predictions
+vs S4=0.217, S2=0.114, S1=0.097 in Results
+What is wrong: RA values in the Predictions section (0.223/0.116/0.098) do not match the RA values reported in the Results section (0.217/0.114/0.097) and abstract (0.217/0.114/0.097). This is a direct contradiction.
+Fix: Change all RA values in Predictions section to match Results: S4=0.217, S2=0.114, S1=0.097
+
+ISSUE 2: [INCONSISTENT RA VALUES - Limitations vs Results]
+Location: Line 356 (Limitations) vs Line 224 (Results)
+Quote: "RA: $0.223 \pm 0.003$ versus $0.116 \pm 0.004$" in Limitations
+vs "S4 $0.217 \pm 0.003$, S2 $0.114 \pm 0.004$" in Results
+What is wrong: Limitations cites RA values (0.223, 0.116) that are higher than Results values (0.217, 0.114). These must match.
+Fix: Change Limitations RA values to $0.217 \pm 0.003$ versus $0.114 \pm 0.004$
+
+[2] FIGURE REFERENCES
+
+ISSUE 3: [CAPTION MISMATCH - fig:srsa]
+Location: Line 163 caption + Line 174 text
+Quote: "Why sRSA is invariant to permutations. Both maps yield identical pairwise distances." / "Figure \ref{fig:srsa} (right) demonstrates this blindness: two fundamentally different failure modes---global rotation versus local folding---yield identical sRSA..."
+What is wrong: The fig_srsa_invariance.png image (confirmed at images/fig_srsa_invariance.png) shows sRSA permutation invariance analysis (two heatmap grids labeled). The caption describes this correctly. BUT line 174 says "(right)" — implying the figure has panels, and that the RIGHT panel shows failure modes. The actual image shows permutation invariance, NOT failure modes. The text at line 174 over-interprets what the figure shows.
+Fix: Remove "(right)" from line 174. Change to: "Figure \ref{fig:srsa} demonstrates this blindness: two fundamentally different failure modes---global rotation versus local folding---yield identical sRSA despite producing qualitatively different neural codes." The image shows the sRSA invariance concept, so the text should refer to the figure's concept rather than a specific panel.
+
+ISSUE 4: [DANGLING REFERENCE WARNING - fig:srsa]
+Location: The \label{fig:srsa} is on the RIGHT minipage (line 164), but the text at line 174 references the whole figure. In LaTeX, \ref{fig:srsa} would return the figure number, which is fine. However, the "(right)" qualifier suggests the author meant to reference a sub-panel, which is not standard LaTeX behavior. This is a clarity issue.
+Fix: Remove "(right)" — just reference the figure directly as in ISSUE 3 fix.
+
+[3] STRUCTURAL COMPLETENESS
+
+ISSUE 5: [EPSILON CONTENT] — CLEAN. No epsilon sweep content found. ✓
+
+ISSUE 6: [SECTION NUMBERING] — CLEAN. All sections use \section* without numbering. ✓
+
+ISSUE 7: [DISCUSSION SECTION 1.3] — The prompt says "Discussion 1.3 (Information Content Threshold)" should be removed. Current draft has Discussion 1.3 as "Representational Quality and the Spectral Gap" which is a legitimate section. No Information Content Threshold section exists. ✓
+
+ISSUE 8: [ABSTRACT-BODY CONSISTENCY] — Abstract vs body: abstract says RA: S1=0.097, S2=0.114, S4=0.217 ✓ (matches Results). Abstract says sRSA: 0.615→0.260 ✓ (matches HD ablation). Abstract says PAA S4<0.05 ✓. 
+FIX NEEDED: Abstract says "EVS > 0.93" implicitly through tuned unit percentages. But the actual EVS threshold used is 0.1. The tuned unit fractions (1.8%, 3.7%, 4.7%) are correct for EVS > 0.1. No change needed to abstract if threshold is 0.1.
+
+[4] REDUNDANCY
+
+ISSUE 9: [SPECTRAL GAP DISCUSSION DUPLICATED]
+Location: Line 288 (Results manifold closing) vs Lines 394-400 (Discussion 1.1) vs Lines 425-427 (Discussion 1.3)
+Quote Results line 288: "The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but negatively predicts spatial map quality --- a dissociation we interpret in the Discussion."
+Quote Discussion 1.1: "The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but negatively predicts spatial map quality. This might seem like a signature of a stronger, more stable attractor --- but it predicts worse spatial representations across seeds."
+Quote Discussion 1.3: "A striking finding from our spectral analysis is the negative correlation between representational quality (measured by sRSA) and the spectral gap..."
+What is wrong: The spectral gap interpretation is stated three times: once in Results, twice in Discussion. The Discussion 1.1 and 1.3 content is partially redundant.
+Fix: The Results-level statement is appropriate as a forward reference. Keep Discussion 1.1 and 1.3 but ensure they add new interpretive value rather than repeating the same finding. Discussion 1.1 focuses on attractor organization; Discussion 1.3 should focus on the dynamical systems interpretation. They can both discuss the spectral gap if they add different angles.
+
+ISSUE 10: [IMPLEMENTATION PARAGRAPH] — CLEAN. Deleted from Methods as required. ✓
+
+[5] HD DESCRIPTION
+
+ISSUE 11: [HD DESCRIPTION] — CLEAN. All HD references use "5-dimensional SpeedHD vector" or "4-way one-hot heading direction" not "12-bin". ✓
+
+[6] SEEDS
+
+ISSUE 12: [SEEDS] — CLEAN. 17 seeds total (S4 n=7, S2 n=5, S1 n=5) stated consistently at lines 139, 149, 354. ✓
+
+SUMMARY:
+- 12 issues found
+- 2 scientific accuracy issues (inconsistent RA values)
+- 2 figure reference issues (fig:srsa caption mismatch and "(right)" qualifier)
+- 0 epsilon/section numbering issues
+- 1 redundancy issue (spectral gap repeated)
+- All hard-rule items (HD description, seeds, implementation paragraph) are clean
+
+PRIORITY FIXES (MUST FIX before Phase 4):
+1. RA values in Predictions section (lines 344, 346): 0.223→0.217, 0.116→0.114, 0.098→0.097
+2. RA values in Limitations (line 356): 0.223±0.003→0.217±0.003, 0.116±0.004→0.114±0.004
+3. Line 174: Remove "(right)" from "Figure \ref{fig:srsa} (right)"
+4. fig:srsa caption is actually correct — no change needed to caption. Only the text at line 174 needs "(right)" removed.

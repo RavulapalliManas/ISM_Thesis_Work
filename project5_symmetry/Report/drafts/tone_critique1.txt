@@ -1,0 +1,47 @@
+TONE CRITIQUE OF r_draft1.tex — Phase 3
+=======================================
+
+TONE CHECKLIST RESULTS:
+
+TONE ISSUE 1: Line 126-129
+Quote: "...the pRNN framework is more robust to environmental ambiguity than one might expect"
+Problem: "than one might expect" — vague hedge that sounds like filler
+Fix: "...the pRNN framework is more robust to environmental ambiguity --- but this robustness has clear geometric limits..."
+
+TONE ISSUE 2: Line 224
+Quote: "Head-direction input cannot prevent local aliasing costs. Unit-level rotational autocorrelation (RA) is S4 $0.217 \pm 0.003$, S2 $0.114 \pm 0.004$, S1 $0.097 \pm 0.002$---exactly matching symmetry group order."
+Problem: Numbers stated without interpretation — reader has to infer what 0.217 means
+Fix: "Head-direction input cannot prevent local aliasing costs. Unit-level rotational autocorrelation (RA) was S4 0.217, S2 0.114, S1 0.097 --- scaling directly with symmetry group order (4-fold, 2-fold, 1-fold respectively)."
+
+TONE ISSUE 3: Line 244
+Quote: "The dissociation between RA and SCI is striking: S4 and S2 show substantially different unit-level aliasing yet indistinguishable population compression ($p = 0.786$)."
+Problem: "striking" is editorializing — not neutral scientific language
+Fix: "RA and SCI dissociate: S4 and S2 show substantially different unit-level aliasing yet indistinguishable population compression ($p = 0.786$)."
+
+TONE ISSUE 4: Line 288 (closing paragraph of manifold section)
+Quote: "The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but negatively predicts spatial map quality --- a dissociation we interpret in the Discussion."
+Problem: "a dissociation we interpret in the Discussion" — this sounds like academic formula. The phrase "negatively predicts" is also awkward.
+Fix: "The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but higher spectral gap goes with worse spatial maps --- the opposite of what a stronger attractor would predict."
+
+TONE ISSUE 5: Lines 396-397
+Quote: "This might seem like a signature of a stronger, more stable attractor --- but it predicts worse spatial representations across seeds."
+Problem: "might seem like" — hedge stacked with implication
+Fix: "This looks like a signature of a stronger attractor --- but it predicts worse spatial representations across seeds."
+
+TONE ISSUE 6: Line 427
+Quote: "A striking finding from our spectral analysis is the negative correlation between representational quality (measured by sRSA) and the spectral gap..."
+Problem: "A striking finding" — editorializing, also redundant with Discussion 1.1 content
+Fix: "The spectral analysis reveals a negative correlation between representational quality (sRSA) and the spectral gap..."
+
+SUMMARY: 6 TONE ISSUES found.
+- All are minor — the draft already has a strong scientific voice
+- Main issues: "striking" used twice, vague hedges ("might expect"), numbers without interpretation
+- No major AI-sounding filler found — the draft is already close to Manas's voice
+
+MUST-FIX TONE REWRITES for Phase 4:
+1. Line 126-129: "than one might expect" → "...but this robustness has clear geometric limits..."
+2. Line 224: Add interpretation after RA values ("scaling directly with symmetry group order")
+3. Line 244: Remove "striking"
+4. Line 288: Rephrase "negatively predicts" and "a dissociation we interpret"
+5. Line 396: Remove "might seem like"
+6. Line 427: Remove "A striking finding"
