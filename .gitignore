@@ -34,3 +34,5 @@ build/
 .coverage.*
 gpu_manager_outputs/
 *.md
+hd_ablation_results/
+*.zip 

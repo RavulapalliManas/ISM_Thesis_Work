@@ -1,0 +1,26 @@
+{
+  "condition": "s2",
+  "seed": 1,
+  "srsa": 0.7364242809041909,
+  "n_positions": 324,
+  "position_hidden_shape": [
+    324,
+    500
+  ],
+  "rsa_matrix_shape": [
+    324,
+    324
+  ],
+  "place_field_coherence": {
+    "mean_score": 8.061067894770398,
+    "std_score": 31.43462937785048,
+    "n_valid_units": 492,
+    "evs_threshold": 0.1
+  },
+  "rgc": {
+    "stress": 0.38755405093766293,
+    "stress_pca": 11.724857737253583,
+    "pca_var_2d": 0.3274666965007782
+  },
+  "pickle_path": "project5_symmetry/results/symmetry_sweep/s2/seed_01/evaluation.pkl"
+}

@@ -1,4 +1,4 @@
-\begin{thebibliography}{5}
+\begin{thebibliography}{7}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -14,6 +14,16 @@ James~J. Knierim, Hemant~S. Kudrimoti, and Bruce~L. McNaughton.
 Stefan Leutgeb, Michael~E. Ragozzino, and Sheri J.~Y. Mizumori.
 \newblock Independent codes for place and headings in the hippocampal formation.
 \newblock \emph{Nature Neuroscience}, 8\penalty0 (6):\penalty0 740--747, 2005.
+
+\bibitem[Levenstein et~al.(2024)Levenstein, Efremov, Eyono, Peyrache, and Richards]{levenstein2024}
+Daniel Levenstein, Ivan Efremov, J{\'e}r{\^o}me Eyono, Adrien Peyrache, and Blake~A. Richards.
+\newblock Sequential predictive learning is a unifying theory for hippocampal representation and replay.
+\newblock \emph{bioRxiv}, 2024.
+
+\bibitem[Lever et~al.(2002)Lever, Burton, and O'Keefe]{lever2002}
+Colin Lever, Stephen Burton, and John O'Keefe.
+\newblock Rearing on hind legs, environmental novelty, and the hippocampal formation.
+\newblock \emph{Reviews in the Neurosciences}, 13\penalty0 (1):\penalty0 71--84, 2002.
 
 \bibitem[Muller and Kubie(1987)]{muller1987}
 Robert~U. Muller and John~L. Kubie.
