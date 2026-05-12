@@ -7,37 +7,60 @@
 
 \bibitem[Knierim et~al.(1995)Knierim, Kudrimoti, and McNaughton]{knierim1995}
 James~J. Knierim, Hemant~S. Kudrimoti, and Bruce~L. McNaughton.
-\newblock Interactions between a new and a familiar environment in the hippocampus.
-\newblock \emph{Journal of Neuroscience}, 15\penalty0 (1):\penalty0 97--110, 1995.
+\newblock Place cells, head direction cells, and the learning of landmark
+  stability.
+\newblock \emph{The Journal of Neuroscience}, 15\penalty0 (3):\penalty0
+  1648--1659, 1995.
+\newblock \doi{10.1523/JNEUROSCI.15-03-01648.1995}.
 
-\bibitem[Leutgeb et~al.(2005)Leutgeb, Ragozzino, and Mizumori]{leutgeb2005}
-Stefan Leutgeb, Michael~E. Ragozzino, and Sheri J.~Y. Mizumori.
-\newblock Independent codes for place and headings in the hippocampal formation.
-\newblock \emph{Nature Neuroscience}, 8\penalty0 (6):\penalty0 740--747, 2005.
+\bibitem[Leutgeb et~al.(2005)Leutgeb, Leutgeb, Barnes, Moser, McNaughton, and
+  Moser]{leutgeb2005}
+Stefan Leutgeb, Jill~K. Leutgeb, Carol~A. Barnes, Edvard~I. Moser, Bruce~L.
+  McNaughton, and May-Britt Moser.
+\newblock Independent codes for spatial context and spatial location in the
+  hippocampal formation.
+\newblock \emph{Science}, 309\penalty0 (5734):\penalty0 619--623, 2005.
+\newblock \doi{10.1126/science.1110711}.
 
-\bibitem[Levenstein et~al.(2024)Levenstein, Efremov, Eyono, Peyrache, and Richards]{levenstein2024}
-Daniel Levenstein, Ivan Efremov, J{\'e}r{\^o}me Eyono, Adrien Peyrache, and Blake~A. Richards.
-\newblock Sequential predictive learning is a unifying theory for hippocampal representation and replay.
+\bibitem[Levenstein et~al.(2024)Levenstein, Efremov, Eyono, Peyrache, and
+  Richards]{levenstein2024}
+Daniel Levenstein, Ivan Efremov, Jérôme Eyono, Adrien Peyrache, and Blake~A.
+  Richards.
+\newblock Sequential predictive learning is a unifying theory for hippocampal
+  representation and replay.
 \newblock \emph{bioRxiv}, 2024.
+\newblock \doi{10.1101/2024.02.26.582126}.
 
 \bibitem[Lever et~al.(2002)Lever, Burton, and O'Keefe]{lever2002}
 Colin Lever, Stephen Burton, and John O'Keefe.
-\newblock Rearing on hind legs, environmental novelty, and the hippocampal formation.
-\newblock \emph{Reviews in the Neurosciences}, 13\penalty0 (1):\penalty0 71--84, 2002.
+\newblock Rearing on hind legs, environmental novelty, and the hippocampal
+  formation.
+\newblock \emph{Reviews in the Neurosciences}, 13\penalty0 (1):\penalty0
+  71--84, 2002.
+\newblock \doi{10.1515/REVNEURO.2002.13.1.71}.
 
 \bibitem[Muller and Kubie(1987)]{muller1987}
 Robert~U. Muller and John~L. Kubie.
-\newblock Effects of changes in the environment on the spatial firing of hippocampal complex-spike cells.
-\newblock \emph{Journal of Neuroscience}, 7\penalty0 (7):\penalty0 1951--1968, 1987.
+\newblock The effects of changes in the environment on the spatial firing of
+  hippocampal complex-spike cells.
+\newblock \emph{The Journal of Neuroscience}, 7\penalty0 (7):\penalty0
+  1951--1968, 1987.
+\newblock \doi{10.1523/JNEUROSCI.07-07-01951.1987}.
 
-\bibitem[Stachenfeld et~al.(2017)Stachenfeld, Botvinick, and Gershman]{stachenfeld2017}
+\bibitem[Stachenfeld et~al.(2017)Stachenfeld, Botvinick, and
+  Gershman]{stachenfeld2017}
 Kimberly~L. Stachenfeld, Matthew~M. Botvinick, and Samuel~J. Gershman.
 \newblock The hippocampus as a predictive map.
-\newblock \emph{Nature Neuroscience}, 20\penalty0 (11):\penalty0 1643--1653, 2017.
+\newblock \emph{Nature Neuroscience}, 20\penalty0 (11):\penalty0 1643--1653,
+  2017.
+\newblock \doi{10.1038/nn.4650}.
 
 \bibitem[Taube et~al.(1990)Taube, Muller, and Ranck]{taube1990}
 Jeffrey~S. Taube, Robert~U. Muller, and James~B. Ranck.
-\newblock Head-direction cells recorded from the postsubiculum in freely moving rats.
-\newblock \emph{Journal of Neuroscience}, 10\penalty0 (2):\penalty0 420--435, 1990.
+\newblock Head-direction cells recorded from the postsubiculum in freely moving
+  rats. i. description and quantitative analysis.
+\newblock \emph{The Journal of Neuroscience}, 10\penalty0 (2):\penalty0
+  420--435, 1990.
+\newblock \doi{10.1523/JNEUROSCI.10-02-00420.1990}.
 
 \end{thebibliography}

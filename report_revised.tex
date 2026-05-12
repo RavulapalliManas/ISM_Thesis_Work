@@ -1,4 +1,4 @@
-\documentclass[10pt]{article}
+﻿\documentclass[10pt]{article}
 \usepackage[margin=0.8in]{geometry}
 \usepackage{graphicx}
 \usepackage{amsmath}
@@ -64,17 +64,17 @@ After training, hidden states were collected by evaluating the pRNN across arena
 
 \subsection{Summary Across Metrics}
 
-Symmetry systematically degrades spatial precision and metric geometry without producing global orientational degeneracy: sRSA falls from 0.745 in S1 to 0.647 in S4, decoding error rises from 0.365 to 0.524, and DTG grows more negative (−0.020 to −0.052), while cross-seed alignment remains above 0.97 in all conditions (Figure 1). The summary table in Figure~\ref{fig:summarytable} gives the corresponding values: sRSA Euclid is 0.647 in S4, 0.657 in S2, and 0.745 in S1; decoding error is 0.524, 0.475, and 0.365. Matched ODI therefore does not imply matched representation. The same amount of sensory information produces different population codes when the equivalence structure of the observations changes.
+Symmetry systematically degrades spatial precision and metric geometry without producing global orientational degeneracy: sRSA falls from 0.745 in S1 to 0.647 in S4, decoding error rises from 0.365 to 0.524, and DTG grows more negative ($-0.020$ to $-0.052$), while cross-seed alignment remains above 0.97 in all conditions (Figure 1). The summary table in Figure~\ref{fig:summarytable} gives the corresponding values: sRSA Euclid is 0.647 in S4, 0.657 in S2, and 0.745 in S1; decoding error is 0.524, 0.475, and 0.365. Matched ODI therefore does not imply matched representation. The same amount of sensory information produces different population codes when the equivalence structure of the observations changes.
 
 \begin{center}
 \centering
-\includegraphics[width=0.64\textwidth]{Dashboardstyleall mertics.png}
+\includegraphics[width=0.64\textwidth]{fig_dashboard_metrics.png}
 \vspace{2pt}
 \includegraphics[width=0.50\textwidth]{FInal Table.png}
 \refstepcounter{figure}
 \label{fig:dashboard}
 \label{fig:summarytable}
-{\small Figure~\thefigure. Symmetry degrades spatial precision without eliminating map structure. S4 shows lower sRSA (0.647 vs 0.745), higher decoding error (0.524 vs 0.365), more negative DTG (−0.052 vs −0.020), and higher manifold dimensionality (5.95 vs 5.66) than S1, with ODI fixed at 0.336 across all conditions.}
+{\small Figure~\thefigure. Symmetry degrades spatial precision without eliminating map structure. S4 shows lower sRSA (0.647 vs 0.745), higher decoding error (0.524 vs 0.365), more negative DTG ($-0.052$ vs $-0.020$), and higher manifold dimensionality (5.95 vs 5.66) than S1, with ODI fixed at 0.336 across all conditions.}
 \end{center}
 
 \subsection{Questions and Evidence Strength}
@@ -83,11 +83,11 @@ The strongest results are those tied to a specific mechanism. The monotone decod
 
 \subsection{Decoding Precision Falls With Symmetry}
 
-Decoding error increased monotonically with symmetry group order: S4 = 0.524 $\pm$ [STAT:decoding_error:S4_sem], S2 = 0.475 $\pm$ [STAT:decoding_error:S2_sem], S1 = 0.365 $\pm$ [STAT:decoding_error:S1_sem] (Mann-Whitney S4 vs S1: p = [STAT:decoding_error:S4_vs_S1_p], r = [STAT:decoding_error:S4_vs_S1_r], Figure 2). In S4, observations at $(x,y)$ are statistically matched by the three $90^\circ$-rotated positions. The recurrent state partially folds these locations into one equivalence class without increasing prediction loss. A linear decoder then estimates the class centroid, producing an error floor set by within-class spatial spread. S2 has only the $180^\circ$ ambiguity and shows a smaller penalty. This is the most direct evidence that symmetry reduces precision rather than merely changing the visual appearance of tuning maps.
+Decoding error increased monotonically with symmetry group order: S4 = 0.524 $\pm$ $\mathtt{[STAT:decoding_error:S4_sem]}$, S2 = 0.475 $\pm$ $\mathtt{[STAT:decoding_error:S2_sem]}$, S1 = 0.365 $\pm$ $\mathtt{[STAT:decoding_error:S1_sem]}$ (Mann-Whitney S4 vs S1: p = $\mathtt{[STAT:decoding_error:S4_vs_S1_p]}$, r = $\mathtt{[STAT:decoding_error:S4_vs_S1_r]}$, Figure 2). In S4, observations at $(x,y)$ are statistically matched by the three $90^\circ$-rotated positions. The recurrent state partially folds these locations into one equivalence class without increasing prediction loss. A linear decoder then estimates the class centroid, producing an error floor set by within-class spatial spread. S2 has only the $180^\circ$ ambiguity and shows a smaller penalty. This is the most direct evidence that symmetry reduces precision rather than merely changing the visual appearance of tuning maps.
 
 \subsection{Geometry Becomes More City-Block-Biased}
 
-Neural distance geometry became more city-block-biased as landmark symmetry increased: DTG was −0.052 in S4, −0.011 in S2, and −0.020 in S1 (Mann-Whitney S4 vs S1: p = [STAT:DTG:S4_vs_S1_p], r = [STAT:DTG:S4_vs_S1_r]). Under C4 symmetry, visual observations do not anchor inter-quadrant transitions, so successor geometry generalizes across rotated equivalence classes and path length dominates straight-line distance. The S4 curve continues to diverge through 80,000 steps in Figure~\ref{fig:dtg}, even after final sRSA reaches a comparable map-like value. S2's value of $-0.011$ is anomalously close to zero; with $n=3$ seeds, it should be treated as preliminary rather than as a stable exception.
+Neural distance geometry became more city-block-biased as landmark symmetry increased: DTG was $-0.052$ in S4, $-0.011$ in S2, and $-0.020$ in S1 (Mann-Whitney S4 vs S1: p = $\mathtt{[STAT:DTG:S4_vs_S1_p]}$, r = $\mathtt{[STAT:DTG:S4_vs_S1_r]}$). Under C4 symmetry, visual observations do not anchor inter-quadrant transitions, so successor geometry generalizes across rotated equivalence classes and path length dominates straight-line distance. The S4 curve continues to diverge through 80,000 steps in Figure~\ref{fig:dtg}, even after final sRSA reaches a comparable map-like value. S2's value of $-0.011$ is anomalously close to zero; with $n=3$ seeds, it should be treated as preliminary rather than as a stable exception.
 
 \begin{center}
 \centering
@@ -122,9 +122,9 @@ Neural distance geometry became more city-block-biased as landmark symmetry incr
 
 \subsection{Degeneracy Is Global-Negative but Local-Positive}
 
-Cross-seed orientational degeneracy did not occur in any condition: PAA gain was 0.006 in S4 and 0.005 in S1, indistinguishable from zero (shuffle z-score: [SHUFFLE:S4]). Cross-seed RSA alignment stayed high in every condition: S4 $=0.977\pm0.002$, S2 $=0.975\pm0.003$, and S1 $=0.974\pm0.001$ (Figure~\ref{fig:alignment}). PAA asks whether a rotated alignment improves over the identity alignment; its gain was tiny, S4 $=0.006$ and S1 $=0.005$, far below the 0.05 threshold. Independent seeds therefore did not learn incompatible global orientations. The head-direction input provides the most direct explanation: it breaks rotational equivalence in the transition sequence even when the visual observation function is C4-symmetric (12-bin one-hot head-direction, Levenstein et al. Figure 4 [1]).
+Cross-seed orientational degeneracy did not occur in any condition: PAA gain was 0.006 in S4 and 0.005 in S1, indistinguishable from zero (shuffle z-score: $\mathtt{[SHUFFLE:S4]}$). Cross-seed RSA alignment stayed high in every condition: S4 $=0.977\pm0.002$, S2 $=0.975\pm0.003$, and S1 $=0.974\pm0.001$ (Figure~\ref{fig:alignment}). PAA asks whether a rotated alignment improves over the identity alignment; its gain was tiny, S4 $=0.006$ and S1 $=0.005$, far below the 0.05 threshold. Independent seeds therefore did not learn incompatible global orientations. The head-direction input provides the most direct explanation: it breaks rotational equivalence in the transition sequence even when the visual observation function is C4-symmetric (12-bin one-hot head-direction, Levenstein et al. Figure 4 [1]).
 
-Local aliasing did increase. Rotational autocorrelation compares a unit's tuning map with its rotated copies; it was S4 $=0.187$ versus S1 $=0.069$, a 2.7$\times$ elevation (shuffle z-score S4: [SHUFFLE:S4], p = [STAT:RA_shuffle:S4_p]; S1: [SHUFFLE:S1], p = [STAT:RA_shuffle:S1_p]). The four-peak unit fraction also increased, from 4.5\% in S1 to 7.7\% in S4. The failure mode is local folding, not global collapse. Individual units can repeat responses at symmetric positions while the population as a whole keeps a shared global orientation.
+Local aliasing did increase. Rotational autocorrelation compares a unit's tuning map with its rotated copies; it was S4 $=0.187$ versus S1 $=0.069$, a 2.7$\times$ elevation (shuffle z-score S4: $\mathtt{[SHUFFLE:S4]}$, p = $\mathtt{[STAT:RA_shuffle:S4_p]}$; S1: $\mathtt{[SHUFFLE:S1]}$, p = $\mathtt{[STAT:RA_shuffle:S1_p]}$). The four-peak unit fraction also increased, from 4.5\% in S1 to 7.7\% in S4. The failure mode is local folding, not global collapse. Individual units can repeat responses at symmetric positions while the population as a whole keeps a shared global orientation.
 
 \begin{center}
 \centering
@@ -136,13 +136,13 @@ Local aliasing did increase. Rotational autocorrelation compares a unit's tuning
 
 \subsection{C2 Symmetry Is Encoded in the Population Code}
 
-The S2 population code specifically encoded the C2 symmetry group of the observation function: C2 Contrast was +0.045 in S2 versus −0.130 in S4 and −0.070 in S1. The contrast compares similarity for $180^\circ$-related quadrant pairs against $90^\circ$-related pairs. A positive value means that the population treats the C2-equivalent quadrants as more similar. This is exactly the relation imposed by the S2 observation function. The result cannot be reduced to generic precision loss, because generic loss blurs all quadrant distinctions rather than selectively favoring the C2-equivalent pairs. The network had no group-theoretic objective; this structure emerges from prediction over symmetric observation sequences.
+The S2 population code specifically encoded the C2 symmetry group of the observation function: C2 Contrast was +0.045 in S2 versus $-0.130$ in S4 and $-0.070$ in S1. The contrast compares similarity for $180^\circ$-related quadrant pairs against $90^\circ$-related pairs. A positive value means that the population treats the C2-equivalent quadrants as more similar. This is exactly the relation imposed by the S2 observation function. The result cannot be reduced to generic precision loss, because generic loss blurs all quadrant distinctions rather than selectively favoring the C2-equivalent pairs. The network had no group-theoretic objective; this structure emerges from prediction over symmetric observation sequences.
 
-The negative C2 Contrast in S4 (−0.130) reflects uniform blurring of all inter-quadrant distinctions under C4 symmetry. When all four quadrants are equally confusable under the visual observation function, predictive learning compresses all inter-quadrant pairs uniformly, including the 180-degree related pairs that define the C2 subgroup. The result is that 180-degree pairs are no more similar than 90-degree pairs -- producing negative contrast rather than the selective compression seen in S2. Under C2 symmetry, only 180-degree pairs are visually confusable, so the network selectively compresses those pairs while preserving 90-degree distinctions, producing positive contrast.
+The negative C2 Contrast in S4 ($-0.130$) reflects uniform blurring of all inter-quadrant distinctions under C4 symmetry. When all four quadrants are equally confusable under the visual observation function, predictive learning compresses all inter-quadrant pairs uniformly, including the 180-degree related pairs that define the C2 subgroup. The result is that 180-degree pairs are no more similar than 90-degree pairs -- producing negative contrast rather than the selective compression seen in S2. Under C2 symmetry, only 180-degree pairs are visually confusable, so the network selectively compresses those pairs while preserving 90-degree distinctions, producing positive contrast.
 
 \subsection{Symmetry Raises Manifold Dimensionality}
 
-TwoNN dimensionality was S4 $=5.95\pm0.29$, S2 $=5.78\pm0.33$, and S1 $=5.66\pm0.37$. This is opposite the simplest collapse prediction. A folded code does not become a cleaner low-dimensional quotient; it uses extra dimensions to retain partial path-history distinctions among visually equivalent positions. PCA Var(2D) is higher in S1 than S4, 0.336 versus 0.319, and MDS stress is lower in S1 than S4, 0.367 versus 0.385. The manifold result explains why decoding can worsen even when sRSA remains nontrivial: the representation is spatial, but its geometry is less accessible as a clean two-dimensional map. Figure~\ref{fig:unit_id} shows the spatial-information and dimensionality measures. The increase in manifold dimensionality with symmetry group order was [STAT:Manifold_ID:S4_vs_S1_significance] between S4 and S1 (Mann-Whitney p = [STAT:Manifold_ID:S4_vs_S1_p], r = [STAT:Manifold_ID:S4_vs_S1_r]).
+TwoNN dimensionality was S4 $=5.95\pm0.29$, S2 $=5.78\pm0.33$, and S1 $=5.66\pm0.37$. This is opposite the simplest collapse prediction. A folded code does not become a cleaner low-dimensional quotient; it uses extra dimensions to retain partial path-history distinctions among visually equivalent positions. PCA Var(2D) is higher in S1 than S4, 0.336 versus 0.319, and MDS stress is lower in S1 than S4, 0.367 versus 0.385. The manifold result explains why decoding can worsen even when sRSA remains nontrivial: the representation is spatial, but its geometry is less accessible as a clean two-dimensional map. Figure~\ref{fig:unit_id} shows the spatial-information and dimensionality measures. The increase in manifold dimensionality with symmetry group order was $\mathtt{[STAT:Manifold_ID:S4_vs_S1_significance]}$ between S4 and S1 (Mann-Whitney p = $\mathtt{[STAT:Manifold_ID:S4_vs_S1_p]}$, r = $\mathtt{[STAT:Manifold_ID:S4_vs_S1_r]}$).
 
 \begin{center}
 \centering
@@ -175,7 +175,7 @@ Three limitations remain. Three seeds for S2 is insufficient to establish whethe
 
 \section{Conclusion}
 
-Landmark symmetry in a C4-symmetric arena degraded the pRNN's spatial representation along three measurable dimensions: decoding error increased from 0.365 to 0.524, metric geometry shifted toward city-block structure (DTG = −0.052 vs −0.020), and unit-level rotational aliasing increased 2.7-fold (RA = 0.187 vs 0.069, shuffle z-score = [SHUFFLE:S4]). Global orientational degeneracy did not occur: cross-seed RSA alignment exceeded 0.97 in all conditions and PAA gain remained below 0.01. The C2 arena produced a qualitatively distinct result: positive C2 Contrast (+0.045) indicated that the population code specifically encoded the C2 equivalence relation of the observation function, a structure too selective to be explained by generic precision loss.
+Landmark symmetry in a C4-symmetric arena degraded the pRNN's spatial representation along three measurable dimensions: decoding error increased from 0.365 to 0.524, metric geometry shifted toward city-block structure (DTG = $-0.052$ vs $-0.020$), and unit-level rotational aliasing increased 2.7-fold (RA = 0.187 vs 0.069, shuffle z-score = $\mathtt{[SHUFFLE:S4]}$). Global orientational degeneracy did not occur: cross-seed RSA alignment exceeded 0.97 in all conditions and PAA gain remained below 0.01. The C2 arena produced a qualitatively distinct result: positive C2 Contrast (+0.045) indicated that the population code specifically encoded the C2 equivalence relation of the observation function, a structure too selective to be explained by generic precision loss.
 
 These findings reframe the reason to control for arena symmetry in predictive-map experiments. The pRNN is more robust than its original L-shaped validation suggested: global map orientation survives symmetric visual observations because head-direction input anchors oriented transition statistics (12-bin one-hot head-direction, Levenstein et al. Figure 4 [1]). The cost is local and quantifiable. The three-metric framework introduced here -- RA, PAA, and C2 Contrast -- provides a reusable toolkit for separating global from local representational failure modes in any predictive spatial model.
 
@@ -183,3 +183,7 @@ These findings reframe the reason to control for arena symmetry in predictive-ma
 \bibliography{project5_symmetry/Report/references}
 
 \end{document}
+
+
+
+
