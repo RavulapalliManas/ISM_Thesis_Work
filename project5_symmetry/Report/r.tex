@@ -135,6 +135,14 @@ The arena is an $18 \times 18$ MiniGrid with 324 positions. All conditions are m
 \]
 S4 has C4-equivalent observations under $90^{\circ}$ rotation ($H_2=4.0$), S2 has C2-equivalent observations under $180^{\circ}$ rotation ($H_2=2.0$), and S1 has no designed equivalence ($H_2=1.0$). The number of seeds is S4 $n=7$, S2 $n=5$, S1 $n=5$.
 
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{../figures/final/fig_new_c_within_cross_odi.pdf}
+% CAPTION NEEDS UPDATING: Describe within/cross-condition ODI structure and symmetry dependence
+\caption{Observational discriminability (ODI) decomposition by condition.}
+\label{fig:odi}
+\end{figure}
+
 The model is a NormReLU pRNN with $N=500$ units. At time $t$, the hidden state updates as:
 \[
 h_t = \mathrm{NormReLU}(W_h h_{t-1} + W_o o_t + W_a a_t + W_d d_t),
@@ -149,14 +157,14 @@ over 80,000 training steps. A total of 17 seeds were run across all conditions (
 \centering
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{images/fig_arenas_overview.png}
+  \includegraphics[width=\textwidth]{../figures/final/fig1_arena_layouts.pdf}
   \caption{Arena layouts by symmetry. S4 has $C_4$ symmetry; S2 has $C_2$; S1 is asymmetric.}
   \label{fig:arena}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{images/fig_srsa_invariance.png}
+  \includegraphics[width=\textwidth]{../figures/final/fig2_srsa_blindness.pdf}
 \caption{Why sRSA is invariant to permutations. Row permutations of the neural population matrix leave all pairwise distances unchanged, so rotated maps yield identical sRSA values.}
 \label{fig:srsa}
 \end{minipage}
@@ -178,14 +186,14 @@ The space of possible outcomes is structured by two independent questions: Does 
 \centering
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{images/fig_failure_modes.png}
+  \includegraphics[width=\textwidth]{../figures/final/fig3_outcome_space.pdf}
   \caption{Mechanistically distinct outcomes. Left: collapse. Center: partial folding (observed). Right: null case.}
   \label{fig:outcomes}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/fig_metric_summary.pdf}
+  \includegraphics[width=\textwidth]{../figures/final/fig4_metric_comparison.pdf}
   \caption{Final metric comparison. PAA (global), RA (aliasing), SCI (compression), and C2 Contrast (grouping).}
   \label{fig:dash}
 \end{minipage}
@@ -201,14 +209,14 @@ Global map degeneracy did not occur. Cross-seed RSA alignment is S4 $0.977 \pm 0
 \centering
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/fig_rdm_comparison.pdf}
+  \includegraphics[width=\textwidth]{../figures/final/fig5_cross_seed_rdm.pdf}
   \caption{Cross-seed RDM alignment. S4, S2, and S1 all show strong RSA alignment across seeds.}
   \label{fig:rdm}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/fig_metric_trajectories.pdf}
+  \includegraphics[width=\textwidth]{../figures/final/fig6b_dtg.pdf}
   \caption{Distance-Topology Gap ($\Delta_{\text{TG}}$). Gap widens in S4, indicating path-dependence.}
   \label{fig:dtg}
 \end{minipage}
@@ -216,20 +224,36 @@ Global map degeneracy did not occur. Cross-seed RSA alignment is S4 $0.977 \pm 0
 
 \noindent Even with $C_4$-symmetric observations, the input stream itself is not symmetric: moving north from position $(r,c)$ and from its $90^{\circ}$ equivalent $(c, 17-r)$ yields different head-direction-tagged transitions at different absolute orientations. These transitions remain globally consistent across any arena trajectory, so the network must track global heading precisely to minimize prediction loss. Global orientation therefore locks in deterministically at training initialization. This closes the first failure mode: global degeneracy is ruled out.
 
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{../figures/final/fig6a_learning_trajectories.pdf}
+% CAPTION NEEDS UPDATING: Verify exact metrics and conditions shown in learning trajectories
+\caption{Learning trajectories of key metrics across training.}
+\label{fig:ltraj}
+\end{figure}
+
 \section*{Unit-level aliasing scales monotonically with symmetry order}
 
 Head-direction input cannot prevent local aliasing costs. Unit-level rotational autocorrelation (RA) was S4 0.217, S2 0.114, S1 0.097, scaling directly with symmetry group order (4-fold, 2-fold, 1-fold respectively). S4 versus S1 yields $p = 0.036$ and $r = -1.0$. Spatially tuned units (EVS $> 0.1$) comprise S4 1.8\%, S2 3.7\%, S1 4.7\% of the population.
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.85\textwidth]{figures/fig_rate_maps.pdf}
+\includegraphics[width=\textwidth]{../figures/final/fig7_place_cell_rate_maps.pdf}
 \caption{Example place cell rate maps for the six highest-EVS units per condition (seed\_00). \textbf{S1:} compact, idiosyncratic single fields typical of healthy place cells. \textbf{S2:} bilateral or 4-fold symmetric fields: the same firing pattern duplicated at rotationally equivalent positions. \textbf{S4:} cross-shaped and stripe-like patterns emerge; some units are nearly silent; fields are substantially broader than S1. These patterns are the unit-level signature of partial folding: the network encodes within-quadrant position but cannot disambiguate which quadrant.}
 \label{fig:tune}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/fig_field_size.pdf}
+\includegraphics[width=0.75\textwidth]{../figures/final/fig_new_a_ra_distribution.pdf}
+% CAPTION NEEDS UPDATING: Describe how RA distribution shifts with symmetry order, violin/box plot interpretation
+\caption{Distribution of rotational autocorrelation (RA) values across the neural population by condition.}
+\label{fig:ra_dist}
+\end{figure}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{../figures/final/fig8_field_width_distribution.pdf}
 \caption{Field width distributions by condition. Mean field width increases monotonically from S1 to S4, with a subpopulation of S4 units developing fields spanning the full arena width.}
 \label{fig:fieldsize}
 \end{figure}
@@ -242,7 +266,7 @@ Population compression stays graded despite unit-level aliasing. Symmetry Collap
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/fig_decoding_confusion.pdf}
+\includegraphics[width=0.75\textwidth]{../figures/final/fig9_decoding_error_maps.pdf}
 \caption{Decoding confusion under symmetry. Errors concentrate near the symmetry axes, exactly where 90$^\circ$ rotation makes positions hardest to distinguish.}
 \label{fig:decode}
 \end{figure}
@@ -257,7 +281,7 @@ The population code encodes group structure, not all symmetries uniformly. A neg
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/fig_quadrant_distances.pdf}
+\includegraphics[width=0.75\textwidth]{../figures/final/fig10_c2_contrast_rdms.pdf}
 \caption{Inter-quadrant neural distances. C2-related quadrants are more similar in S2; all pairs compress uniformly in S4.}
 \label{fig:quadrant}
 \end{figure}
@@ -268,16 +292,14 @@ The network maintains high dimensionality despite symmetry. TwoNN intrinsic dime
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.45\textwidth]{figures/fig_intrinsic_dim_training.pdf}
-\hfill
-\includegraphics[width=0.52\textwidth]{figures/fig_population_geometry.pdf}
+\includegraphics[width=\textwidth]{../figures/final/fig11_manifold_geometry.pdf}
 \caption{Manifold geometry. Left: intrinsic dimensionality over training, increasing with symmetry order. Right: t-SNE visualizations showing local fragmentation in S4 and S2 while global structure is preserved.}
 \label{fig:manifold}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/fig_spectral_gap.pdf}
+\includegraphics[width=0.75\textwidth]{../figures/final/fig12_spectral_gap.pdf}
 \caption{Spectral gap of the recurrent weight matrix $\mathbf{W}_h$. The dominant eigenvalue grows relative to the rest of the spectrum as symmetry increases, but this predicts worse spatial maps, not better.}
 \label{fig:spectral}
 \end{figure}
@@ -329,7 +351,7 @@ frame~\citep{lever2002}.
 
 \begin{figure}[tbp]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/fig_hd_ablation.pdf}
+\includegraphics[width=0.75\textwidth]{../figures/final/fig13_hd_ablation.pdf}
 \caption{HD ablation results. Removing heading input causes map collapse (sRSA drops below the 0.40 formation gate). Degrading directional specificity produces the same failure.}
 \label{fig:hdablation}
 \end{figure}
@@ -358,7 +380,13 @@ Spatially tuned unit fraction is lower than typical recording values. The fracti
 
 The HD ablation used $n=2$ seeds and should be treated as a targeted validation rather than a fully-powered statistical test.
 
-
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{../figures/final/fig_new_d_sr_vs_rdm.pdf}
+% CAPTION NEEDS UPDATING: Explain SR-RDM correspondence, show how transition geometry constrains representational structure
+\caption{Successor representation geometry versus neural representational dissimilarity matrix.}
+\label{fig:sr_rdm}
+\end{figure}
 
 \section{Discussion}
 \label{sec:discussion}
