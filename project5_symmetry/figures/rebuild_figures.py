@@ -1101,7 +1101,7 @@ def build_new_figure_c():
 
 
 def build_new_figure_d(condition_evals):
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 5), layout="constrained", layout="constrained")
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 5), layout="constrained")
 
     # Build SR for S4
     grid_size = 18
