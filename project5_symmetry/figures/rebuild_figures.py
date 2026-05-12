@@ -264,7 +264,7 @@ def render_arena_grid(ax, condition, grid_size=18):
 
 
 def build_figure_1():
-    fig, axes = plt.subplots(1, 4, figsize=(14, 3.5))
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4), layout="constrained")
 
     titles = ["S4 (C$_4$ symmetry)", "S2 (C$_2$ symmetry)", "S1 (asymmetric)"]
     for ax, cond, title in zip(axes[:3], ["S4", "S2", "S1"], titles):
@@ -393,8 +393,8 @@ def build_figure_2():
 
 
 def build_figure_3():
-    fig = plt.figure(figsize=(5, 4))
-    gs = gridspec.GridSpec(2, 1, height_ratios=[2.2, 1.2], hspace=0.25)
+    fig = plt.figure(figsize=(6.5, 5.5))
+    gs = gridspec.GridSpec(2, 1, height_ratios=[2.2, 1.2], hspace=0.35)
 
     # Outcome grid
     ax = fig.add_subplot(gs[0])
@@ -457,7 +457,7 @@ def build_figure_4(metrics_df):
         "C2 Contrast": "c2_contrast",
         "Decode Error": "decode_error",
     }
-    fig, axes = plt.subplots(2, 2, figsize=(8, 6))
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), layout="constrained")
     for ax, (label, key) in zip(axes.flat, metrics.items()):
         for i, cond in enumerate(CONDITIONS):
             vals = metrics_df[(metrics_df["experiment"] == "symmetry_sweep") & (metrics_df["condition"] == cond)][key].dropna().values
@@ -477,7 +477,7 @@ def build_figure_4(metrics_df):
 
 
 def build_figure_5(condition_evals):
-    fig, axes = plt.subplots(1, 4, figsize=(11, 3))
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.8), layout="constrained")
     vmin, vmax = 0.0, 1.2
 
     mean_rdms = {}
@@ -530,7 +530,7 @@ def build_figure_5(condition_evals):
 
 
 def build_figure_6a(condition_evals):
-    fig, axes = plt.subplots(2, 2, figsize=(8, 6))
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8), layout="constrained")
     metric_keys = [
         ("srsa_euclid", "sRSA"),
         ("manifold_id", "Manifold ID"),
@@ -582,7 +582,7 @@ def build_figure_6a(condition_evals):
 
 
 def build_figure_6b(condition_evals):
-    fig, ax = plt.subplots(figsize=(6.5, 2.8))
+    fig, ax = plt.subplots(figsize=(8.5, 3.8), layout="constrained")
 
     for cond in CONDITIONS:
         logs = [e["log"] for e in condition_evals[cond] if e.get("log")]
@@ -623,7 +623,7 @@ def build_figure_6b(condition_evals):
 
 
 def build_figure_7(condition_evals):
-    fig, axes = plt.subplots(3, 6, figsize=(12, 6))
+    fig, axes = plt.subplots(3, 6, figsize=(14, 7.5), layout="constrained")
     shared_im = None
 
     for row, cond in enumerate(CONDITIONS):
@@ -674,7 +674,7 @@ def build_figure_7(condition_evals):
 
 
 def build_figure_8(condition_evals):
-    fig, ax = plt.subplots(figsize=(6.5, 3))
+    fig, ax = plt.subplots(figsize=(8.5, 4), layout="constrained")
 
     for cond in CONDITIONS:
         widths = []
@@ -720,7 +720,7 @@ def build_figure_8(condition_evals):
 
 
 def build_figure_9(condition_evals):
-    fig, axes = plt.subplots(1, 4, figsize=(12, 3), gridspec_kw={"width_ratios": [1, 1, 1, 0.5]})
+    fig, axes = plt.subplots(1, 4, figsize=(14, 3.8), layout="constrained", gridspec_kw={"width_ratios": [1, 1, 1, 0.5]})
 
     error_maps = {}
     for ax, cond in zip(axes[:3], CONDITIONS):
@@ -768,7 +768,7 @@ def build_figure_9(condition_evals):
 
 
 def build_figure_10(metrics_df, condition_evals):
-    fig, axes = plt.subplots(1, 4, figsize=(11, 3), gridspec_kw={"width_ratios": [1.2, 1.0, 1.0, 1.0]})
+    fig, axes = plt.subplots(1, 4, figsize=(13.5, 3.8), layout="constrained", gridspec_kw={"width_ratios": [1.2, 1.0, 1.0, 1.0]})
 
     # C2 contrast bar
     ax = axes[0]
@@ -811,8 +811,8 @@ def build_figure_10(metrics_df, condition_evals):
 
 
 def build_figure_11(condition_evals):
-    fig = plt.figure(figsize=(11, 3.5))
-    gs = gridspec.GridSpec(1, 4, width_ratios=[1.2, 1.0, 1.0, 1.0], wspace=0.4)
+    fig = plt.figure(figsize=(14, 4.5))
+    gs = gridspec.GridSpec(1, 4, width_ratios=[1.2, 1.0, 1.0, 1.0], wspace=0.5)
 
     # Left panel: manifold ID over training
     ax = fig.add_subplot(gs[0, 0])
@@ -861,7 +861,7 @@ def build_figure_11(condition_evals):
 
 
 def build_figure_12(spectral_df):
-    fig, axes = plt.subplots(1, 2, figsize=(8, 3))
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4), layout="constrained")
 
     # Left: spectral gap strip plot
     ax = axes[0]
@@ -900,7 +900,7 @@ def build_figure_12(spectral_df):
 
 
 def build_figure_13(metrics_df):
-    fig, axes = plt.subplots(1, 2, figsize=(7, 3))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), layout="constrained")
     abl_order = ["HD_FULL", "HD_DEGRADED", "HD_ABLATED"]
     labels = ["Full", "Degraded", "Ablated"]
 
@@ -962,7 +962,7 @@ def build_figure_13(metrics_df):
 
 
 def build_new_figure_a(condition_evals):
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(8, 5.5), layout="constrained")
     distributions = {}
     for cond in CONDITIONS:
         ras = []
@@ -1005,7 +1005,7 @@ def build_new_figure_b(condition_evals):
 
 
 def build_new_figure_c():
-    fig, ax = plt.subplots(figsize=(7.5, 4.2), layout="constrained")
+    fig, ax = plt.subplots(figsize=(9.5, 5.5), layout="constrained")
 
     within_vals = []
     cross_vals = []
@@ -1101,7 +1101,7 @@ def build_new_figure_c():
 
 
 def build_new_figure_d(condition_evals):
-    fig, axes = plt.subplots(1, 2, figsize=(9.5, 4.0), layout="constrained")
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 5), layout="constrained", layout="constrained")
 
     # Build SR for S4
     grid_size = 18
