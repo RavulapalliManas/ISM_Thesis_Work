@@ -35,7 +35,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\lhead{\small\textit{Ravulapalli --- Landmark Symmetry and Cognitive Map Formation}}
+\lhead{\small\textit{Ravulapalli -- Landmark Symmetry and Cognitive Map Formation}}
 \rhead{\small\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 
@@ -54,7 +54,7 @@
   {\LARGE\bfseries Landmark Symmetry and Cognitive Map Formation\\[6pt]
   in Predictive Recurrent Neural Networks}\\[14pt]
   {\large Manas Venkata Sai Ravulapalli}\\[4pt]
-  {\normalsize Independent Study Module --- Computational Neuroscience}
+  {\normalsize Independent Study Module -- Computational Neuroscience}
 \end{center}
 
 
@@ -93,7 +93,7 @@ formed representation.
 
 \section*{Introduction}
 
-Levenstein et al.~(2024) showed that a recurrent network trained on sequential predictive loss spontaneously develops spatially structured representations---but validated this exclusively in an L-shaped arena chosen to ensure every position has a unique visual fingerprint. Most rodent electrophysiology experiments use square arenas. Square arenas are rotationally symmetric. The condition Levenstein's validation depends on---global observational discriminability---does not hold there. We ask what the Levenstein framework actually does under these conditions. Not what the hippocampus does. What the model does. The answer has direct consequences for how the framework should be used, what its representations are grounded in, and what any extension to more naturalistic environments should expect to find.
+Levenstein et al.~(2024) showed that a recurrent network trained on sequential predictive loss spontaneously develops spatially structured representations, but validated this exclusively in an L-shaped arena chosen to ensure every position has a unique visual fingerprint. Most rodent electrophysiology experiments use square arenas. Square arenas are rotationally symmetric. The condition Levenstein's validation depends on (global observational discriminability) does not hold there. We ask what the Levenstein framework actually does under these conditions. Not what the hippocampus does. What the model does. The answer has direct consequences for how the framework should be used, what its representations are grounded in, and what any extension to more naturalistic environments should expect to find.
 
 The head-direction (HD) system tracks global orientation through path integration while landmark anchoring corrects drift via visual cues~\cite{taube1990, knierim1995}, but symmetric landmarks force these two mechanisms into direct conflict: the same landmark view appears at multiple rotations, so the HD state and the landmark signal become discordant. The double-rotation literature documents that place cells increase their number of firing fields in symmetric arenas~\cite{muller1987, knierim1995}, with multi-field fraction scaling with symmetry order, and these multi-field patterns emerge spontaneously in the hippocampus without explicit instruction~\cite{leutgeb2005}.
 
@@ -110,7 +110,7 @@ profiles~\citep{stachenfeld2017}. Critically, the SR geometry is shaped
 by the transition structure of the environment, not just its physical
 geometry. This means that environments with rotational symmetry will have
 SR matrices in which multiple distinct spatial positions are predicted to
-share the same future state distribution --- the SR entries for these
+share the same future state distribution: the SR entries for these
 positions will be identical or nearly so. Whether a predictive RNN can
 resolve this ambiguity, and if not, in what way its representation fails,
 is the central question of this work.
@@ -123,7 +123,7 @@ three arena conditions (C1, C2, C4) with matched object density, analyzed
 with four metrics designed to detect forms of representational failure that
 spatial RSA cannot resolve. Second, an HD ablation experiment that removes
 or degrades the heading direction input to test whether HD is necessary for
-global representational stability. Across both experiments, we find that the pRNN framework is more robust to environmental ambiguity --- but this robustness has clear geometric limits that depend on both the structure of the environment and the quality of the agent's sensory signal.
+global representational stability. Across both experiments, we find that the pRNN framework is more robust to environmental ambiguity, but this robustness has clear geometric limits that depend on both the structure of the environment and the quality of the agent's sensory signal.
 
 
 
@@ -162,13 +162,13 @@ over 80,000 training steps. A total of 17 seeds were run across all conditions (
 \end{minipage}
 \end{figure}
 
-\noindent Three purpose-built metrics address this blindness. PAA detects when rotated alignment between seeds beats identity alignment, revealing orientational divergence. RA measures whether units respond identically at rotationally equivalent positions, capturing unit-level aliasing. C2 Contrast tests whether the population code encodes group structure. PAA, RA, and C2 Contrast separate identifiability, entanglement, and population structure---what sRSA cannot do.
+\noindent Three purpose-built metrics address this blindness. PAA detects when rotated alignment between seeds beats identity alignment, revealing orientational divergence. RA measures whether units respond identically at rotationally equivalent positions, capturing unit-level aliasing. C2 Contrast tests whether the population code encodes group structure. PAA, RA, and C2 Contrast separate identifiability, entanglement, and population structure: what sRSA cannot do.
 
 \section*{sRSA cannot detect the failure modes this paper measures}
 
 Seed-to-seed RSA correlates pairwise neural distances with pairwise spatial distances. However, this metric has a critical vulnerability: row permutations of the neural population vector preserve all pairwise distances, so rotated maps yield identical sRSA values even though they represent opposite global orientations.
 
-Figure \ref{fig:srsa} demonstrates this blindness: two fundamentally different failure modes---global rotation versus local folding---yield identical sRSA despite producing qualitatively different neural codes. This blindness matters empirically: sRSA is near-equal for S2 and S4 (~0.72 vs ~0.67), yet RA differs by nearly 2× (0.114 vs 0.217). A researcher relying on sRSA alone would conclude that C2 and C4 symmetry impose equivalent representational costs. They do not.
+Figure \ref{fig:srsa} demonstrates this blindness: two fundamentally different failure modes (global rotation versus local folding) yield identical sRSA despite producing qualitatively different neural codes. This blindness matters empirically: sRSA is near-equal for S2 and S4 (~0.72 vs ~0.67), yet RA differs by nearly 2× (0.114 vs 0.217). A researcher relying on sRSA alone would conclude that C2 and C4 symmetry impose equivalent representational costs. They do not.
 
 \section*{Three possible outcomes frame every result that follows}
 
@@ -195,7 +195,7 @@ The space of possible outcomes is structured by two independent questions: Does 
 
 \section*{HD input prevents global orientational degeneracy}
 
-Global map degeneracy did not occur. Cross-seed RSA alignment is S4 $0.977 \pm 0.002$, S2 $0.975 \pm 0.003$, S1 $0.974 \pm 0.001$. PAA gain is S4 $0.0015 \pm 0.0002$, S2 $0.0021 \pm 0.0004$, S1 $0.0000 \pm 0.0001$ with $p = 0.786$ and $r = -0.200$---indistinguishable across conditions and all below 0.05.
+Global map degeneracy did not occur. Cross-seed RSA alignment is S4 $0.977 \pm 0.002$, S2 $0.975 \pm 0.003$, S1 $0.974 \pm 0.001$. PAA gain is S4 $0.0015 \pm 0.0002$, S2 $0.0021 \pm 0.0004$, S1 $0.0000 \pm 0.0001$ with $p = 0.786$ and $r = -0.200$, indistinguishable across conditions and all below 0.05.
 
 \begin{figure}[tbp]
 \centering
@@ -218,12 +218,12 @@ Global map degeneracy did not occur. Cross-seed RSA alignment is S4 $0.977 \pm 0
 
 \section*{Unit-level aliasing scales monotonically with symmetry order}
 
-Head-direction input cannot prevent local aliasing costs. Unit-level rotational autocorrelation (RA) was S4 0.217, S2 0.114, S1 0.097 --- scaling directly with symmetry group order (4-fold, 2-fold, 1-fold respectively). S4 versus S1 yields $p = 0.036$ and $r = -1.0$. Spatially tuned units (EVS $> 0.1$) comprise S4 1.8\%, S2 3.7\%, S1 4.7\% of the population.
+Head-direction input cannot prevent local aliasing costs. Unit-level rotational autocorrelation (RA) was S4 0.217, S2 0.114, S1 0.097, scaling directly with symmetry group order (4-fold, 2-fold, 1-fold respectively). S4 versus S1 yields $p = 0.036$ and $r = -1.0$. Spatially tuned units (EVS $> 0.1$) comprise S4 1.8\%, S2 3.7\%, S1 4.7\% of the population.
 
 \begin{figure}[tbp]
 \centering
 \includegraphics[width=0.85\textwidth]{figures/fig_rate_maps.pdf}
-\caption{Example place cell rate maps for the six highest-EVS units per condition (seed\_00). \textbf{S1:} compact, idiosyncratic single fields typical of healthy place cells. \textbf{S2:} bilateral or 4-fold symmetric fields --- the same firing pattern duplicated at rotationally equivalent positions. \textbf{S4:} cross-shaped and stripe-like patterns emerge; some units are nearly silent; fields are substantially broader than S1. These patterns are the unit-level signature of partial folding: the network encodes within-quadrant position but cannot disambiguate which quadrant.}
+\caption{Example place cell rate maps for the six highest-EVS units per condition (seed\_00). \textbf{S1:} compact, idiosyncratic single fields typical of healthy place cells. \textbf{S2:} bilateral or 4-fold symmetric fields: the same firing pattern duplicated at rotationally equivalent positions. \textbf{S4:} cross-shaped and stripe-like patterns emerge; some units are nearly silent; fields are substantially broader than S1. These patterns are the unit-level signature of partial folding: the network encodes within-quadrant position but cannot disambiguate which quadrant.}
 \label{fig:tune}
 \end{figure}
 
@@ -234,7 +234,7 @@ Head-direction input cannot prevent local aliasing costs. Unit-level rotational 
 \label{fig:fieldsize}
 \end{figure}
 
-\noindent High-RA units in S4 produce four distinct peaks across quadrants---they encode within-quadrant position but cannot disambiguate which quadrant. Symmetric observations remove the prediction gradient that would force quadrant differentiation, so aliasing accumulates with symmetry order. The field width distributions (Figure~\ref{fig:fieldsize}) confirm this: mean field width increases monotonically from S1 to S4, with a subpopulation of S4 units developing fields spanning the full arena width.
+\noindent High-RA units in S4 produce four distinct peaks across quadrants; they encode within-quadrant position but cannot disambiguate which quadrant. Symmetric observations remove the prediction gradient that would force quadrant differentiation, so aliasing accumulates with symmetry order. The field width distributions (Figure~\ref{fig:fieldsize}) confirm this: mean field width increases monotonically from S1 to S4, with a subpopulation of S4 units developing fields spanning the full arena width.
 
 \section*{Decoding degrades while population collapse stays partial}
 
@@ -243,7 +243,7 @@ Population compression stays graded despite unit-level aliasing. Symmetry Collap
 \begin{figure}[tbp]
 \centering
 \includegraphics[width=0.65\textwidth]{figures/fig_decoding_confusion.pdf}
-\caption{Decoding confusion under symmetry. Errors concentrate near the symmetry axes --- exactly where 90$^\circ$ rotation makes positions hardest to distinguish.}
+\caption{Decoding confusion under symmetry. Errors concentrate near the symmetry axes, exactly where 90$^\circ$ rotation makes positions hardest to distinguish.}
 \label{fig:decode}
 \end{figure}
 
@@ -271,18 +271,18 @@ The network maintains high dimensionality despite symmetry. TwoNN intrinsic dime
 \includegraphics[width=0.45\textwidth]{figures/fig_intrinsic_dim_training.pdf}
 \hfill
 \includegraphics[width=0.52\textwidth]{figures/fig_population_geometry.pdf}
-\caption{Manifold geometry. Left: intrinsic dimensionality over training --- increases with symmetry order. Right: t-SNE visualizations showing local fragmentation in S4 and S2 while global structure is preserved.}
+\caption{Manifold geometry. Left: intrinsic dimensionality over training, increasing with symmetry order. Right: t-SNE visualizations showing local fragmentation in S4 and S2 while global structure is preserved.}
 \label{fig:manifold}
 \end{figure}
 
 \begin{figure}[tbp]
 \centering
 \includegraphics[width=0.65\textwidth]{figures/fig_spectral_gap.pdf}
-\caption{Spectral gap of the recurrent weight matrix $\mathbf{W}_h$. The dominant eigenvalue grows relative to the rest of the spectrum as symmetry increases --- but this predicts worse spatial maps, not better.}
+\caption{Spectral gap of the recurrent weight matrix $\mathbf{W}_h$. The dominant eigenvalue grows relative to the rest of the spectrum as symmetry increases, but this predicts worse spatial maps, not better.}
 \label{fig:spectral}
 \end{figure}
 
-\noindent The manifold fragments locally while preserving global structure---partial folding. The network cannot fold symmetric positions onto a single point without destroying within-quadrant structure for multi-step prediction, so it maintains high dimensionality while tolerating inter-quadrant ambiguity. The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but higher spectral gap goes with worse spatial maps --- the opposite of what a stronger attractor would predict. Symmetry costs are real but bounded and compensable.
+\noindent The manifold fragments locally while preserving global structure: partial folding. The network cannot fold symmetric positions onto a single point without destroying within-quadrant structure for multi-step prediction, so it maintains high dimensionality while tolerating inter-quadrant ambiguity. The spectral gap of $\mathbf{W}_h$ increases with symmetry order (Figure~\ref{fig:spectral}), but higher spectral gap goes with worse spatial maps, the opposite of what a stronger attractor would predict. Symmetry costs are real but bounded and compensable.
 
 \section*{Heading Direction Input is Necessary for Global Map Stability}
 \label{sec:hdablation}
@@ -310,7 +310,7 @@ conditions ($\sim$0.0190) was about $8\times$ higher than
 for HD\_FULL ($\sim$0.0025), indicating that the network
 without heading direction simply cannot predict future observations
 accurately even after 80k training steps. Without knowing where the agent
-is headed, the optimal strategy becomes to predict the mean observation ---
+is headed, the optimal strategy becomes to predict the mean observation:
 which carries no spatial information. Mean field coherence confirmed this:
 HD\_ABLATED networks had a coherence of $\sim$58.96
 (highly disordered activity), compared to $\sim$13.64 for
@@ -338,7 +338,7 @@ frame~\citep{lever2002}.
 
 \section*{Predictions the model generates for hippocampal biology}
 
-The model predicts that multi-field place cell fraction should scale with symmetry group order. This follows directly from the RA result: existing hippocampal recording datasets from symmetric arenas can be stratified by symmetry order and the fraction of multi-field units measured. The RA result predicts that multi-field fraction scales as $|C_4| > |C_2| > |C_1|$, matching the symmetry groups: RA = 0.217, 0.114, 0.097 respectively. This prediction follows from the computational finding that high-RA units respond identically at rotationally equivalent positions and cannot disambiguate arena quadrant---precisely the dual-frequency structure of multi-field place cells recorded in symmetric arenas~\cite{muller1987, knierim1995}.
+The model predicts that multi-field place cell fraction should scale with symmetry group order. This follows directly from the RA result: existing hippocampal recording datasets from symmetric arenas can be stratified by symmetry order and the fraction of multi-field units measured. The RA result predicts that multi-field fraction scales as $|C_4| > |C_2| > |C_1|$, matching the symmetry groups: RA = 0.217, 0.114, 0.097 respectively. This prediction follows from the computational finding that high-RA units respond identically at rotationally equivalent positions and cannot disambiguate arena quadrant: precisely the dual-frequency structure of multi-field place cells recorded in symmetric arenas~\cite{muller1987, knierim1995}.
 
 The model generates a specific prediction about head-direction lesion effects. Lesioning anterior thalamic nuclei (which provide HD input to hippocampus) should raise PAA gain above 0.05 in S4 arenas while RA remains at 0.217 or higher. This dissociation is the key prediction: global orientation becomes ambiguous between seeds (PAA breaks) but local aliasing persists (RA unchanged), because HD input stabilises global phase through transition statistics without affecting local observation equivalence. This dissociation is unique to the partial folding account.
 
@@ -352,7 +352,7 @@ Sample sizes are at the statistical minimum. The sample sizes are S4 $n=7$, S2 $
 
 The SCI and RA dissociation is unexplained. S4 and S2 show substantially different unit-level aliasing (RA: $0.217 \pm 0.003$ versus $0.114 \pm 0.004$) yet statistically indistinguishable population compression (SCI: $p = 0.786$). This dissociation suggests the population code redistributes aliasing across units rather than concentrating it through compensatory coding strategies. The mechanistic cause remains unidentified and requires analysis of learned weight matrices and representational geometry.
 
-Distance geometry results confound representation with environment. The $18 \times 18$ MiniGrid imposes a city-block navigation metric by construction---agents must move along grid lines. The DTG result showing larger negative gaps under symmetry may partially reflect this environmental structure. Replication in a continuous environment such as RatInABox is required before the representational geometry interpretation is secure.
+Distance geometry results confound representation with environment. The $18 \times 18$ MiniGrid imposes a city-block navigation metric by construction: agents must move along grid lines. The DTG result showing larger negative gaps under symmetry may partially reflect this environmental structure. Replication in a continuous environment such as RatInABox is required before the representational geometry interpretation is secure.
 
 Spatially tuned unit fraction is lower than typical recording values. The fraction of spatially tuned units at EVS $> 0.1$ is S4 1.8\%, S2 3.7\%, S1 4.7\%, substantially lower than values typically reported in hippocampal recordings at more lenient thresholds (EVS $> 0.5$). The more conservative threshold reflects position-averaged evaluation which removes within-position variability. The ordering $S4 < S2 < S1$ is robust to threshold choice and the main conclusions rest on population-level metrics (RA, SCI, DTG, C2 Contrast) unaffected by this discrepancy.
 
@@ -369,7 +369,7 @@ The central finding of this work is that the pRNN framework does not fail
 under landmark symmetry. A network trained to
 predict future observations in a C4-symmetric environment does not produce
 a globally degenerate or random representation. Instead, it forms a map
---- but one that is geometrically compressed along the symmetry axes of
+, but one that is geometrically compressed along the symmetry axes of
 the environment. We call this partial folding: the network learns the true
 spatial structure of the arena, but units develop activity patterns that
 are correlated at rotationally equivalent positions, reducing the
@@ -390,7 +390,7 @@ symmetric environment.
 
 The spectral gap of $\mathbf{W}_h$ increases with symmetry order
 (Figure~\ref{fig:spectral}), but negatively predicts spatial map quality.
-This looks like a signature of a stronger, more stable attractor ---
+This looks like a signature of a stronger, more stable attractor,
 but it predicts worse spatial representations across seeds. The attractor
 has organized around the environmental symmetry group rather than the
 arena's spatial layout. Attractor strength and attractor accuracy are not
@@ -421,7 +421,7 @@ network.
 
 \subsection{Representational Quality and the Spectral Gap}
 
-The spectral analysis reveals a negative correlation between representational quality (measured by sRSA) and the spectral gap of the recurrent weight matrix. The spectral gap --- the distance between the largest and second-largest eigenvalues --- reflects the stability and "mixing time" of the recurrent dynamics. In symmetric environments, we find that the spectral gap narrows as sRSA increases. This suggests that high-quality spatial maps in symmetric arenas do not emerge from "stronger" or more stable recurrent attractors, but rather from dynamics that are poised near a symmetry-breaking transition. This poise allows the network to maintain high-dimensional within-quadrant structure while tolerating the global ambiguity induced by the landmarks. The spectral gap thus serves as a dynamical signature of the "partial folding" we observe at the representational level.
+The spectral analysis reveals a negative correlation between representational quality (measured by sRSA) and the spectral gap of the recurrent weight matrix. The spectral gap (the distance between the largest and second-largest eigenvalues) reflects the stability and "mixing time" of the recurrent dynamics. In symmetric environments, we find that the spectral gap narrows as sRSA increases. This suggests that high-quality spatial maps in symmetric arenas do not emerge from "stronger" or more stable recurrent attractors, but rather from dynamics that are poised near a symmetry-breaking transition. This poise allows the network to maintain high-dimensional within-quadrant structure while tolerating the global ambiguity induced by the landmarks. The spectral gap thus serves as a dynamical signature of the "partial folding" we observe at the representational level.
 
 \subsection{Limitations and Future Directions}
 
@@ -436,9 +436,9 @@ are read out by downstream regions for navigation and memory. Whether the
 partial folding we observe degrades these downstream computations in
 proportion to the RA increase, or whether readout mechanisms compensate
 for the geometric distortion, is an important open question. Future work
-extending this analysis to multi-environment generalization --- where
+extending this analysis to multi-environment generalization (where
 the network must maintain distinct maps for environments with different
-symmetry structures --- will be needed to address this.
+symmetry structures) will be needed to address this.
 
 
 
