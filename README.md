@@ -1,6 +1,6 @@
 # Predictive Learning and Cognitive Map Formation in Recurrent Neural Networks
 
-**Manas Venkata Sai Ravulapalli** — ISM Thesis Work
+**Manas Venkata Sai Ravulapalli** - ISM Thesis Work
 
 This repository contains the thesis work investigating how predictive recurrent neural networks learn spatial representations, how those representations generalize across environments of varied geometry and topology, and how landmark symmetry shapes the emergent structure of hippocampal-like codes.
 
@@ -23,11 +23,11 @@ This repository contains the thesis work investigating how predictive recurrent 
 
 ### Predictive Learning Framework
 
-This work builds on the framework established by Levenstein et al. (2024): *Sequential predictive learning is a unifying theory for hippocampal representation and replay* ([bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.04.28.591528v1)). The core idea is that a recurrent network trained to predict future observations must maintain latent spatial state variables that support path integration. Spatial structure — place fields, head-direction tuning, grid-like representations — can emerge spontaneously from this objective without coordinate supervision.
+This work builds on the framework established by Levenstein et al. (2024): *Sequential predictive learning is a unifying theory for hippocampal representation and replay* ([bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.04.28.591528v1)). The core idea is that a recurrent network trained to predict future observations must maintain latent spatial state variables that support path integration. Spatial structure - place fields, head-direction tuning, grid-like representations - can emerge spontaneously from this objective without coordinate supervision.
 
 ### Successor Representation Interpretation
 
-The Successor Representation (SR) provides the theoretical link between predictive learning and spatial cognition (Stachenfeld et al. 2017). Under the SR interpretation, the neural representation at a position encodes the expected discounted future occupancy of the agent. Formally, the SR matrix **M** has entries `M[i,j]` = expected discounted visits to position *j* starting from position *i*. This means the geometry of the representation reflects the transition structure of the environment — topologically similar environments produce similar SR matrices, enabling generalization.
+The Successor Representation (SR) provides the theoretical link between predictive learning and spatial cognition (Stachenfeld et al. 2017). Under the SR interpretation, the neural representation at a position encodes the expected discounted future occupancy of the agent. Formally, the SR matrix **M** has entries `M[i,j]` = expected discounted visits to position *j* starting from position *i*. This means the geometry of the representation reflects the transition structure of the environment - topologically similar environments produce similar SR matrices, enabling generalization.
 
 ### Head-Direction Anchoring and the Symmetry Problem
 
@@ -62,7 +62,7 @@ ISM_Thesis_Work/
 │   ├── thetaRNN.py                # Theta cycling RNN cell implementation
 │   ├── predictiveNet.py          # PredictiveNet wrapper class (1244 lines)
 │   ├── agent.py                   # RandomActionAgent, RandomHDAgent
-│   ├── env.py                     # make_env() — MiniGrid environment factory
+│   ├── env.py                     # make_env() - MiniGrid environment factory
 │   ├── lossFuns.py                # predMSE, LPLLoss
 │   ├── ActionEncodings.py         # OneHotHD, SpeedHD, Velocities, etc.
 │   ├── LinearDecoder.py           # Linear decoder for spatial representations
@@ -70,7 +70,7 @@ ISM_Thesis_Work/
 │   ├── general.py                 # General utility functions (saveFig, savePkl, etc.)
 │   ├── serialization.py           # Unified pathlib-based save/load (pickle, JSON)
 │   ├── data_schema.py             # Trajectory format constants + validation
-│   ├── data_store.py              # ResultStore — unified seed-dir loader
+│   ├── data_store.py              # ResultStore - unified seed-dir loader
 │   └── gpu_manager.py             # Standalone interactive GPU experiment manager
 │
 ├── analysis/                      # Offline analysis pipeline (shared by all projects)
@@ -88,13 +88,13 @@ ISM_Thesis_Work/
 │
 ├── FigureScripts/                # 22 Jupyter notebooks for original paper figures
 │
-├── project5_symmetry/            # THESIS PROJECT — Landmark symmetry study
+├── project5_symmetry/            # THESIS PROJECT - Landmark symmetry study
 │
-├── project4_topology_before_geometry/  # Supporting project — Topology vs. geometry
+├── project4_topology_before_geometry/  # Supporting project - Topology vs. geometry
 │
-├── project3_generalization/      # Supporting project — Cross-environment generalization
+├── project3_generalization/      # Supporting project - Cross-environment generalization
 │
-├── reasoning_geometry/           # Exploratory work — Geometric reasoning in RNNs
+├── reasoning_geometry/           # Exploratory work - Geometric reasoning in RNNs
 │
 ├── configs/                      # Configuration files (visual_rnn example configs)
 ├── BashScripts_ClusterTraining/  # HPC cluster training scripts
@@ -271,7 +271,7 @@ Project 5 has **two parallel experiment tracks** that serve different scientific
 questions. Both use the same model architecture, training loop, and evaluation
 metrics, but vary different parameters.
 
-#### Track A — Phase-Based Parameter Sweep
+#### Track A - Phase-Based Parameter Sweep
 
 **Use when:** Varying arena size, landmark density, view field, rollout horizon,
 or sequence length to study how these parameters affect spatial representations.
@@ -312,12 +312,12 @@ project5_symmetry/results/
   all_results_phase1.json            aggregated across all seeds in phase
 ```
 
-**Config source:** `configs.py` — `SymmetryExperimentConfig` dataclass +
+**Config source:** `configs.py` - `SymmetryExperimentConfig` dataclass +
 pre-built phase lists (PHASE0 through PHASE4B).
 
 ---
 
-#### Track B — Symmetry Group Sweep (S4/S2/S1)
+#### Track B - Symmetry Group Sweep (S4/S2/S1)
 
 **Use when:** Comparing how different levels of landmark symmetry (C4, C2,
 asymmetric) affect representational geometry, aliasing, and manifold structure.
@@ -356,7 +356,7 @@ project5_symmetry/results/symmetry_sweep/
       ...
 ```
 
-**Config source:** Inline in `run_sweep.py` — conditions defined at module top.
+**Config source:** Inline in `run_sweep.py` - conditions defined at module top.
 
 ---
 
@@ -384,11 +384,11 @@ figures/srsa_by_symmetry.png
 
 | Goal | Use Track |
 |------|-----------|
-| Reproduce thesis sRSA-by-symmetry figures | **B** — `run_sweep.py`, then `pipeline.py` |
-| Vary landmark density or view field | **A** — `run.py --phase 2a` |
-| Test arena size scaling | **A** — `run.py --phase 1` |
-| Sweep rollout horizon or sequence length | **A** — `run.py --phase 4a/4b` |
-| Quick sanity check / gate test | **A** — `run.py --phase 0` or B's `--validate` |
+| Reproduce thesis sRSA-by-symmetry figures | **B** - `run_sweep.py`, then `pipeline.py` |
+| Vary landmark density or view field | **A** - `run.py --phase 2a` |
+| Test arena size scaling | **A** - `run.py --phase 1` |
+| Sweep rollout horizon or sequence length | **A** - `run.py --phase 4a/4b` |
+| Quick sanity check / gate test | **A** - `run.py --phase 0` or B's `--validate` |
 
 ---
 
@@ -398,7 +398,7 @@ figures/srsa_by_symmetry.png
 
 ### 4.1 Scientific Question
 
-A fundamental question in spatial cognition is whether the brain first learns the topological structure of the environment (which places are connected, regardless of metric distances) before learning the geometric details (exact distances and angles). This project tests the hypothesis that predictive RNNs exhibit the same bias: topological representations — detectable via persistent homology (Betti numbers) — should converge before geometric ones (detectable via sRSA).
+A fundamental question in spatial cognition is whether the brain first learns the topological structure of the environment (which places are connected, regardless of metric distances) before learning the geometric details (exact distances and angles). This project tests the hypothesis that predictive RNNs exhibit the same bias: topological representations - detectable via persistent homology (Betti numbers) - should converge before geometric ones (detectable via sRSA).
 
 The **gap** metric (T_geometry − T_topology) is the key scientific output: a positive gap supports the hypothesis.
 
@@ -437,9 +437,9 @@ The core innovation is a parameterized environment system that independently con
 - Aliasing tests: `symmetry_trap`, `long_corridor_alias`, `uniform_box`, `checkerboard_large_period`
 
 **RatInABox continuous environments**:
-- `annulus_approx` (with tunable inner_radius) — Betti-1 = 1
-- `figure8_env` — Betti-1 = 2
-- `cylinder_env` (periodic x) — Betti-1 = 1
+- `annulus_approx` (with tunable inner_radius) - Betti-1 = 1
+- `figure8_env` - Betti-1 = 2
+- `cylinder_env` (periodic x) - Betti-1 = 1
 
 **Note**: `maze_medium` and `spiral_maze` produce disconnected traversable regions and should not be used.
 
@@ -541,16 +541,16 @@ How does a predictive RNN's learned representation generalize when placed in nov
 
 18 predefined arenas across 4 categories:
 
-**Category A — Simple convex:**
+**Category A - Simple convex:**
 - A1_square, A2_large_square, A3_circle, A4_rectangle
 
-**Category B — Non-convex / compartmentalized:**
+**Category B - Non-convex / compartmentalized:**
 - B1_l_shape, B2_t_maze, B3_hairpin_maze, B4_compartmentalized
 
-**Category C — Annotated / morphing:**
+**Category C - Annotated / morphing:**
 - C1_reward_zone_layout, C2_barrier_with_gap, C3_morph_series
 
-**Category D — Topologically nontrivial:**
+**Category D - Topologically nontrivial:**
 - D1_annulus, D2_figure8_style
 
 **Observation modes:**
@@ -675,7 +675,7 @@ The `utils/` and `analysis/` directories form the foundational codebase shared b
 
 ### 6.1 Core Architecture (`utils/Architectures.py`)
 
-Defines all pRNN variants — over 1271 lines of architecture definitions:
+Defines all pRNN variants - over 1271 lines of architecture definitions:
 
 | Architecture | Description |
 |-------------|-------------|
@@ -690,9 +690,9 @@ The **thetaRNN** (`utils/thetaRNN.py`) is the core RNN cell: it implements theta
 
 The `PredictiveNet` class (1244 lines) wraps architectures and training. Key methods:
 
-- `train()` — Full training loop with RMSProp, LR scaling per layer
-- `evaluate()` — Compute sRSA and other metrics
-- `spontaneous_activity()` — Generate replay trajectories from spontaneous dynamics
+- `train()` - Full training loop with RMSProp, LR scaling per layer
+- `evaluate()` - Compute sRSA and other metrics
+- `spontaneous_activity()` - Generate replay trajectories from spontaneous dynamics
 
 ### 6.3 Offline Analysis (`analysis/`)
 
@@ -710,11 +710,11 @@ The `PredictiveNet` class (1244 lines) wraps architectures and training. Key met
 
 22 Jupyter notebooks for reproducing the original paper figures:
 
-- `Figure1_PredictiveLearningSpatialRep.ipynb` — Main Figure 1
-- `Figure2_MultiMaskCogMap.ipynb` — Main Figure 2
-- `Figure3_Replay.ipynb` — Main Figure 3
-- `Figure4_ThetapRNN.ipynb` — Main Figure 4
-- `FigureS2.ipynb` through `FigureS21.ipynb` — Supplementary figures
+- `Figure1_PredictiveLearningSpatialRep.ipynb` - Main Figure 1
+- `Figure2_MultiMaskCogMap.ipynb` - Main Figure 2
+- `Figure3_Replay.ipynb` - Main Figure 3
+- `Figure4_ThetapRNN.ipynb` - Main Figure 4
+- `FigureS2.ipynb` through `FigureS21.ipynb` - Supplementary figures
 
 Each notebook loads trained networks from `nets/replicate_fig1/` and generates figures using `analysis.*` modules and `utils.predictiveNet.PredictiveNet`.
 
@@ -791,7 +791,7 @@ Projects 4 and 5 support hardware-aware configurations:
 
 ### CUDA Requirements
 
-- `torch.compile` used in Projects 4 and 5 (not supported on Windows via `run_remote.py` — `maybe_compile()` checks `sys.platform != 'win32'`)
+- `torch.compile` used in Projects 4 and 5 (not supported on Windows via `run_remote.py` - `maybe_compile()` checks `sys.platform != 'win32'`)
 - CUDA Graphs for speed in Project 5 training
 - Multi-GPU: not currently used; single-GPU training is standard
 
@@ -799,7 +799,7 @@ Projects 4 and 5 support hardware-aware configurations:
 
 ## Quick Reference: Entry Points by Project
 
-### Project 5 (Symmetry — thesis focus)
+### Project 5 (Symmetry - thesis focus)
 
 ```bash
 # Training
