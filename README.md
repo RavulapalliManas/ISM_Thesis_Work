@@ -66,7 +66,12 @@ ISM_Thesis_Work/
 │   ├── lossFuns.py                # predMSE, LPLLoss
 │   ├── ActionEncodings.py         # OneHotHD, SpeedHD, Velocities, etc.
 │   ├── LinearDecoder.py           # Linear decoder for spatial representations
-│   └── figures.py                 # TrainingFigure, SpontTrajectoryFigure
+│   ├── figures.py                 # TrainingFigure, SpontTrajectoryFigure
+│   ├── general.py                 # General utility functions (saveFig, savePkl, etc.)
+│   ├── serialization.py           # Unified pathlib-based save/load (pickle, JSON)
+│   ├── data_schema.py             # Trajectory format constants + validation
+│   ├── data_store.py              # ResultStore — unified seed-dir loader
+│   └── gpu_manager.py             # Standalone interactive GPU experiment manager
 │
 ├── analysis/                      # Offline analysis pipeline (shared by all projects)
 │   ├── OfflineTrajectoryAnalysis.py   # Main trajectory analysis (806 lines)
@@ -74,6 +79,12 @@ ISM_Thesis_Work/
 │   ├── RepresentationalGeometryAnalysis.py  # RGA (RSA, RDM)
 │   ├── DiffusionReplayAnalysis.py     # Diffusion/replay analysis
 │   └── ExperienceReplayAnalysis.py   # Experience replay metrics
+│
+├── tests/                         # Test suite (pytest)
+│   ├── conftest.py                # Shared fixtures, repo-root sys.path
+│   ├── utils/                     # Tests for serialization, data_schema
+│   ├── project5_symmetry/         # Tests for dataset, arena
+│   └── reasoning_geometry/        # Tests for data loaders
 │
 ├── FigureScripts/                # 22 Jupyter notebooks for original paper figures
 │
@@ -88,8 +99,7 @@ ISM_Thesis_Work/
 ├── configs/                      # Configuration files (visual_rnn example configs)
 ├── BashScripts_ClusterTraining/  # HPC cluster training scripts
 ├── nets/                         # Trained network checkpoints and output figures
-├── outputs/                      # General results storage
-└── results/                      # Tabular and figure outputs
+└── outputs/                      # General results storage
 ```
 
 ### How the Projects Relate
@@ -183,6 +193,9 @@ set PYTHONPATH=.
 # Phase 0: Baseline gate (must pass sRSA > 0.40 for seed 0)
 python -m project5_symmetry.run_fast --phase 0
 
+# Or use the full sweep launcher:
+python project5_symmetry/experiments/run.py --phase 0
+
 # Resume Phase 0 from step 40k → 80k (validates loss before committing)
 python project5_symmetry/training/resume_p0.py
 
@@ -213,22 +226,34 @@ python project5_symmetry/analyze_symmetry_sweep.py
 project5_symmetry/
 ├── run_fast.py                      # Main training launcher (LaunchPreset presets)
 ├── experiments/
-│   ├── configs.py                   # ExperimentConfig dataclass, phase definitions
-│   └── sweep.py                     # Outer sweep loop, gate, evaluation
+│   ├── configs.py                   # SymmetryExperimentConfig dataclass, phase definitions
+│   ├── sweep.py                     # Outer sweep loop, gate, evaluation
+│   ├── run.py                       # Entry-point launcher (delegates to sweep)
+│   ├── run_sweep.py                 # Standalone symmetry sweep runner
+│   └── run_hd_ablation.py           # Head-direction ablation experiment
+├── analysis/
+│   └── pipeline.py                  # Analysis pipeline (statistics + figures)
 ├── training/
-│   ├── train.py                     # Core training (pRNN_th, RMSProp, 80k steps, 1041 lines)
+│   ├── train.py                     # Core training (pRNN_th, RMSProp, 80k steps)
 │   ├── dataset.py                   # TrajectoryDataset, PackedTrajectoryStore
+│   ├── train_single_run.py          # Single-run forward-pass debug script
 │   └── resume_p0.py                 # Resume from step 40k → 80k
 ├── environments/
 │   ├── arena.py                     # SymmetryArena (MiniGrid), PixelObsWrapper, H2 compute
 │   └── generate_trajectories.py     # Offline trajectory collection (multiprocess)
 ├── evaluation/
 │   └── metrics.py                   # sRSA, RA, PAA, C2 Contrast, SCI, DTG, manifold_id, EVS
+├── figures/
+│   ├── rebuild_figures.py           # Rebuild all manuscript figures
+│   ├── plot_rate_maps.py            # Rate map visualization
+│   └── plot_training_curves.py      # Training curve visualization
 ├── full_analysis_part1.py           # Data loading + metric computation → master_metrics.csv
 ├── full_analysis_part2.py           # Publication figures (Fig 1–6)
 ├── full_analysis_part3_supp.py      # Supplementary figures (Fig S1–S6)
 ├── analyze_symmetry_sweep.py        # Standalone analysis + PDF report generator
 ├── visualize_environments.py        # Arena/landmark/POV/H2 visualization
+├── visualize_phase0.py              # Phase 0 arena visualiser
+├── visualize_new_arenas.py          # New arena visualiser
 └── Report/
     ├── r_fixed.tex                  # Main thesis report (LaTeX source)
     ├── r_fixed.pdf                  # Compiled PDF
@@ -237,6 +262,133 @@ project5_symmetry/
     ├── stats_results (3).csv
     └── images/                      # ~90 figure files (PDF, PNG)
 ```
+
+---
+
+### 3.8 Experiment Pipeline Overview
+
+Project 5 has **two parallel experiment tracks** that serve different scientific
+questions. Both use the same model architecture, training loop, and evaluation
+metrics, but vary different parameters.
+
+#### Track A — Phase-Based Parameter Sweep
+
+**Use when:** Varying arena size, landmark density, view field, rollout horizon,
+or sequence length to study how these parameters affect spatial representations.
+
+**Entry points:**
+```bash
+# Fast GPU trainer (recommended):
+python -m project5_symmetry.run_fast --phase 0
+
+# Full sweep launcher (more options):
+python project5_symmetry/experiments/run.py --phase all
+```
+
+**Flow:**
+```
+run.py / run_fast.py
+  └─► sweep.py  (iterates over condition × seed)
+        ├─► generate_trajectories.py  (writes .npz files)
+        ├─► train.py                  (trains pRNN, saves .pt + logs)
+        └─► metrics.py                (computes sRSA, SCI, DTG, etc.)
+              └─► metrics.json        (per seed)
+              └─► all_results_*.json  (aggregated)
+```
+
+**Output directory structure:**
+```
+project5_symmetry/results/
+  <condition_id>/                    e.g. P1-B, P2a-U3
+    trajectories/                    traj_00000.npz … traj_09999.npz
+    arena_meta.json
+    seed_00/
+      ckpt_final.pt                  trained model weights
+      training_log.json              loss + sRSA curves over training steps
+      metrics.json                   final evaluation metrics
+      tb/                            TensorBoard event files
+    seed_01/
+      ...
+  all_results_phase1.json            aggregated across all seeds in phase
+```
+
+**Config source:** `configs.py` — `SymmetryExperimentConfig` dataclass +
+pre-built phase lists (PHASE0 through PHASE4B).
+
+---
+
+#### Track B — Symmetry Group Sweep (S4/S2/S1)
+
+**Use when:** Comparing how different levels of landmark symmetry (C4, C2,
+asymmetric) affect representational geometry, aliasing, and manifold structure.
+This is the primary track for the thesis findings.
+
+**Entry point:**
+```bash
+python project5_symmetry/experiments/run_sweep.py
+```
+
+**Flow:**
+```
+run_sweep.py
+  ├─► Phase 0 validation gate (optional)
+  └─► for condition in ['s4', 's2', 's1']:
+        ├─► SymmetryArena(symmetry_condition=condition)
+        ├─► generate_trajectories()
+        ├─► train pRNN
+        └─► compute metrics (sRSA, SCI, DTG, manifold_id)
+              └─► symmetry_sweep_raw.pkl  (aggregated dict)
+```
+
+**Output:**
+```
+project5_symmetry/results/symmetry_sweep/
+  symmetry_sweep_raw.pkl          dict[condition → list[metrics_per_seed]]
+  s4/
+    seed_00/
+      ckpt_final.pt               model weights
+      training_log.json           training curves
+  s2/
+    seed_00/
+      ...
+  s1/
+    seed_00/
+      ...
+```
+
+**Config source:** Inline in `run_sweep.py` — conditions defined at module top.
+
+---
+
+#### Analysis Pipeline
+
+**Entry point:**
+```bash
+python project5_symmetry/analysis/pipeline.py
+```
+
+The analysis pipeline (`analysis/pipeline.py`) is designed for **Track B**
+(symmetry group sweep). It reads `symmetry_sweep_raw.pkl` or per-seed
+`metrics.json` files and produces summary statistics + figures.
+
+**Output:**
+```
+results/symmetry_summary_statistics.csv
+results/symmetry_condition_comparisons.csv
+figures/srsa_by_symmetry.png
+```
+
+---
+
+#### Which Pipeline Should I Use?
+
+| Goal | Use Track |
+|------|-----------|
+| Reproduce thesis sRSA-by-symmetry figures | **B** — `run_sweep.py`, then `pipeline.py` |
+| Vary landmark density or view field | **A** — `run.py --phase 2a` |
+| Test arena size scaling | **A** — `run.py --phase 1` |
+| Sweep rollout horizon or sequence length | **A** — `run.py --phase 4a/4b` |
+| Quick sanity check / gate test | **A** — `run.py --phase 0` or B's `--validate` |
 
 ---
 
@@ -651,17 +803,20 @@ Projects 4 and 5 support hardware-aware configurations:
 
 ```bash
 # Training
-python -m project5_symmetry.run_fast --phase 0        # Gate
+python -m project5_symmetry.run_fast --phase 0        # Gate (fast GPU trainer)
+python project5_symmetry/experiments/run.py --phase 0 # Gate (full sweep launcher)
 python -m project5_symmetry.run_fast --phase all      # Full sweep
+python project5_symmetry/experiments/run_hd_ablation.py  # HD ablation experiment
 
 # Analysis
 python project5_symmetry/full_analysis_part1.py        # Metrics computation
 python project5_symmetry/full_analysis_part2.py        # Main figures
 python project5_symmetry/full_analysis_part3_supp.py  # Supplementary figures
+python project5_symmetry/analysis/pipeline.py          # Unified analysis pipeline
+python project5_symmetry/analyze_symmetry_sweep.py     # Standalone analysis + PDF
 
 # Report
 # project5_symmetry/Report/r_fixed.tex + r_fixed.pdf
-# Also: report_revised.tex (root, older version)
 ```
 
 ### Project 4 (Topology Before Geometry)
@@ -700,14 +855,38 @@ python -m project3_generalization.experiments.run_3d                    # 3D exp
 
 ```bash
 # Training (legacy)
-python trainNet.py
+python project3_generalization/scripts/train_net.py
 
 # Figure notebooks
 # Open FigureScripts/Figure*.ipynb
 
 # Analysis
-python run_analysis.py
+python project3_generalization/scripts/run_analysis.py
 ```
+
+---
+
+## 9. Testing
+
+Test suite location: `tests/` (pytest framework).
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test modules
+python -m pytest tests/utils/ -v
+python -m pytest tests/project5_symmetry/ -v
+```
+
+### What's covered
+
+| Test module | What it validates |
+|-------------|-------------------|
+| `tests/utils/test_serialization.py` | Pickle/JSON roundtrips, numpy handling, auto-mkdir |
+| `tests/utils/test_data_schema.py` | Trajectory filename format, key validation, dtype checks |
+| `tests/project5_symmetry/test_dataset.py` | TrajectoryDataset loading, PackedTrajectoryStore, error handling |
+| `tests/reasoning_geometry/` | *(placeholder)* Data loader tests |
 
 ---
 

@@ -568,18 +568,21 @@ class PredictiveNet:
         return obs
 
     
-    #TODO: convert these to general.savePkl and general.loadPkl (follow SpatialTuningAnalysis.py)
-    def saveNet(self,savename,savefolder=None):
-        filename = 'nets/'+savename+'.pkl'
-        with open(filename,'wb') as f:
+    def saveNet(self, savename, savefolder=None):
+        from pathlib import Path
+        dest = Path(savefolder) if savefolder else Path('nets')
+        dest.mkdir(parents=True, exist_ok=True)
+        filename = dest / f'{savename}.pkl'
+        with open(filename, 'wb') as f:
             pickle.dump(self, f)
         print("Net Saved to pathname")
 
 
-    def loadNet(savename,savefolder=None, suppressText=False):
-        #TODO Load in init... from filename
-        filename = 'nets/'+savename+'.pkl'
-        with open(filename,'rb') as f:
+    def loadNet(savename, savefolder=None, suppressText=False):
+        from pathlib import Path
+        dest = Path(savefolder) if savefolder else Path('nets')
+        filename = dest / f'{savename}.pkl'
+        with open(filename, 'rb') as f:
             predAgent = pickle.load(f)
         if not suppressText:
             print("Net Loaded from pathname")

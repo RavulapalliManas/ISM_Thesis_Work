@@ -1,12 +1,20 @@
+#!/usr/bin/env python3
+"""
+Legacy analysis runner for trained PredictiveNet models.
+"""
+
 import sys
+from pathlib import Path
+
+_repo_root = str(Path(__file__).resolve().parents[2])
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 import matplotlib.pyplot as plt
 from utils.predictiveNet import PredictiveNet
 from analysis.SpatialTuningAnalysis import SpatialTuningAnalysis
 
-# Define where the trained model is saved
 netfolder = 'replicate_fig1/'
-# Using the same parameters from the trainNet command:
-# pRNNtype: 'AutoencoderPred_LN', namext: 'Onehot', seed: 102
 netname = 'AutoencoderPred_LN-Onehot-s102'
 
 print(f"Loading net {netname} from {netfolder} ...")
@@ -19,7 +27,6 @@ except Exception as e:
 print("Running Spatial Tuning Analysis...")
 STA = SpatialTuningAnalysis(predictiveNet, inputControl=True, untrainedControl=True)
 
-# Generate and save tuning figures
 print("Generating spatial tuning figures...")
 savefolder = 'nets/' + netfolder + 'analysis/' + netname + '/'
 import os
@@ -31,4 +38,3 @@ try:
     print(f"Analysis completed successfully. Figures saved in: {savefolder}")
 except Exception as e:
     print(f"Encountered an error while saving figures: {e}")
-

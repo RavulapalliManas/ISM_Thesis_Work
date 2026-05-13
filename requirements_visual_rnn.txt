@@ -13,3 +13,7 @@ ripser
 PyYAML
 rich
 psutil
+tqdm
+pynapple
+gymnasium
+minigrid

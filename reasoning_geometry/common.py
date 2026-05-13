@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 @dataclass
-class ExperimentConfig:
+class ReasoningExperimentConfig:
     model: str
     dataset: str
     n_examples: int
@@ -53,7 +53,7 @@ class ExperimentConfig:
     holdout_name: str = "validation"
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "ExperimentConfig":
+    def from_yaml(cls, path: str | Path) -> "ReasoningExperimentConfig":
         with open(path, "r", encoding="utf-8") as handle:
             payload = yaml.safe_load(handle)
         return cls(**payload)

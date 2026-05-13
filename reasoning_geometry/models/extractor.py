@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from reasoning_geometry.common import ExperimentConfig, ReasoningExample, TrajectoryBundle
+from reasoning_geometry.common import ReasoningReasoningExperimentConfig, ReasoningExample, TrajectoryBundle
 
 
 MODEL_NAME_MAP = {
@@ -29,7 +29,7 @@ def resolve_model_name(name: str) -> str:
     return MODEL_NAME_MAP.get(name, name)
 
 
-def load_causal_lm(config: ExperimentConfig) -> LoadedLM:
+def load_causal_lm(config: ReasoningExperimentConfig) -> LoadedLM:
     model_name = resolve_model_name(config.model)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token_id is None:
@@ -97,7 +97,7 @@ def teacher_forcing_hidden_states(
 def extract_teacher_forcing_trajectory(
     example: ReasoningExample,
     loaded_lm: LoadedLM,
-    config: ExperimentConfig,
+    config: ReasoningExperimentConfig,
 ) -> TrajectoryBundle:
     payload = teacher_forcing_hidden_states(
         example=example,

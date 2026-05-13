@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Dec 13 16:17:09 2021
+Legacy shared utilities for all ISM thesis projects.
 
-@author: dl2820
+Provides figure saving (saveFig), pickle serialization (savePkl/loadPkl),
+directory creation (mkdir_p), and miscellaneous helpers (clumpyRandom,
+fit_exp_linear, kl_divergence, delaydist, state2nap).
+
+New code should prefer utils/serialization.py for pathlib-based save/load.
 """
+
+from pathlib import Path
 
 import numpy as np 
 
@@ -12,55 +18,52 @@ from errno import EEXIST
 import os 
 
 import pickle
+from typing import Optional
 
-#from sklearn import linear_model #For Wiener Filter and Wiener Cascade
 
-def clumpyRandom(size,choices,seedprobability,numiter=1):
-    pattern = np.random.choice(choices,(size,size),p=seedprobability)
-    
-    for ii in range(numiter):
-        for xx in range(size^2):
+
+def clumpyRandom(size, choices, seedprobability, numiter=1):
+    pattern = np.random.choice(choices, (size, size), p=seedprobability)
+    for _ in range(numiter):
+        for _ in range(size ** 2):
             x = np.random.choice(range(size))
             y = np.random.choice(range(size))
-            
-            adjacent = pattern[max(x-1,0):x+2,max(y-1,0):y+2]
-            
-            pattern[x,y] = np.random.choice(adjacent.flatten())
-            
+            adjacent = pattern[max(x-1, 0):x+2, max(y-1, 0):y+2]
+            pattern[x, y] = np.random.choice(adjacent.flatten())
     return pattern
 
 
 
-def saveFig(fig,savename,savepath=None,filetype='pdf'):
+def saveFig(fig, savename, savepath=None, filetype='pdf'):
     mkdir_p(savepath)
-    fig.savefig(f'{savepath}/{savename}.{filetype}',format=filetype)
-    return
+    fig.savefig(f'{savepath}/{savename}.{filetype}', format=filetype)
 
 
-def savePkl(obj,savename,savepath=None):
-    mkdir_p(savepath)
-    filename = savepath+'/'+savename+'.pkl'
-    with open(filename,'wb') as f:
+def savePkl(obj, savename: str, savepath: Optional[str] = None):
+    dest = Path(savepath) if savepath else Path.cwd()
+    dest.mkdir(parents=True, exist_ok=True)
+    filename = dest / f'{savename}.pkl'
+    with open(filename, 'wb') as f:
         pickle.dump(obj, f)
-    return
-    
-def loadPkl(savename,savepath=None):
-    filename = savepath+'/'+savename+'.pkl'
-    with open(filename,'rb') as f:
-        pkl = pickle.load(f)
-    return pkl
+
+
+def loadPkl(savename: str, savepath: Optional[str] = None):
+    dest = Path(savepath) if savepath else Path.cwd()
+    filename = dest / f'{savename}.pkl'
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
 
 
 def mkdir_p(mypath):
-    '''Creates a directory. equivalent to using mkdir -p on the command line
-    If the path exists, no error'''
+    """Creates a directory. equivalent to using mkdir -p on the command line.
+    If the path exists, no error."""
     try:
         os.makedirs(mypath)
-    except OSError as exc: # Python >2.5
+    except OSError as exc:
         if exc.errno == EEXIST and os.path.isdir(mypath):
             pass
-        else: raise      
-    return
+        else:
+            raise
 
 
 
@@ -75,8 +78,7 @@ def fit_exp_linear(t, y, C=0):
 
 from scipy.special import rel_entr
 def kl_divergence(p, q):
- 	#return np.sum(p[i] * np.log2(p[i]/q[i]) for i in range(len(p)))
-    return np.sum(rel_entr(p,q))
+    return np.sum(rel_entr(p, q))
 
 
 
@@ -91,10 +93,7 @@ def delaydist(signal,numdelays=10, maxdist=15, firstdelay=1, sqdist=False,
     nulldist,_ = np.histogram(distances_null,np.arange(-0.5,maxdist+0.5))
     nulldist = nulldist/np.sum(nulldist)
     
-    #alldists = np.array([])
-    #alldelays = np.array([])
-    #delaydist[0,0] = np.size(signal,0)-1
-    for delay in range(firstdelay,numdelays+1):
+    for delay in range(firstdelay, numdelays + 1):
         lastindex = None
         if delay>0:
             lastindex = 0-delay
@@ -108,12 +107,7 @@ def delaydist(signal,numdelays=10, maxdist=15, firstdelay=1, sqdist=False,
             delay_kl[delay-firstdelay] = np.mean(distances**2.0)
         else:
             delay_kl[delay-firstdelay] = kl_divergence(delay_dist[:,delay-firstdelay],nulldist)
-        #alldists = np.append(alldists,distances)
-        #alldelays = np.append(alldelays,delay*np.ones_like(distances))
-        
-        
-    #delaydistcorr = np.corrcoef(alldelays,alldists)[0,1]
-    return delay_dist, delay_kl #, delaydistcorr
+    return delay_dist, delay_kl
 
 
 import pynapple as nap

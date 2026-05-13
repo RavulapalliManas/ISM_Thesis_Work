@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, List
 
-from reasoning_geometry.common import ExperimentConfig, ReasoningExample
+from reasoning_geometry.common import ReasoningReasoningExperimentConfig, ReasoningExample
 from reasoning_geometry.data.graph_utils import filter_steps, split_reasoning_steps
 
 
@@ -36,7 +36,7 @@ def _extract_domain(record: Dict) -> str:
     )
 
 
-def load_halueval(config: ExperimentConfig) -> Dict[str, List[ReasoningExample]]:
+def load_halueval(config: ReasoningExperimentConfig) -> Dict[str, List[ReasoningExample]]:
     dataset = _load_hf_dataset("openkg/HaluEval", config.halueval_split)
     grouped: Dict[tuple[str, int], List[ReasoningExample]] = defaultdict(list)
     for idx, record in enumerate(dataset):

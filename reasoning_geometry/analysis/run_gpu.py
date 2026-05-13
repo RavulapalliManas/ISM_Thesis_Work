@@ -23,7 +23,7 @@ from reasoning_geometry.analysis.shared import (
     summarize_manifold,
     summarize_srsa,
 )
-from reasoning_geometry.common import GateFailedError, GateResult, ExperimentConfig, save_json, set_global_seed
+from reasoning_geometry.common import GateFailedError, GateResult, ReasoningReasoningExperimentConfig, save_json, set_global_seed
 from reasoning_geometry.logging.tb_logger import TensorBoardLogger
 from reasoning_geometry.metrics.statistics import grassmann_permutation_test
 from reasoning_geometry.metrics.subspace import canonical_angles, fit_pca_subspace, projection_dynamics_statistics, projection_ratio, signed_velocity
@@ -55,7 +55,7 @@ def gate2_result(observed: float, null_95: float, p_value: float) -> GateResult:
 
 
 def run(config_path: str) -> Dict[str, object]:
-    config = ExperimentConfig.from_yaml(config_path)
+    config = ReasoningExperimentConfig.from_yaml(config_path)
     set_global_seed(config.seed)
     set_publication_style()
     dirs = prepare_output_dirs(config)

@@ -21,6 +21,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 import os
+from pathlib import Path
+
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -35,14 +37,14 @@ from project5_symmetry.environments.arena import (
 )
 from project5_symmetry.experiments.configs import PHASE0
 
-OUT_DIR   = 'project5_symmetry/env_viz/phase0'
+OUT_DIR   = Path('project5_symmetry/env_viz/phase0')
 TILE_PX   = 18          # pixels per tile for top-down renders
 HD_NAMES  = {0: 'E', 1: 'S', 2: 'W', 3: 'N'}
 HD_ARROWS = {0: '→', 1: '↓', 2: '←', 3: '↑'}
 
 
 def _save(fig, name: str, dpi: int = 150):
-    path = os.path.join(OUT_DIR, name)
+    path = OUT_DIR / name
     fig.savefig(path, dpi=dpi, bbox_inches='tight')
     plt.close(fig)
     tqdm.write(f'  saved  {name}')
@@ -291,11 +293,11 @@ def plot_h2_histogram(h2: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     cfg = PHASE0[0]
     print(f'\nPhase 0 arena:  {cfg.arena_shape}  {cfg.arena_size}×{cfg.arena_size}'
           f'  U={cfg.U}  F={cfg.F}  k={cfg.k}  T={cfg.T}')
-    print(f'Output folder:  {os.path.abspath(OUT_DIR)}/\n')
+    print(f'Output folder:  {OUT_DIR.resolve()}/\n')
 
     steps = [
         ('01 top-down',       lambda: plot_topdown(env)),
@@ -319,14 +321,14 @@ def main():
     plot_h2_histogram(h2)
 
     # ── Print file list ───────────────────────────────────────────────────────
-    files = sorted(f for f in os.listdir(OUT_DIR) if f.endswith('.png'))
+    files = sorted(f.name for f in sorted(OUT_DIR.glob('*.png')))
     print(f'\n{"─"*52}')
     print(f'Phase 0 images ({len(files)} files):')
     for f in files:
-        size_kb = os.path.getsize(os.path.join(OUT_DIR, f)) // 1024
+        size_kb = (OUT_DIR / f).stat().st_size // 1024
         print(f'  {f:40s}  {size_kb:4d} KB')
     print(f'{"─"*52}')
-    print(f'Folder: {os.path.abspath(OUT_DIR)}/')
+    print(f'Folder: {OUT_DIR.resolve()}/')
 
 
 if __name__ == '__main__':

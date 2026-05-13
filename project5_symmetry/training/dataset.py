@@ -12,9 +12,13 @@ For pRNN_th (B=1) training, __getitem__ returns one full trajectory.
 
 import glob
 import os
+from pathlib import Path
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+
+from utils.data_schema import TRAJECTORY_FMT, check_trajectory
 
 
 class TrajectoryDataset(Dataset):
@@ -26,14 +30,15 @@ class TrajectoryDataset(Dataset):
     """
 
     def __init__(self, data_dir: str):
-        self.files = sorted(glob.glob(os.path.join(data_dir, 'traj_*.npz')))
+        pattern = str(Path(data_dir) / TRAJECTORY_FMT.replace("{i:05d}", "*"))
+        self.files = sorted(glob.glob(pattern))
         if not self.files:
             raise FileNotFoundError(f"No .npz files in {data_dir}")
-        # Preload all trajectories once so __getitem__ is pure RAM access.
         self.cache = [self._load(path) for path in self.files]
 
     def _load(self, path: str):
         d = np.load(path)
+        check_trajectory(d, name=path)
         return (
             torch.from_numpy(d['obs']),
             torch.from_numpy(d['act_enc']),

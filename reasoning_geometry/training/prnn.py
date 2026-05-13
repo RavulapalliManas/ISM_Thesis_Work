@@ -12,7 +12,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset
 
-from reasoning_geometry.common import ExperimentConfig, TrajectoryBundle, save_json
+from reasoning_geometry.common import ReasoningReasoningExperimentConfig, TrajectoryBundle, save_json
 from reasoning_geometry.metrics.srsa import spearman_rsa
 
 
@@ -104,7 +104,7 @@ def validation_srsa(
     trajectories: Sequence[TrajectoryBundle],
     logical_matrices: Dict[str, np.ndarray],
     stats: NormalizationStats,
-    config: ExperimentConfig,
+    config: ReasoningExperimentConfig,
 ) -> float:
     scores: List[float] = []
     for bundle in trajectories[: config.validation_metric_examples]:
@@ -122,7 +122,7 @@ def train_prnn(
     trajectories_train: Sequence[TrajectoryBundle],
     trajectories_val: Sequence[TrajectoryBundle],
     logical_matrices_val: Dict[str, np.ndarray],
-    config: ExperimentConfig,
+    config: ReasoningExperimentConfig,
     tb_logger=None,
 ) -> Dict[str, object]:
     stats = fit_normalization([bundle.hidden_states for bundle in trajectories_train])

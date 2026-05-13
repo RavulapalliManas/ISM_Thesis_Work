@@ -179,7 +179,7 @@ _KB = {
     "hyperparams": {
         "n_steps": {
             "default": 80000,
-            "note": "Training steps (not epochs). 80k matches project5 ExperimentConfig default.",
+            "note": "Training steps (not epochs). 80k matches project5 SymmetryExperimentConfig default.",
             "advice": "80k for all primary experiments. 10 for smoke tests.",
             "warn_low": 20000,
         },
@@ -195,7 +195,7 @@ _KB = {
         },
         "batch_size": {
             "default": 8,
-            "note": "B=8 is the ExperimentConfig default for project5_symmetry.",
+            "note": "B=8 is the SymmetryExperimentConfig default for project5_symmetry.",
             "advice": "B=8 for project5. B=1 only for strict Levenstein replication via trainNet.py.",
         },
         "T": {
@@ -238,7 +238,7 @@ _KB = {
             "params": {"hidden_size": 500, "T": 200, "k": 5, "n_steps": 80000, "batch_size": 8},
         },
         "symmetry_sweep": {
-            "desc": "S4/S2/S1 landmark symmetry comparison (Project 5 ISM, run_symmetry_sweep.py).",
+            "desc": "S4/S2/S1 landmark symmetry comparison (Project 5 ISM, experiments/run_sweep.py).",
             "min_seeds": 5, "rec_seeds": 9,
             "goal": "Demonstrate monotonic relationship between symmetry and degeneracy.",
             "metrics": ["sRSA_euclid", "sRSA_city", "SCI", "DTG", "manifold_id"],

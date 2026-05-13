@@ -13,6 +13,7 @@ Or directly:
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -24,7 +25,7 @@ from project5_symmetry.environments.arena import (
 from project5_symmetry.environments.generate_trajectories import generate_dataset
 from project5_symmetry.experiments.configs import (
     PHASE0, PHASE1, PHASE2A, PHASE2B, PHASE4A, PHASE4B, ALL_CONDITIONS,
-    ExperimentConfig,
+    SymmetryExperimentConfig,
 )
 from project5_symmetry.training.train import (
     train, train_parallel_seeds, _collect_hidden_states,
@@ -39,53 +40,53 @@ BASE_OUT       = 'project5_symmetry/results'
 
 # ── Single condition × seed run ───────────────────────────────────────────────
 
-def _condition_paths(cfg: ExperimentConfig, seed: int, base_dir: str) -> tuple[str, str, str]:
-    cond_dir = os.path.join(base_dir, cfg.condition_id)
-    data_dir = os.path.join(cond_dir, 'trajectories')
-    run_dir  = os.path.join(cond_dir, f'seed_{seed:02d}')
+def _condition_paths(cfg: SymmetryExperimentConfig, seed: int, base_dir: str) -> tuple[Path, Path, Path]:
+    base = Path(base_dir)
+    cond_dir = base / cfg.condition_id
+    data_dir = cond_dir / 'trajectories'
+    run_dir  = cond_dir / f'seed_{seed:02d}'
     return cond_dir, data_dir, run_dir
 
 
-def _ensure_condition_data(cfg: ExperimentConfig, seed: int, base_dir: str):
+def _ensure_condition_data(cfg: SymmetryExperimentConfig, seed: int, base_dir: str):
     cond_dir, data_dir, _ = _condition_paths(cfg, seed, base_dir)
-    os.makedirs(cond_dir, exist_ok=True)
+    cond_dir.mkdir(parents=True, exist_ok=True)
 
     env = make_symmetry_env(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
 
-    existing = len([f for f in os.listdir(data_dir) if f.endswith('.npz')]) \
-               if os.path.isdir(data_dir) else 0
+    existing = len(list(data_dir.glob('*.npz'))) if data_dir.is_dir() else 0
 
     if existing < cfg.n_traj:
         generate_dataset(
-            env, cfg.n_traj, cfg.T, data_dir,
+            env, cfg.n_traj, cfg.T, str(data_dir),
             desc=f'{cfg.condition_id} trajectories',
         )
-        meta_path = os.path.join(cond_dir, 'arena_meta.json')
-        if not os.path.exists(meta_path):
-            save_arena_metadata(env, meta_path)
+        meta_path = cond_dir / 'arena_meta.json'
+        if not meta_path.exists():
+            save_arena_metadata(env, str(meta_path))
 
     return env
 
 
 def _evaluate_condition_run(
-    cfg: ExperimentConfig,
+    cfg: SymmetryExperimentConfig,
     seed: int,
     base_dir: str,
     training_log: dict,
 ) -> dict:
     cond_dir, data_dir, run_dir = _condition_paths(cfg, seed, base_dir)
     env = make_symmetry_env(cfg.arena_shape, cfg.arena_size, cfg.U, cfg.F, seed=seed)
-    os.makedirs(run_dir, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Final evaluation ──────────────────────────────────────────────────────
     obs_size = cfg.F * cfg.F * 3
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    dataset = TrajectoryDataset(data_dir)
+    dataset = TrajectoryDataset(str(data_dir))
 
     from utils.Architectures import pRNN_th
     from utils.thetaRNN import LayerNormRNNCell
 
-    ckpt = torch.load(os.path.join(run_dir, 'ckpt_final.pt'), map_location=device)
+    ckpt = torch.load(run_dir / 'ckpt_final.pt', map_location=device)
     model = pRNN_th(obs_size=obs_size, act_size=5, k=cfg.k,
                     hidden_size=500, cell=LayerNormRNNCell, neuralTimescale=2,
                     predOffset=PRED_OFFSET, hidden_init_sigma=HIDDEN_INIT_SIGMA)
@@ -126,13 +127,13 @@ def _evaluate_condition_run(
         'steps':             training_log['steps'],
     }
 
-    with open(os.path.join(run_dir, 'metrics.json'), 'w') as f:
+    with open(run_dir / 'metrics.json', 'w') as f:
         json.dump(result, f, indent=2)
 
     return result
 
 
-def _run_condition(cfg: ExperimentConfig, seed: int, base_dir: str) -> dict:
+def _run_condition(cfg: SymmetryExperimentConfig, seed: int, base_dir: str) -> dict:
     _ensure_condition_data(cfg, seed, base_dir)
     cond_dir, data_dir, run_dir = _condition_paths(cfg, seed, base_dir)
 
@@ -173,7 +174,7 @@ def run_phase0(base_dir: str) -> bool:
 
 
 def run_sweep(conditions: list, base_dir: str, label: str = '') -> list:
-    os.makedirs(base_dir, exist_ok=True)
+    Path(base_dir).mkdir(parents=True, exist_ok=True)
     all_results = []
     trainer_mode = os.getenv('PRNN_TRAINER', 'fast')
     parallel_group = max(1, int(os.getenv('PRNN_PARALLEL_SEEDS', PARALLEL_SEED_GROUP)))
@@ -227,7 +228,7 @@ def run_sweep(conditions: list, base_dir: str, label: str = '') -> list:
 
     outer_pbar.close()
 
-    out_path = os.path.join(base_dir, f'all_results{label}.json')
+    out_path = Path(base_dir) / f'all_results{label}.json'
     with open(out_path, 'w') as f:
         json.dump(all_results, f, indent=2)
     tqdm.write(f'\n✓ Results written to {out_path}')
@@ -249,7 +250,7 @@ def main():
                         help='Skip Phase 0 gate check')
     args = parser.parse_args()
 
-    os.makedirs(args.out, exist_ok=True)
+    Path(args.out).mkdir(parents=True, exist_ok=True)
 
     if args.phase == '0':
         run_phase0(args.out)

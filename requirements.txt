@@ -1,1 +1,5 @@
 -r requirements_visual_rnn.txt
+pynapple             # Tuning curve computation
+tqdm                 # Progress bars
+gymnasium            # MiniGrid discrete navigation (via minigrid)
+PyYAML               # YAML config loading

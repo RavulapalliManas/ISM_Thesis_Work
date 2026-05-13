@@ -7,7 +7,7 @@ import numpy as np
 
 from reasoning_geometry.common import (
     DistanceBundle,
-    ExperimentConfig,
+    ReasoningReasoningExperimentConfig,
     GateFailedError,
     GateResult,
     ReasoningExample,
@@ -25,7 +25,7 @@ from reasoning_geometry.metrics.statistics import symmetric_permutation_test
 from reasoning_geometry.models.embeddings import compute_surface_distances
 
 
-def load_dataset_split(config: ExperimentConfig) -> Dict[str, List[ReasoningExample]]:
+def load_dataset_split(config: ReasoningExperimentConfig) -> Dict[str, List[ReasoningExample]]:
     if config.dataset == "prontoqa":
         return load_prontoqa(config)
     if config.dataset == "halueval":
@@ -33,7 +33,7 @@ def load_dataset_split(config: ExperimentConfig) -> Dict[str, List[ReasoningExam
     raise ValueError(f"Unsupported dataset: {config.dataset}")
 
 
-def prepare_output_dirs(config: ExperimentConfig) -> Dict[str, Path]:
+def prepare_output_dirs(config: ReasoningExperimentConfig) -> Dict[str, Path]:
     dirs = {
         "output": config.resolve_dir(config.output_dir),
         "trajectories": config.resolve_dir(config.trajectories_dir),
@@ -56,10 +56,10 @@ def build_distance_bundles(
     examples: Sequence[ReasoningExample],
     tokenizer=None,
     model=None,
-    config: ExperimentConfig | None = None,
+    config: ReasoningExperimentConfig | None = None,
     gpu_mode: bool = False,
 ) -> Dict[str, DistanceBundle]:
-    config = config or ExperimentConfig(
+    config = config or ReasoningExperimentConfig(
         model="phi-2",
         dataset="prontoqa",
         n_examples=0,

@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 import torch
 
-from reasoning_geometry.common import ExperimentConfig, ReasoningExample, TrajectoryBundle
+from reasoning_geometry.common import ReasoningReasoningExperimentConfig, ReasoningExample, TrajectoryBundle
 from reasoning_geometry.models.extractor import LoadedLM, _last_token_hidden, next_token_entropy
 
 
@@ -48,7 +48,7 @@ class CoconutWrapper:
     def extract_continuous_trajectory(
         self,
         example: ReasoningExample,
-        config: ExperimentConfig,
+        config: ReasoningExperimentConfig,
     ) -> TrajectoryBundle:
         prompt = example.prompt.strip()
         encoded_prompt = self.tokenizer(prompt, return_tensors="pt", truncation=True)

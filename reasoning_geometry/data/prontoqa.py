@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 
-from reasoning_geometry.common import ExperimentConfig, ReasoningExample
+from reasoning_geometry.common import ReasoningReasoningExperimentConfig, ReasoningExample
 from reasoning_geometry.data.graph_utils import filter_steps, split_reasoning_steps
 
 
@@ -42,7 +42,7 @@ def _extract_fields(record: Dict) -> Tuple[str, str, int]:
     return str(context), str(reasoning), label
 
 
-def load_prontoqa(config: ExperimentConfig) -> Dict[str, List[ReasoningExample]]:
+def load_prontoqa(config: ReasoningExperimentConfig) -> Dict[str, List[ReasoningExample]]:
     dataset = _load_hf_dataset("longface/prontoqa", config.prontoqa_split)
     examples: List[ReasoningExample] = []
     for idx, record in enumerate(dataset):

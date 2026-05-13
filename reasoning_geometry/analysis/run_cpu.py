@@ -19,7 +19,7 @@ from reasoning_geometry.analysis.shared import (
     summarize_manifold,
     summarize_srsa,
 )
-from reasoning_geometry.common import GateFailedError, ExperimentConfig, save_json, set_global_seed
+from reasoning_geometry.common import GateFailedError, ReasoningReasoningExperimentConfig, save_json, set_global_seed
 from reasoning_geometry.logging.tb_logger import TensorBoardLogger
 from reasoning_geometry.metrics.manifold import bootstrap_twonn
 from reasoning_geometry.models.extractor import extract_teacher_forcing_trajectory, load_causal_lm
@@ -39,7 +39,7 @@ from reasoning_geometry.visualization.plots import (
 
 
 def run(config_path: str) -> Dict[str, object]:
-    config = ExperimentConfig.from_yaml(config_path)
+    config = ReasoningExperimentConfig.from_yaml(config_path)
     set_global_seed(config.seed)
     set_publication_style()
     dirs = prepare_output_dirs(config)
