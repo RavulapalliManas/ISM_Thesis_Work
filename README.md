@@ -1,6 +1,6 @@
 # Predictive Learning and Cognitive Map Formation in Recurrent Neural Networks
 
-**Manas Venkata Sai Ravulapalli** - ISM Thesis Work
+**Manas Venkata Sai Ravulapalli** -- Thesis Work
 
 This repository contains the thesis work investigating how predictive recurrent neural networks learn spatial representations, how those representations generalize across environments of varied geometry and topology, and how landmark symmetry shapes the emergent structure of hippocampal-like codes.
 
