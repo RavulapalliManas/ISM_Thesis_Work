@@ -83,10 +83,10 @@ reduce the four-way compass to exactly one bit, one invariant under a $180^\circ
 (\textit{axis}: east/west vs.\ north/south) and one not (\textit{parity}: east/south vs.\
 west/north). Using orbit-phase decoding --- can a decoder recover which of two
 rotationally-equivalent positions produced a population state? --- we find that in the $C_2$
-arena the two encodings differ by $0.40$ in accuracy ($p = 0.00216$, the exact two-sided
-Mann--Whitney floor at $n = 6$ vs.\ $6$), while in the $C_1$ arena, where there is no symmetry
-to collapse onto, they are indistinguishable ($p = 0.18$). Information quantity does not fold
-the code; invariance does. Read through its own $C_4$ quotient, the $C_4$ arena reproduces the
+arena the two encodings differ by $0.40$ in accuracy (complete separation, $p = 1.1\times10^{-5}$
+at $n = 10$ vs.\ $10$), while in the $C_1$ arena, where there is no symmetry to collapse onto,
+they are indistinguishable ($p = 0.97$). Information quantity does not fold the code; invariance
+does. Read through its own $C_4$ quotient, the $C_4$ arena reproduces the
 group-theoretic ceiling exactly: a $G$-folded code cannot exceed $1/|G|$ phase accuracy
 ($0.482$ against a predicted $0.500$ for a $C_2$-invariant encoding; $0.275$ against $0.250$
 for the only $C_4$-invariant one). Finally, the entire effect is contingent on the objective:
@@ -203,34 +203,35 @@ decoder must generalise a phase direction to positions it has never seen. Chance
 
 \begin{table}[t]
 \centering
-\caption{Orbit-phase decoding accuracy (chance $=0.500$). $n=6$ per cell for s1 and s2,
-$n=4$ for s4.}
+\caption{Orbit-phase decoding accuracy (chance $=0.500$). $n=10$ per cell for s1 and s2,
+$n=8$ for s4.}
 \label{tab:phase}
 \begin{tabular}{lcccc}
 \toprule
 arena & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} \\
 \midrule
-s1 ($C_1$, no symmetry) & 0.981 & 0.973 & 0.970 & 0.967 \\
-s2 ($C_2$)              & 0.978 & 0.953 & \textbf{0.553} & \textbf{0.551} \\
-s4 ($C_4$)              & 0.984 & 0.930 & \textbf{0.547} & \textbf{0.520} \\
+s1 ($C_1$, no symmetry) & 0.981 & 0.972 & 0.971 & 0.966 \\
+s2 ($C_2$)              & 0.978 & 0.955 & \textbf{0.552} & \textbf{0.552} \\
+s4 ($C_4$)              & 0.984 & 0.933 & \textbf{0.544} & \textbf{0.521} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 In the $C_2$ arena, \textit{axis} and \textit{parity} --- carrying identical information ---
-differ by $0.400$ in phase accuracy (Mann--Whitney $U=0$, $p = 0.00216$; this is the exact
-two-sided floor at $n=6$ vs.\ $6$, $2/\binom{12}{6}$, so the separation is complete).
-In the $C_1$ arena, where there is no symmetry to collapse onto, the same two encodings are
-indistinguishable ($\Delta = 0.003$, $p = 0.18$). The $C_1$ null is what licenses the causal
-reading: \textit{axis} does not degrade spatial coding in general, it degrades it exactly when
-the arena has a symmetry under which \textit{axis} is invariant.
+differ by $0.403$ in phase accuracy. The separation is complete: every \textit{parity} network
+scores above every \textit{axis} network (Mann--Whitney $U=0$, $p = 1.1\times10^{-5}$, the exact
+two-sided floor at $n=10$ vs.\ $10$; $p = 3.2\times10^{-5}$ after Bonferroni correction across
+the three arenas). In the $C_1$ arena, where there is no symmetry to collapse onto, the same two
+encodings are indistinguishable ($\Delta = 0.000$, $p = 0.97$). The $C_1$ null is what licenses
+the causal reading: \textit{axis} does not degrade spatial coding in general, it degrades it
+exactly when the arena has a symmetry under which \textit{axis} is invariant.
 
-None of the folded networks has simply stopped representing space. For 60 of the 64 networks,
+None of the folded networks has simply stopped representing space. For 104 of the 112 networks,
 $\max(R^2_{\text{raw}}, R^2_{\text{domain}}) \ge 0.81$: the folded codes still linearly encode
 position \emph{within the fundamental domain}, they have merely discarded which copy of it the
-animal occupies (Fig.~\ref{fig:manifold}). The four exceptions are \textit{const} in the $C_4$
+animal occupies (Fig.~\ref{fig:manifold}). The eight exceptions are \textit{const} in the $C_4$
 arena, which fails both $C_2$-based readouts ($R^2_{\text{raw}} = -0.069$,
-$R^2_{\text{domain}} = -0.591$) not because it has stopped coding space but because it is folded
+$R^2_{\text{domain}} = -0.589$) not because it has stopped coding space but because it is folded
 by the \emph{full} $C_4$ group, which a $C_2$ decoder cannot see; the next section resolves it.
 
 \begin{figure}[t]
