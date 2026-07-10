@@ -1,10 +1,21 @@
 """Offline dynamics: does the network generate coherent spatial trajectories with no input?
 
 \\citet{levenstein2024} report that offline simulations emerge only in networks that use
-recurrent connections and head-direction information to predict *multi-step* observation
-sequences. Our symmetry result says one step of prediction already suffices to resolve
-symmetry. If replay needs multi-step and symmetry-resolution needs one step, the two
-dissociate -- a claim on Levenstein's own axis, testable with his own readout.
+recurrent connections and head-direction information to predict future observations.
+
+This module was written to look for a DISSOCIATION: symmetry is resolved at k = 1, so if
+replay needed a longer horizon the two would come apart on Levenstein's own axis. It does
+not. Measured (s2, n = 6 per cell, coverage as a fraction of a wake path of equal length):
+
+    k = 0 (autoencoder)   all four HD encodings      0.30 - 0.37 x wake
+    k = 1   full 1.30   parity 0.80   axis 0.45   const 0.31
+    k = 3   full 1.11   parity 0.80   axis 0.49   const 0.30
+    k = 5   full 1.04   parity 0.82   axis 0.50   const 0.25
+
+Replay appears at exactly the horizon where the fold is resolved (k = 1) and does not
+improve with a longer one, and it fails under the same HD ablations that make the code
+fold. Both are step functions in k, and they step together. That is a stronger agreement
+with Levenstein than the dissociation this file went looking for.
 
 How offline rollout works here
 ------------------------------
