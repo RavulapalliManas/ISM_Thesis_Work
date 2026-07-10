@@ -404,15 +404,17 @@ which it is not, and the observation stream is identical in both cases. We train
 each arrangement and asked, per network, whether the population code separates the two rooms
 and whether individual units repeat their firing fields across them (Fig~\ref{fig:compartments}).
 
-The arrangements dissociate cleanly. Under translation the fields repeat almost perfectly
-across the two rooms (repetition $0.997$) and the room is not decodable even by a
-nearest-neighbour classifier evaluated on cells it has already visited ($0.514$, chance
-$0.5$): the code folds the two identical rooms onto a single map. Under rotation the repetition
-is abolished (repetition $-0.066$) and the room is fully decodable ($0.998$). Within-room
-position decodes well in both ($R^2 = 0.96$ and $0.81$), so neither network has stopped coding
-space; what differs is only whether the code separates the rooms. This reproduces the Grieves
-et al.\ dissociation in a network whose sole difference between conditions is the group action
-on the compass.
+The arrangements dissociate cleanly ($n = 8$ networks per arrangement). Under translation the
+fields repeat almost perfectly across the two rooms (repetition $0.997$) and the room is not
+decodable even by a nearest-neighbour classifier evaluated on cells it has already visited
+($0.515$, chance $0.5$): the code folds the two identical rooms onto a single map. Under
+rotation the repetition is abolished (repetition $-0.080$) and the room is fully decodable
+($0.998$). Within-room position decodes well in both ($R^2 = 0.95$ and $0.79$), so neither
+network has stopped coding space; what differs is only whether the code separates the rooms.
+Every translation network separates from every rotation network on all four measures
+(Mann--Whitney $p = 1.6\times10^{-4}$, the exact two-sided floor at $n = 8$ vs.\ $8$). This
+reproduces the Grieves et al.\ dissociation in a network whose sole difference between
+conditions is the group action on the compass.
 
 \begin{figure}[t]
 \centering
@@ -531,7 +533,7 @@ further with a longer one
 Rate remapping: a slight rate-based discrimination between otherwise repeated fields
 & \citet{spiers2015} & absent. In the parallel arrangement the fields repeat perfectly
 (repetition $+0.997$) and the compartment is not decodable even by a nearest-neighbour
-readout at cells it has already seen ($0.514$, chance $0.5$). The fold is complete; the
+readout at cells it has already seen ($0.515$, chance $0.5$). The fold is complete; the
 animals retain a residual rate signal that this network does not
 & not reproduced \\[4pt]
 Grid cells on a toroidal population manifold, invariant across environments and sleep
