@@ -547,6 +547,21 @@ converges without instability. Dots are individual networks.}
 \label{fig:init}
 \end{figure}
 
+\subsection{The dissociation survives a noisy compass}
+
+The head-direction signal used so far is a noiseless oracle, whereas the biological compass
+drifts and is re-anchored by vision. To test whether the fold depends on a perfect signal, we
+retrained the $C_2$ networks with the reported heading corrupted: on $30\%$ of steps the compass
+was rotated by a random $\pm 90^\circ$ before encoding. The dissociation is preserved. Orbit-phase
+decoding is $0.556$ under \textit{axis} and $0.922$ under \textit{parity}, a separation of
+$0.367$ that remains complete: every \textit{parity} network scores above every \textit{axis}
+network (Mann--Whitney $U = 0$, $p = 0.0022$ at $n = 6$ vs.\ $6$). Relative to the clean
+networks the separation narrows only slightly (from $0.403$), driven by a small drop in
+\textit{parity} resolution ($0.955 \to 0.922$) while the folded \textit{axis} code is unchanged
+($0.552 \to 0.556$). A compass corrupted on a third of steps still folds exactly the symmetries
+under which it is invariant. (These networks were trained for $30{,}000$ steps rather than
+$80{,}000$; the effect is already complete by then.)
+
 \section{Discussion}
 
 The result is a statement about group actions rather than about information channels. A
@@ -662,8 +677,9 @@ given that head direction is supplied as an input rather than learned and that n
 non-negativity constraint is imposed \citep{sorscher2023unified}; the toroidal code of
 \citet{gardner2022toroidal} cannot exist in this model, and we do not claim it. The
 head-direction signal is a noiseless oracle, whereas the biological compass drifts and is
-re-anchored by vision; whether the fold survives a noisy or drifting compass is the sharpest
-robustness question for the claim and is addressed separately. We also tested whether
+re-anchored by vision; a control that corrupts the compass on $30\%$ of steps (Results) leaves
+the dissociation intact, but a fully learned, continuously drifting compass is not tested here.
+We also tested whether
 population-manifold topology crystallizes before metric geometry, a proposed developmental
 ordering. With a shuffle-null Betti estimator the effect does not hold in these arenas:
 position is linearly decodable at $R^2 = 0.79$ in the untrained network, metric geometry

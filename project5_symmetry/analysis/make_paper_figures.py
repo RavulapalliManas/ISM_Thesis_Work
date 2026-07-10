@@ -393,6 +393,35 @@ def fig_fields(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+def fig_manifold_pc(data: Path, figs: Path):
+    """Population manifolds of the topology arenas, PCA to 3-D, one point per passable cell,
+    coloured by the cell's angle around the arena centre. A ring manifold shows the colour
+    wheel closing into a loop; an open arena does not."""
+    npz = data / 'manifold_pc.npz'
+    if not npz.exists():
+        print('  skip fig_manifold_pc: missing manifold_pc.npz'); return
+    d = np.load(npz)
+    order = ['open', 'annulus', 'theta', 'figure8']
+    labels = {'open': 'open ($b_1{=}0$)', 'annulus': 'annulus ($b_1{=}1$)',
+              'theta': 'theta ($b_1{=}2$)', 'figure8': 'figure-8 ($b_1{=}2$)'}
+    lays = [l for l in order if f'{l}__Y' in d.files]
+    fig = plt.figure(figsize=(WIDE, 2.3))
+    for i, lay in enumerate(lays):
+        Y, ang, evr = d[f'{lay}__Y'], d[f'{lay}__angle'], d[f'{lay}__evr']
+        ax = fig.add_subplot(1, len(lays), i + 1, projection='3d')
+        ax.scatter(Y[:, 0], Y[:, 1], Y[:, 2], c=ang, cmap='twilight', s=10,
+                   depthshade=False, edgecolors='none')
+        ax.set_title(f'{labels.get(lay, lay)}\n{100 * float(evr[:3].sum()):.0f}% var',
+                     fontsize=8, pad=-2)
+        ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+        for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
+            pane.pane.set_edgecolor('#cccccc'); pane.pane.set_alpha(0.06)
+        ax.grid(False)
+    fig.tight_layout()
+    out = figs / 'fig_manifold_pc.pdf'; fig.savefig(out, dpi=300); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def fig_place_cells_all(data: Path, figs: Path):
     """Supplementary: every extracted unit for one condition, unselected, SI-ranked, so the
     reader can see the selection in the main figure was representative rather than cherry-picked."""
@@ -437,8 +466,9 @@ def main():
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
     allfigs = {'place_cells': fig_place_cells, 'place_cells_all': fig_place_cells_all,
-               'fields': fig_fields, 'horizon': fig_horizon, 'map_quality': fig_map_quality,
-               'compartments': fig_compartments, 'init': fig_init, 'topology': fig_topology}
+               'fields': fig_fields, 'manifold_pc': fig_manifold_pc, 'horizon': fig_horizon,
+               'map_quality': fig_map_quality, 'compartments': fig_compartments,
+               'init': fig_init, 'topology': fig_topology}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
             continue
