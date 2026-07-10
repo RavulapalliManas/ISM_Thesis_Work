@@ -448,6 +448,38 @@ the folding is consistent rather than degenerate. Bars are mean $\pm$ s.e.m.\ ov
 \label{fig:mapquality}
 \end{figure}
 
+\subsection{Folding multiplies place fields and imprints the arena's symmetry on each map}
+
+The fold is visible cell by cell, not only in the population decoder. We characterised every
+unit's firing-rate map and counted its place fields (Fig.~\ref{fig:fields}). Fields per unit
+rise with both arena symmetry and encoding invariance, from $1.78$ under \textit{full} in the
+$C_1$ arena to $3.39$ under \textit{const} in the $C_4$ arena. On its own this count is a
+confounded readout: it rises even in the $C_1$ arena, where nothing can fold ($2.44$ fields
+under \textit{const} against $1.78$ under \textit{full}), because a more invariant encoding
+yields more multi-peaked units regardless of symmetry. The fold-specific question is whether
+the extra fields sit at group-related positions. We measure this as the correlation between a
+unit's rate map and its own $180^\circ$ rotation, a per-cell index of $C_2$ symmetry
+(Fig.~\ref{fig:fields}B). The index saturates near $0.97$ exactly when the encoding is
+$C_2$-invariant and the arena is symmetric (\textit{axis} and \textit{const} in the $C_2$ and
+$C_4$ arenas), while the matched non-invariant encoding stays low (\textit{parity}, $0.36$ in
+$C_2$) and \textit{full} stays near zero throughout. An invariant encoding alone induces
+partial symmetry even in the $C_1$ arena ($0.61$ for \textit{axis}), which the arena's own
+symmetry then completes. The four-fold version of the index reaches $0.97$ only for
+\textit{const} in the $C_4$ arena, the single fully $C_4$-invariant condition. Each map
+acquires precisely the symmetry the compass cannot break.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_fields.pdf}
+\caption{Place-field structure across arenas and encodings. (A) Mean number of place fields per
+unit. It increases with both arena symmetry and encoding invariance, but also in the $C_1$
+arena where nothing folds, so it is confounded. (B) The rate-map $C_2$ symmetry index, the
+correlation of a unit's map with its $180^\circ$ rotation. This fold-specific measure saturates
+near $0.97$ only when the encoding is invariant to the arena's symmetry, and stays low for the
+non-invariant encodings. Bars are mean $\pm$ s.e.m.\ over networks.}
+\label{fig:fields}
+\end{figure}
+
 \subsection{The same dissociation appears across observationally identical compartments}
 
 Head direction should resolve rotational but not translational symmetry, and this can be tested
@@ -619,9 +651,17 @@ develop place-like but not grid-like tuning (gridness over the 100 most spatiall
 mean $-0.35$, maximum $+0.08$, none above the conventional $0.3$ threshold), which is expected
 given that head direction is supplied as an input rather than learned and that no
 non-negativity constraint is imposed \citep{sorscher2023unified}; the toroidal code of
-\citet{gardner2022toroidal} cannot exist in this model, and we do not claim it. The architecture has no
-excitatory--inhibitory separation. Finally, symmetry here is a property of the landmark layout,
-not of the arena geometry, which is square and therefore $C_4$-symmetric in every condition.
+\citet{gardner2022toroidal} cannot exist in this model, and we do not claim it. The
+head-direction signal is a noiseless oracle, whereas the biological compass drifts and is
+re-anchored by vision; whether the fold survives a noisy or drifting compass is the sharpest
+robustness question for the claim and is addressed separately. We also tested whether
+population-manifold topology crystallizes before metric geometry, a proposed developmental
+ordering. With a shuffle-null Betti estimator the effect does not hold in these arenas:
+position is linearly decodable at $R^2 = 0.79$ in the untrained network, metric geometry
+develops gradually, and loop topology is not reliably recovered even at convergence, so we make
+no topology-before-geometry claim. The architecture has no excitatory--inhibitory separation.
+Finally, symmetry here is a property of the landmark layout, not of the arena geometry, which is
+square and therefore $C_4$-symmetric in every condition.
 
 \section{Methods}
 

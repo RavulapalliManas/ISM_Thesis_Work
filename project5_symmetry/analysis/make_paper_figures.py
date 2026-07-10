@@ -358,6 +358,41 @@ def fig_place_cells(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+def fig_fields(data: Path, figs: Path):
+    """Two panels. Left: mean place fields per unit rises with both arena symmetry and encoding
+    invariance -- but also in the C1 arena, so it is confounded. Right: the rate-map symmetry
+    index (correlation of a map with its 180-deg rotation) is the fold-specific readout; it
+    saturates only when the encoding is invariant to the arena's group."""
+    p = data / 'field_stats.csv'
+    if not p.exists():
+        print('  skip fig_fields: missing field_stats'); return
+    rows = _read(p)
+    conds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in rows)]
+    x = np.arange(len(HD_ORDER)); w = 0.8 / max(len(conds), 1)
+    shades = {c: plt.cm.Greys(0.4 + 0.45 * i / max(len(conds) - 1, 1)) for i, c in enumerate(conds)}
+    labels = {'s1': '$C_1$', 's2': '$C_2$', 's4': '$C_4$'}
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(WIDE, 3.0), sharex=True)
+    for ax, col, ylab, ttl, ylim in [
+            (axA, 'mean_fields', 'place fields per unit', 'Field count (confounded)', (0, 3.8)),
+            (axB, 'sym_c2', 'rate-map $C_2$ symmetry', 'The fold-specific readout', (-0.1, 1.05))]:
+        for i, c in enumerate(conds):
+            m, e = [], []
+            for hd in HD_ORDER:
+                mm, se = _mean_sem([_f(r, col) for r in rows
+                                    if r['condition'] == c and r['hd_mode'] == hd])
+                m.append(mm); e.append(se)
+            ax.bar(x + (i - (len(conds) - 1) / 2) * w, m, w, yerr=e, capsize=2,
+                   color=shades[c], edgecolor='k', lw=0.5, label=labels.get(c, c))
+        ax.set_xticks(x); ax.set_xticklabels(HD_ORDER); ax.set_ylabel(ylab)
+        ax.set_title(ttl); ax.set_ylim(*ylim)
+    axB.axhline(0, lw=0.6, color='k', alpha=0.5)
+    axA.legend(title='arena', fontsize=7, title_fontsize=7, loc='upper left')
+    panel(axA, 'A'); panel(axB, 'B')
+    fig.tight_layout()
+    out = figs / 'fig_fields.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def fig_place_cells_all(data: Path, figs: Path):
     """Supplementary: every extracted unit for one condition, unselected, SI-ranked, so the
     reader can see the selection in the main figure was representative rather than cherry-picked."""
@@ -402,7 +437,7 @@ def main():
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
     allfigs = {'place_cells': fig_place_cells, 'place_cells_all': fig_place_cells_all,
-               'horizon': fig_horizon, 'map_quality': fig_map_quality,
+               'fields': fig_fields, 'horizon': fig_horizon, 'map_quality': fig_map_quality,
                'compartments': fig_compartments, 'init': fig_init, 'topology': fig_topology}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
