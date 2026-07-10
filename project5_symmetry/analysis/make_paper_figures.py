@@ -19,20 +19,44 @@ import matplotlib
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib import font_manager  # noqa: E402
 
 # Colourblind-safe (Wong 2011). Fixed per head-direction encoding across every figure.
-HD_COLOR = {'full': '#0072B2', 'parity': '#009E73', 'axis': '#D55E00', 'const': '#7F7F7F'}
+HD_COLOR = {'full': '#0B6E99', 'parity': '#2E8B57', 'axis': '#C6531B', 'const': '#8A8A8A'}
 HD_ORDER = ['full', 'parity', 'axis', 'const']
 COND_MARK = {'s1': 'o', 's2': 's', 's4': '^'}
-TWO = {'translation': '#0072B2', 'rotation': '#D55E00'}
+TWO = {'translation': '#0B6E99', 'rotation': '#C6531B'}
+INK = '#222222'          # one ink colour for every axis, tick and label
+RATE_CMAP = plt.get_cmap('magma').copy()
+RATE_CMAP.set_bad('#ffffff')     # unvisited cells render white, not dark
+
+# One column = 3.4 in, full width = 7.0 in, to match a two-column preprint.
+COL, WIDE = 3.4, 7.0
+
+# Prefer Arial (TrueType, subsets cleanly); the mac Helvetica faces are AAT and cannot be
+# subset by matplotlib. Fall back quietly to the bundled DejaVu.
+_PREFERRED = ['Arial', 'Liberation Sans', 'Nimbus Sans', 'TeX Gyre Heros', 'DejaVu Sans']
+_have = {f.name for f in font_manager.fontManager.ttflist}
+_family = next((f for f in _PREFERRED if f in _have), 'DejaVu Sans')
 
 plt.rcParams.update({
-    'font.size': 9, 'font.family': 'sans-serif', 'axes.spines.top': False,
-    'axes.spines.right': False, 'axes.linewidth': 0.8, 'figure.dpi': 150,
-    'savefig.dpi': 300, 'savefig.bbox': 'tight', 'legend.frameon': False,
-    'axes.titlesize': 9, 'axes.titleweight': 'bold', 'xtick.direction': 'out',
-    'ytick.direction': 'out',
+    'font.size': 8.5, 'font.family': _family, 'mathtext.fontset': 'dejavusans',
+    'axes.spines.top': False, 'axes.spines.right': False, 'axes.linewidth': 0.9,
+    'axes.edgecolor': INK, 'axes.labelcolor': INK, 'text.color': INK,
+    'xtick.color': INK, 'ytick.color': INK, 'axes.titlecolor': INK,
+    'figure.dpi': 150, 'savefig.dpi': 400, 'savefig.bbox': 'tight',
+    'savefig.pad_inches': 0.02, 'legend.frameon': False, 'axes.titlesize': 9,
+    'axes.titleweight': 'bold', 'axes.titlepad': 6, 'axes.labelpad': 3,
+    'xtick.direction': 'out', 'ytick.direction': 'out', 'xtick.major.size': 3,
+    'ytick.major.size': 3, 'xtick.major.width': 0.9, 'ytick.major.width': 0.9,
+    'lines.solid_capstyle': 'round', 'pdf.fonttype': 42, 'ps.fonttype': 42,
 })
+
+
+def panel(ax, letter, dx=-0.02, dy=1.04):
+    """Bold panel letter at the top-left, in figure-consistent placement."""
+    ax.text(dx, dy, letter, transform=ax.transAxes, fontsize=11, fontweight='bold',
+            va='bottom', ha='right', color=INK)
 
 
 def _read(path):
@@ -78,7 +102,7 @@ def fig_horizon(data: Path, figs: Path):
 
     ks_p = sorted(phase)
     ks_r = sorted(rep)
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(7.2, 3.0))
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(WIDE, 2.9))
 
     for hd in HD_ORDER:
         m, e = [], []
@@ -108,6 +132,7 @@ def fig_horizon(data: Path, figs: Path):
     axR.set_title('Offline replay'); axR.set_xticks(ks_r)
     axR.legend(title='HD encoding', fontsize=7, title_fontsize=7, loc='upper left')
 
+    panel(axL, 'A'); panel(axR, 'B')
     fig.tight_layout()
     out = figs / 'fig_horizon.pdf'; fig.savefig(out); plt.close(fig)
     print(f'  wrote {out.name}')
@@ -126,8 +151,8 @@ def fig_map_quality(data: Path, figs: Path):
     x = np.arange(len(HD_ORDER)); w = 0.8 / max(len(conds), 1)
     shades = {c: plt.cm.Greys(0.35 + 0.5 * i / max(len(conds) - 1, 1)) for i, c in enumerate(conds)}
 
-    fig, (axA, axB) = plt.subplots(1, 2, figsize=(7.2, 3.0), sharex=True)
-    for panel, (ax, col, ylab, ttl) in enumerate([
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(WIDE, 3.0), sharex=True)
+    for _, (ax, col, ylab, ttl) in enumerate([
             (axA, 'srsa_e', 'spatial RSA', 'Folding collapses spatial RSA'),
             (axB, 'cross_seed_rho', 'cross-seed correlation', 'The fold is reproducible')]):
         for i, c in enumerate(conds):
@@ -141,6 +166,7 @@ def fig_map_quality(data: Path, figs: Path):
         ax.set_xticks(x); ax.set_xticklabels(HD_ORDER); ax.set_ylabel(ylab); ax.set_title(ttl)
         ax.set_ylim(0, 1.0)
     axB.legend(title='arena', fontsize=7, title_fontsize=7)
+    panel(axA, 'A'); panel(axB, 'B')
     fig.tight_layout()
     out = figs / 'fig_map_quality.pdf'; fig.savefig(out); plt.close(fig)
     print(f'  wrote {out.name}')
@@ -252,6 +278,121 @@ def fig_topology(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+def _border_frac(m, ring=2):
+    tot = m.sum()
+    return 1.0 if tot <= 0 else 1.0 - m[ring:-ring, ring:-ring].sum() / tot
+
+
+def _fold_corr(m, order):
+    """Mean correlation of a rate map with its own rotations under C_order (higher = more
+    symmetric, i.e. more folded). C2 uses the 180-deg rotation; C4 uses 90/180/270."""
+    a = (m - m.mean()).ravel()
+    js = (2,) if order == 2 else (1, 2, 3)
+    cs = [np.corrcoef(a, (np.rot90(m, j) - m.mean()).ravel())[0, 1] for j in js]
+    return float(np.mean(cs))
+
+
+def _smooth(m, mask, sigma=0.9):
+    """Gaussian-smoothed rate map for display, ignoring unvisited cells (standard for
+    place-field figures). Falls back to the raw map if scipy is unavailable."""
+    try:
+        from scipy.ndimage import gaussian_filter
+    except Exception:
+        return m
+    w = (~mask).astype(float)
+    num = gaussian_filter(np.where(mask, 0.0, m), sigma)
+    den = gaussian_filter(w, sigma)
+    out = np.divide(num, den, out=np.zeros_like(num), where=den > 1e-6)
+    return out
+
+
+def _select(maps, kind, n):
+    """Pick representative units. Maps arrive SI-ranked. `clean` drops border-dominated
+    units and keeps the most spatially informative; `c2`/`c4` rank by fold symmetry so the
+    repeated fields are the ones shown."""
+    idx = list(range(len(maps)))
+    if kind == 'clean':
+        cand = [i for i in idx if _border_frac(maps[i]) < 0.45] or idx
+        return cand[:n]
+    order = 2 if kind == 'c2' else 4
+    cand = [i for i in idx if _border_frac(maps[i]) < 0.65] or idx
+    cand.sort(key=lambda i: -_fold_corr(maps[i], order))
+    return cand[:n]
+
+
+def fig_place_cells(data: Path, figs: Path):
+    """The place cells the network grows, and how they fold. Each row is a condition; each
+    tile is one unit's mean rate map (smoothed for display, peak-normalised). Fields are
+    single and sharp when the code does not fold, and repeat once ($C_2$) or four times
+    ($C_4$) when the head-direction encoding is made invariant to the arena's symmetry."""
+    npz = data / 'rate_maps.npz'
+    if not npz.exists():
+        print('  skip fig_place_cells: missing rate_maps.npz'); return
+    d = np.load(npz)
+    rows = [('s1_full', 'asymmetric\nfull HD', 'clean'),
+            ('s2_full', '$C_2$ arena\nfull HD', 'clean'),
+            ('s2_axis', '$C_2$ arena\naxis HD', 'c2'),
+            ('s4_const', '$C_4$ arena\nconst HD', 'c4')]
+    rows = [r for r in rows if f'{r[0]}__maps' in d.files]
+    ncol = 5
+    fig, axes = plt.subplots(len(rows), ncol, figsize=(WIDE * 0.82, 1.12 * len(rows) + 0.4),
+                             gridspec_kw={'hspace': 0.1, 'wspace': 0.08})
+    for i, (key, label, kind) in enumerate(rows):
+        maps, occ = d[f'{key}__maps'], d[f'{key}__occ']
+        mask = occ == 0
+        pick = _select(maps, kind, ncol)
+        for j in range(ncol):
+            ax = axes[i, j]
+            m = _smooth(maps[pick[j]].astype(float), mask)
+            m = m / (m.max() if m.max() > 0 else 1.0)
+            ax.imshow(np.ma.array(m, mask=mask), cmap=RATE_CMAP, origin='lower',
+                      vmin=0, vmax=1, interpolation='bilinear')
+            ax.set_xticks([]); ax.set_yticks([])
+            for s in ax.spines.values():
+                s.set_visible(False)
+        axes[i, 0].set_ylabel(label, fontsize=8.5, rotation=0, ha='right', va='center',
+                              labelpad=16)
+    axes[0, ncol // 2].set_title('example place units', fontsize=9, pad=5)
+    out = figs / 'fig_place_cells.pdf'
+    fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def fig_place_cells_all(data: Path, figs: Path):
+    """Supplementary: every extracted unit for one condition, unselected, SI-ranked, so the
+    reader can see the selection in the main figure was representative rather than cherry-picked."""
+    npz = data / 'rate_maps.npz'
+    if not npz.exists():
+        print('  skip fig_place_cells_all: missing rate_maps.npz'); return
+    d = np.load(npz)
+    order = [('s1_full', 'asymmetric, full HD'), ('s2_full', '$C_2$ arena, full HD'),
+             ('s2_axis', '$C_2$ arena, axis HD'), ('s4_const', '$C_4$ arena, const HD')]
+    for key, label in order:
+        if f'{key}__maps' not in d.files:
+            continue
+        maps, occ = d[f'{key}__maps'], d[f'{key}__occ']
+        mask = occ == 0
+        n = min(len(maps), 40)
+        ncol = 8
+        nrow = int(np.ceil(n / ncol))
+        fig, axes = plt.subplots(nrow, ncol, figsize=(WIDE, 0.9 * nrow + 0.4),
+                                 gridspec_kw={'hspace': 0.08, 'wspace': 0.06})
+        for k, ax in enumerate(axes.flat):
+            ax.set_xticks([]); ax.set_yticks([])
+            for s in ax.spines.values():
+                s.set_visible(False)
+            if k >= n:
+                ax.axis('off'); continue
+            m = _smooth(maps[k].astype(float), mask)
+            m = m / (m.max() if m.max() > 0 else 1.0)
+            ax.imshow(np.ma.array(m, mask=mask), cmap=RATE_CMAP, origin='lower',
+                      vmin=0, vmax=1, interpolation='bilinear')
+        fig.suptitle(f'{label}: {n} most spatially informative units', fontsize=9, y=0.995)
+        out = figs / f'figS_units_{key}.pdf'
+        fig.savefig(out); plt.close(fig)
+        print(f'  wrote {out.name}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True)
@@ -260,7 +401,8 @@ def main():
     a = ap.parse_args()
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
-    allfigs = {'horizon': fig_horizon, 'map_quality': fig_map_quality,
+    allfigs = {'place_cells': fig_place_cells, 'place_cells_all': fig_place_cells_all,
+               'horizon': fig_horizon, 'map_quality': fig_map_quality,
                'compartments': fig_compartments, 'init': fig_init, 'topology': fig_topology}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
