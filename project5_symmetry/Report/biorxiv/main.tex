@@ -400,6 +400,14 @@ which the code folds. Step-to-step continuity did not follow this ordering and w
 it represents. Offline generation and symmetry resolution therefore depend on prediction and on
 head direction in the same way, and appear at the same horizon.
 
+These offline trajectories are temporally ordered rather than random walks, and only when the
+compass is intact. We score sequenceness as the rank correlation between a rollout's
+principal-axis position and time, against a circular time-shift null and a cell-identity
+shuffle. In the $C_2$ arena the \textit{full} network's offline paths reach a sequenceness of
+$0.53$, close to the waking reference of $0.56$ and well above the cell-shuffle floor of $0.25$,
+whereas the folded \textit{axis} and \textit{const} encodings fall to that floor ($0.20$ against
+$0.17$). Coherent replay, like coverage, requires the head-direction signal the fold discards.
+
 \subsection{Two natural readouts fail, in two different ways}
 
 Decomposing each unit's rate map into the four characters of $C_4$ gives an isotypic power
