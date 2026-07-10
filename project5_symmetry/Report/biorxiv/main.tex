@@ -306,6 +306,43 @@ self-motion, so the compass is not recruited and the observation stream --- whic
 $C_2$-symmetric by construction --- determines the code. Prediction requires integrating
 self-motion across at least one step, and it is that integration which resolves the symmetry.
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_horizon.pdf}
+\caption{Symmetry resolution and offline replay across the prediction horizon $k$, in the
+$C_2$ arena, for the four head-direction encodings. Left: orbit-phase decoding accuracy
+(chance $0.5$). The two encodings that are not $C_2$-invariant (\textit{full}, \textit{parity})
+resolve the fold at $k \geq 1$, while the two invariant ones (\textit{axis}, \textit{const})
+stay at chance. Right: coverage of the self-generated offline trajectory as a fraction of a
+wake path of equal length; the dashed line marks wake coverage. Both readouts step up at
+$k = 1$ and are ordered by how much of the compass the encoding retains. Points are mean
+$\pm$ s.e.m.\ over $n = 6$ networks.}
+\label{fig:horizon}
+\end{figure}
+
+\subsection{Offline replay appears at the same horizon and under the same head-direction dependence}
+
+\citet{levenstein2024} report that offline trajectory generation, in which the recurrent
+network is driven by its own predicted observations with no environmental input, emerges only
+in networks that combine recurrence, a head-direction signal, and prediction of future rather
+than present observations. We tested this on the same $C_2$ networks by driving each network
+with its own output for $200$ steps and decoding position with a ridge decoder fit on wake
+activity (Fig~\ref{fig:horizon}, right). Coverage, the fraction of arena cells the offline
+path visits, is reported relative to a wake path of equal length: a $200$-step wake trajectory
+itself visits only $27\%$ of the arena, so a coverage figure has no meaning without that
+reference.
+
+Two features match the prediction. Coverage steps up at the same horizon as symmetry
+resolution. At $k = 0$, the autoencoder, every encoding reaches only $30$ to $37\%$ of wake
+coverage, and at $k \geq 1$ the \textit{full} compass exceeds it, at $1.30$, $1.11$ and $1.04$
+times wake for $k = 1$, $3$ and $5$. Coverage is also graded by head direction in the same
+order as folding: $1.30$, $0.80$, $0.45$ and $0.31$ times wake for \textit{full},
+\textit{parity}, \textit{axis} and \textit{const} at $k = 1$. Step-to-step continuity runs in
+the opposite direction, with \textit{const} scoring highest, because a network whose state
+barely moves produces small smooth steps by default; coverage, not continuity, is the
+discriminating measure. Offline generation and symmetry resolution thus appear together, at
+the same prediction horizon and under the same dependence on the compass.
+
 \subsection{Two natural readouts fail, in two different ways}
 
 Decomposing each unit's rate map into the four characters of $C_4$ gives an isotypic power
@@ -327,6 +364,91 @@ reshaping the rate-map spectrum. Orbit-phase decoding is immune to that and retu
 We therefore report phase decoding as the primary readout and the isotypic spectrum as a
 secondary, descriptive one. We note this explicitly because the confounded readout would have
 supported the same qualitative conclusion, by an argument that does not hold.
+
+\subsection{A spatial map forms whether or not the code folds}
+
+Folding is not a failure to learn. Under every encoding a spatial map forms, and it is the
+geometry of that map, not its existence, that folding changes. Two measures on the same
+networks make this precise (Fig~\ref{fig:mapquality}). Spatial representational similarity, the
+Spearman correlation between neural distance and Euclidean distance over pairs of positions,
+falls monotonically as the compass is ablated, from $0.70$ under \textit{full} to $0.32$ under
+\textit{const} in the $C_1$ arena, and further in the more symmetric arenas. This is what
+folding predicts: a position and its group image sit at near-zero neural distance while lying
+far apart in the arena, which drags the neural-to-spatial correlation down. The cross-seed
+correlation, the agreement between the position-conditioned population codes of independently
+trained networks, moves the other way. It stays above $0.96$ for every encoding in every arena.
+A folded code is therefore not degenerate but reproducible: independent networks fold the same
+way. At least $448$ of the $500$ units retain a place field even under \textit{const}. The map
+forms; the compass sets how it is embedded, not whether it exists.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_map_quality.pdf}
+\caption{A map forms and folds reproducibly. Left: spatial representational similarity falls as
+the head-direction encoding is ablated (\textit{full} to \textit{const}) and as arena symmetry
+increases ($C_1$ to $C_4$), the signature of a code collapsing onto the quotient. Right: the
+cross-seed correlation between independently trained networks stays above $0.96$ throughout, so
+the folding is consistent rather than degenerate. Bars are mean $\pm$ s.e.m.\ over networks.}
+\label{fig:mapquality}
+\end{figure}
+
+\subsection{The dissociation reproduces across observationally identical compartments}
+
+The claim that head direction disambiguates rotationally related but not translationally
+related positions can be tested directly, in a setting matched to the animal experiments
+discussed below. We built two closed $6\times6$ compartments joined by a corridor, with
+identical interior landmarks, so that the two rooms produce an identical distribution of
+egocentric observations; all $144$ view-and-heading pairs coincide exactly. The rooms are
+related either by translation, under which the compass is invariant, or by rotation, under
+which it is not, and the observation stream is identical in both cases. We trained networks on
+each arrangement and asked, per network, whether the population code separates the two rooms
+and whether individual units repeat their firing fields across them (Fig~\ref{fig:compartments}).
+
+The arrangements dissociate cleanly. Under translation the fields repeat almost perfectly
+across the two rooms (repetition $0.997$) and the room is not decodable even by a
+nearest-neighbour classifier evaluated on cells it has already visited ($0.514$, chance
+$0.5$): the code folds the two identical rooms onto a single map. Under rotation the repetition
+is abolished (repetition $-0.066$) and the room is fully decodable ($0.998$). Within-room
+position decodes well in both ($R^2 = 0.96$ and $0.81$), so neither network has stopped coding
+space; what differs is only whether the code separates the rooms. This reproduces the Grieves
+et al.\ dissociation in a network whose sole difference between conditions is the group action
+on the compass.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/fig_compartments.pdf}
+\caption{Place-field repetition across two observationally identical compartments. Under
+translation (parallel rooms) fields repeat and the room is undecodable, at chance even for a
+decoder tested on cells it has seen. Under rotation (radial rooms) fields do not repeat and the
+room is fully decodable. Within-room position ($R^2$) is high in both, so neither network has
+stopped coding space. Bars are mean $\pm$ s.e.m.; dots are individual networks.}
+\label{fig:compartments}
+\end{figure}
+
+\subsection{Initialization sets the speed of learning, not its stability}
+
+The recurrent matrix does not begin blank: the architecture adds a leaky-integrator term
+$(1 - 1/\tau)\,I$ to a random matrix, and the original implementation records that a Kaiming
+initialization was tried and abandoned because it ``blows up''. We varied the initialization
+along three axes, the identity time constant $\tau$, the gain of the random part, and its
+structure, and measured learning speed as the area under the training-loss curve
+(Fig~\ref{fig:init}). The ordering is monotone in the amount of random recurrent mixing present
+at initialization. The fastest learner is a pure leak, $W = 0.5\,I$ with no random recurrence
+at all; adding random mixing slows learning, and the two Kaiming variants are slowest. They do
+not diverge. The loss decreases monotonically to a final value $34\%$ above the default by area,
+with no instability. The abandoned initialization is slower, not unstable; the instability the
+original note describes belongs to a plain recurrent cell rather than the normalized cell used
+here.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/fig_init.pdf}
+\caption{Learning speed by recurrent initialization, measured as area under the training-loss
+curve (lower is faster), ranked. A pure leak with no random recurrence learns fastest; adding
+random mixing slows learning monotonically. The abandoned Kaiming initialization is slowest but
+converges without instability. Dots are individual networks.}
+\label{fig:init}
+\end{figure}
 
 \section{Discussion}
 
