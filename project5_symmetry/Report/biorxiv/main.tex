@@ -437,7 +437,7 @@ structure, and measured learning speed as the area under the training-loss curve
 (Fig~\ref{fig:init}). The ordering is monotone in the amount of random recurrent mixing present
 at initialization. The fastest learner is a pure leak, $W = 0.5\,I$ with no random recurrence
 at all; adding random mixing slows learning, and the two Kaiming variants are slowest. They do
-not diverge. The loss decreases monotonically to a final value $34\%$ above the default by area,
+not diverge. The loss decreases monotonically to a final value $33\%$ above the default by area,
 with no instability. The abandoned initialization is slower, not unstable; the instability the
 original note describes belongs to a plain recurrent cell rather than the normalized cell used
 here.
