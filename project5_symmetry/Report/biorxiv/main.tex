@@ -8,27 +8,57 @@
 % deliberately absent rather than sketched. Do not add a number to this file that is not
 % in outputs/gpu_runs/*.csv.
 
-\documentclass[11pt, letterpaper]{article}
+\documentclass[10pt, letterpaper]{article}
 
-\usepackage[margin=1in]{geometry}
+\usepackage[letterpaper, top=2.2cm, bottom=2.4cm, left=2.3cm, right=2.3cm]{geometry}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
+\usepackage{textcomp}
 \usepackage{amsmath, amssymb}
+\usepackage{newtxtext}
+\usepackage[scaled=0.92]{helvet}
+\let\Bbbk\relax                 % avoid the newtxmath/amssymb \Bbbk clash
+\usepackage{newtxmath}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{caption}
 \usepackage{microtype}
 \usepackage{authblk}
-\usepackage{lineno}
+\usepackage{titlesec}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{fancyhdr}
+\usepackage{setspace}
 \usepackage[round, authoryear]{natbib}
 \usepackage[hidelinks]{hyperref}
-\usepackage{setspace}
 
-\linenumbers
-\doublespacing
-\renewcommand{\abstractname}{\vspace{-1em}}
+\definecolor{sec}{RGB}{22,45,74}
+\setstretch{1.05}
 
-\title{\bfseries Symmetry, not information, determines what a predictive
-cognitive map collapses --- and only prediction resolves it}
+% Sans-serif navy section headings, tight spacing (the preprint look).
+\titleformat{\section}{\sffamily\large\bfseries\color{sec}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\sffamily\normalsize\bfseries\color{sec}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.5ex}{0.6ex}
+\titlespacing*{\subsection}{0pt}{1.1ex}{0.4ex}
+
+\captionsetup{labelfont={bf,sf}, font=small, labelsep=period, justification=justified}
+
+\renewcommand\Authfont{\sffamily\large}
+\renewcommand\Affilfont{\sffamily\small}
+\setlength{\affilsep}{0.4em}
+
+% Abstract as a full-width ruled block with a run-in heading.
+\renewenvironment{abstract}
+  {\vspace{0.2em}\noindent{\color{sec}\rule{\linewidth}{1pt}}\par\vspace{0.5em}\small
+   \noindent\textbf{\sffamily\color{sec}Abstract.}\hspace{0.6em}\ignorespaces}
+  {\par\vspace{0.5em}\noindent{\color{sec}\rule{\linewidth}{0.5pt}}\par\normalsize\vspace{0.3em}}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}\renewcommand{\footrulewidth}{0pt}
+\fancyhead[L]{\sffamily\footnotesize\color{sec}Symmetry determines what a predictive map collapses}
+\fancyfoot[C]{\sffamily\footnotesize\thepage}
+
+\title{\sffamily\bfseries\color{sec}Symmetry, not information, determines what a predictive
+cognitive map collapses, and only prediction resolves it}
 
 \author[1]{Manas Venkata Sai Ravulapalli}
 \affil[1]{Ashoka University, Sonipat, India}
@@ -525,11 +555,12 @@ folds the $C_2$ arena to chance (Table~\ref{tab:phase}).
 \begin{table}[t]
 \centering
 \small
+\setlength{\tabcolsep}{4pt}
 \caption{The model against the animal literature. ``Reproduced'' means the model shows the
 phenomenon without being fitted to it; ``absent'' means the phenomenon cannot exist in this
 architecture and we do not claim it.}
 \label{tab:bio}
-\begin{tabular}{p{0.30\textwidth}p{0.24\textwidth}p{0.30\textwidth}l}
+\begin{tabular}{p{0.29\textwidth}p{0.22\textwidth}p{0.28\textwidth}p{0.11\textwidth}}
 \toprule
 observation in animals & source & in this model & verdict \\
 \midrule
