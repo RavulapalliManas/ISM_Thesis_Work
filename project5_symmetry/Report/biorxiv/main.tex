@@ -1,0 +1,538 @@
+% bioRxiv preprint format.
+% Build:  latexmk -pdf main.tex
+%
+% NOTE ON STATUS. The symmetry / head-direction / objective results below are complete
+% (n = 6 per cell for s1 and s2, n = 4 for s4). 153 trained networks: 64 in the symmetry x
+% encoding sweep, 72 across the three extra prediction horizons, 17 in the isotypic re-run.
+% topology-before-geometry and initialisation studies are running; their sections are
+% deliberately absent rather than sketched. Do not add a number to this file that is not
+% in outputs/gpu_runs/*.csv.
+
+\documentclass[11pt, letterpaper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage{authblk}
+\usepackage{lineno}
+\usepackage[round, authoryear]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{setspace}
+
+\linenumbers
+\doublespacing
+\renewcommand{\abstractname}{\vspace{-1em}}
+
+\title{\bfseries Symmetry, not information, determines what a predictive
+cognitive map collapses --- and only prediction resolves it}
+
+\author[1]{Manas Venkata Sai Ravulapalli}
+\affil[1]{Ashoka University, Sonipat, India}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Predictive learning produces place-cell-like spatial codes in recurrent networks
+\citep{levenstein2024}, but the environments used to validate this are chosen so that every
+position looks unique. Real arenas are symmetric, and symmetric landmarks make distinct
+positions observationally identical. What does a predictive code do then, and what resolves
+the ambiguity? We train predictive recurrent networks in $18\times18$ arenas with $C_1$,
+$C_2$ and $C_4$ rotational landmark symmetry and manipulate the self-motion (head-direction,
+HD) input the network receives; the decisive comparison is made \emph{within} a single arena,
+so the observation stream is held exactly fixed. The critical
+comparison holds information constant and varies only symmetry: two encodings that each
+reduce the four-way compass to exactly one bit, one invariant under a $180^\circ$ rotation
+(\textit{axis}: east/west vs.\ north/south) and one not (\textit{parity}: east/south vs.\
+west/north). Using orbit-phase decoding --- can a decoder recover which of two
+rotationally-equivalent positions produced a population state? --- we find that in the $C_2$
+arena the two encodings differ by $0.40$ in accuracy ($p = 0.00216$, the exact two-sided
+Mann--Whitney floor at $n = 6$ vs.\ $6$), while in the $C_1$ arena, where there is no symmetry
+to collapse onto, they are indistinguishable ($p = 0.18$). Information quantity does not fold
+the code; invariance does. Read through its own $C_4$ quotient, the $C_4$ arena reproduces the
+group-theoretic ceiling exactly: a $G$-folded code cannot exceed $1/|G|$ phase accuracy
+($0.482$ against a predicted $0.500$ for a $C_2$-invariant encoding; $0.275$ against $0.250$
+for the only $C_4$-invariant one). Finally, the entire effect is contingent on the objective:
+with a matched autoencoder --- identical architecture, identical HD input, reconstruction
+instead of prediction --- the full two-bit compass is worthless and every encoding folds
+($p = 0.59$). One step of prediction restores it completely. We conclude that a self-motion
+signal resolves only those symmetries under which it is not itself invariant, and only when
+the objective forces the network to integrate it. Along the way we show that two natural
+readouts, rotational autocorrelation and odd isotypic power, are respectively blind to and
+confounded by this phenomenon.
+\end{abstract}
+
+\vspace{1em}
+\noindent\textbf{Keywords:} predictive learning; cognitive map; hippocampus; head direction;
+rotational symmetry; group representation; recurrent neural network
+
+\section{Introduction}
+
+\citet{levenstein2024} showed that a recurrent network trained to predict its own future
+observations develops spatially tuned units without any spatial supervision, and validated
+this in an L-shaped arena chosen so that every position has a unique visual fingerprint. Most
+rodent electrophysiology is done in square arenas, which are rotationally symmetric; the
+condition the validation rests on --- global observational discriminability --- does not hold
+there. Symmetric landmarks make distinct positions observationally identical, and the
+theoretical link between predictive learning and spatial coding, the successor representation
+\citep{stachenfeld2017}, inherits the problem: positions related by a symmetry of the
+transition structure have identical expected future occupancy.
+
+Something must break the tie. The obvious candidate is self-motion. The head-direction system
+tracks global orientation by path integration and is anchored to landmarks by vision
+\citep{taube1990, knierim1995}; when landmarks are symmetric the two signals conflict. The
+standard reading is that head direction supplies \emph{extra information}, and that more
+information means less ambiguity.
+
+We show that this reading is wrong, and that the correct variable is not the quantity of
+information but its \emph{symmetry}. If the head-direction encoding $\phi$ satisfies
+$\phi(h + g) = \phi(h)$ for the generator $g$ of the arena's symmetry group $G$, then the
+entire (observation, action) input process is $G$-equivariant, the posterior over position is
+$G$-invariant, and no amount of that signal can lift the ambiguity --- the code must collapse
+onto the quotient $X/G$. An encoding carrying exactly the same number of bits, but not
+invariant under $g$, lifts it completely.
+
+Two further results follow from the same design. Read through the $C_4$ quotient rather than
+the $C_2$ one, the folding produces a hard, quantitative ceiling ($1/|G|$) that the trained
+networks hit. And the whole phenomenon is a property of \emph{predictive} learning: under a
+matched reconstruction objective the compass does nothing at all.
+
+\section{Results}
+
+\subsection{A design that holds information constant and varies only symmetry}
+
+Networks receive a $7\times7\times3$ egocentric view and a five-dimensional SpeedHD action
+vector, $[\,\text{speed},\ \mathrm{onehot}(h)\,]$ with $h \in \{\text{E},\text{S},\text{W},
+\text{N}\}$. We replace the heading block by $M\,\mathrm{onehot}(h)$ for a $4\times4$ matrix
+$M$, preserving dimensionality and column sums (Table~\ref{tab:encodings}). Two of the four
+encodings partition the headings into two classes of two --- exactly one bit each, identical
+entropy, identical activation statistics --- and differ only in \emph{which} partition, and
+hence in whether they are invariant under the $180^\circ$ rotation $R^2$.
+
+\begin{table}[t]
+\centering
+\caption{The four head-direction encodings. \textit{axis} and \textit{parity} are matched at
+one bit and differ only in invariance.}
+\label{tab:encodings}
+\begin{tabular}{lccc}
+\toprule
+encoding & bits & $C_2$-invariant & $C_4$-invariant \\
+\midrule
+\textit{full} (E,S,W,N)            & 2.0 & no  & no  \\
+\textit{parity} (\{E,S\} vs \{W,N\}) & 1.0 & no  & no  \\
+\textit{axis} (\{E,W\} vs \{N,S\})   & 1.0 & \textbf{yes} & no \\
+\textit{const}                     & 0.0 & yes & \textbf{yes} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two hypotheses make opposite predictions. If folding tracks how much information the
+compass carries, \textit{axis} and \textit{parity} behave alike. If it tracks invariance,
+\textit{axis} folds and \textit{parity} does not.
+
+\subsection{Invariance, not information, folds the code}
+
+Under folding onto $X/G$ the population state satisfies $h(x) = h(R^2x)$, so no decoder can
+recover which element of the orbit $\{x, R^2x\}$ produced it. We therefore train a linear
+decoder for \emph{orbit phase}, holding out whole orbits across cross-validation folds so the
+decoder must generalise a phase direction to positions it has never seen. Chance is $0.500$.
+
+\begin{table}[t]
+\centering
+\caption{Orbit-phase decoding accuracy (chance $=0.500$). $n=6$ per cell for s1 and s2,
+$n=4$ for s4.}
+\label{tab:phase}
+\begin{tabular}{lcccc}
+\toprule
+arena & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} \\
+\midrule
+s1 ($C_1$, no symmetry) & 0.981 & 0.973 & 0.970 & 0.967 \\
+s2 ($C_2$)              & 0.978 & 0.953 & \textbf{0.553} & \textbf{0.551} \\
+s4 ($C_4$)              & 0.984 & 0.930 & \textbf{0.547} & \textbf{0.520} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In the $C_2$ arena, \textit{axis} and \textit{parity} --- carrying identical information ---
+differ by $0.400$ in phase accuracy (Mann--Whitney $U=0$, $p = 0.00216$; this is the exact
+two-sided floor at $n=6$ vs.\ $6$, $2/\binom{12}{6}$, so the separation is complete).
+In the $C_1$ arena, where there is no symmetry to collapse onto, the same two encodings are
+indistinguishable ($\Delta = 0.003$, $p = 0.18$). The $C_1$ null is what licenses the causal
+reading: \textit{axis} does not degrade spatial coding in general, it degrades it exactly when
+the arena has a symmetry under which \textit{axis} is invariant.
+
+None of the folded networks has simply stopped representing space. For 60 of the 64 networks,
+$\max(R^2_{\text{raw}}, R^2_{\text{domain}}) \ge 0.81$: the folded codes still linearly encode
+position \emph{within the fundamental domain}, they have merely discarded which copy of it the
+animal occupies (Fig.~\ref{fig:manifold}). The four exceptions are \textit{const} in the $C_4$
+arena, which fails both $C_2$-based readouts ($R^2_{\text{raw}} = -0.069$,
+$R^2_{\text{domain}} = -0.591$) not because it has stopped coding space but because it is folded
+by the \emph{full} $C_4$ group, which a $C_2$ decoder cannot see; the next section resolves it.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/manifold_s2.png}
+\caption{Position-conditioned population manifold (one point per arena cell, PCA to three
+dimensions), coloured by $C_2$ orbit phase. Under \textit{full} and \textit{parity} the two
+phases occupy separate regions; under \textit{axis} in the $C_2$ arena they superimpose. The
+fold ratio --- distance between a cell and its $180^\circ$ image, in units of the distance to a
+spatial neighbour --- is 2.68, 2.10 and 0.39 respectively, and 1.89 for \textit{axis} in the
+$C_1$ arena, where the same encoding folds nothing.}
+\label{fig:manifold}
+\end{figure}
+
+\subsection{The $C_4$ arena reproduces the group-theoretic ceiling}
+
+A code folded onto $X/G$ cannot name the element of an orbit, only the coset, so a $|G|$-way
+phase decoder is bounded above by $1/|G|$. Reading the $C_4$ arena through its own quotient
+(four-way phase, chance $0.250$) recovers this exactly (Table~\ref{tab:c4}). \textit{const} is
+the only $C_4$-invariant encoding, and the only one to reach the $C_4$ floor. \textit{axis} is
+$C_2$- but not $C_4$-invariant, and sits at the $C_2$ ceiling of $0.5$.
+
+This also resolves \textit{const} in the $C_4$ arena. Read through the $C_4$ quotient it is
+plainly a live spatial code --- its $C_4$ fundamental-domain $R^2$ is $+0.646$ (minimum $+0.535$
+across all sixteen s4 networks) --- and its four-way phase accuracy of $0.275$ sits at the $C_4$
+chance floor. What looked like a dead code under a $C_2$ readout is a code folded onto a larger
+quotient than the readout was built to see. We flag this because a $G$-folded code and a code
+that has stopped representing space are easy to confuse, and only the second is a failure.
+
+\begin{table}[t]
+\centering
+\caption{$C_4$ four-way phase decoding in the s4 arena (chance $= 0.250$).}
+\label{tab:c4}
+\begin{tabular}{lccc}
+\toprule
+encoding & invariance & measured & predicted ceiling \\
+\midrule
+\textit{full}   & none          & 0.918 & --- \\
+\textit{parity} & none          & 0.860 & --- \\
+\textit{axis}   & $C_2$ only    & \textbf{0.482} & 0.500 \\
+\textit{const}  & $C_2$ and $C_4$ & \textbf{0.275} & 0.250 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The ceiling is set by the inputs; the objective decides whether it is reached}
+
+None of this requires a trained network to predict. Call two states $(x,h)$ and $(x',h')$
+\emph{input-equivalent} if they produce the same $7\times7$ observation and the same HD encoding.
+A code is a function of its inputs, so no decoder can separate input-equivalent states, and phase
+decoding is bounded above by
+
+\begin{equation}
+\mathrm{acc}_{\max} \;=\; \tfrac12 + \tfrac12 \, \Pr_{(x,h)}\!\big[\,(x,h) \not\sim (R^2x,\, h+2)\,\big],
+\label{eq:bound}
+\end{equation}
+
+the fraction of orbit pairs the input distinguishes. Evaluating the right-hand side on the arenas
+themselves --- enumerating all $324\times4$ states and hashing their observations --- takes no
+training at all.
+
+\begin{table}[t]
+\centering
+\caption{The bound of Eq.~\ref{eq:bound}, computed from the arenas, against the trained networks.
+Across the twelve cells, Pearson $r = 0.996$ ($p = 1.3\times10^{-11}$), mean absolute error
+$0.031$, no free parameters.}
+\label{tab:bound}
+\begin{tabular}{llccc}
+\toprule
+arena & encoding & distinguishable & predicted & measured \\
+\midrule
+s1 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.981 / 0.973 \\
+s1 & \textit{axis} / \textit{const}  & 0.934 & 0.967 & 0.970 / 0.967 \\
+s2 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.978 / 0.953 \\
+s2 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.553 / 0.551 \\
+s4 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.984 / 0.930 \\
+s4 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.547 / 0.520 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:bound} also settles a number that would otherwise look like a failure. In the
+$C_1$ arena \textit{axis} reaches $0.970$ rather than $1.000$ --- because $6.6\%$ of states there
+are \emph{accidentally} observationally identical to their $C_2$ partner, putting the bound at
+$0.967$. \textit{axis} and \textit{const} sit exactly on it. They were not failing to fold; they
+were folding on precisely the ambiguous fraction.
+
+\paragraph{The objective selects the bound.} The inequality is an upper bound, not a prediction:
+a network is free to discard information its loss does not reward. This is what the horizon sweep
+shows. At $k=0$ the input still separates $1228$ of the $1296$ states under \textit{full} --- the
+compass is right there --- yet all four encodings collapse to within $0.005$ of one another
+(Table~\ref{tab:horizon}), landing on the \emph{observation-only} bound of $0.500$. The spread
+across encodings is $0.0052$ at $k=0$ against $0.427$ at $k=5$.
+
+So the compass is not absent under reconstruction; it is \emph{discarded}. Reconstructing
+$o_t$ never requires knowing which of two identical-looking places you occupy. Predicting $o_{t+1}$
+does, and one step is enough.
+
+\subsection{The fold is resolved by prediction, not by observation}
+
+We repeated the s2 sweep varying only the rollout horizon $k$. At $k=0$ the network's target is
+its own current observation at the anchor (verified exactly), i.e.\ a pure autoencoder with the
+same architecture and the same head-direction input, but no future to predict.
+
+\begin{table}[t]
+\centering
+\caption{Orbit-phase decoding in the $C_2$ arena as a function of prediction horizon $k$
+(chance $= 0.500$, $n = 6$ per cell).}
+\label{tab:horizon}
+\begin{tabular}{lccccc}
+\toprule
+$k$ & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} & \textit{axis} vs \textit{parity} \\
+\midrule
+0 (autoencoder) & 0.536 & 0.541 & 0.539 & 0.539 & $p = 0.59$ \\
+1 & 0.975 & 0.941 & 0.545 & 0.546 & $p = 0.00216$ \\
+3 & 0.968 & 0.947 & 0.548 & 0.545 & $p = 0.00216$ \\
+5 & 0.978 & 0.953 & 0.553 & 0.551 & $p = 0.00216$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Under reconstruction the full two-bit compass buys nothing: every encoding folds, and all four
+sit at chance (Table~\ref{tab:horizon}). These are folded codes, not broken ones --- the
+minimum of $\max(R^2_{\text{raw}}, R^2_{\text{domain}})$ across all 24 autoencoder networks is
+$0.858$. A single step of prediction restores the effect in full, and extending the horizon to
+five adds nothing: the dependence on $k$ is a step, not a gradient.
+
+The interpretation is direct. Reconstruction never requires the network to integrate
+self-motion, so the compass is not recruited and the observation stream --- which is
+$C_2$-symmetric by construction --- determines the code. Prediction requires integrating
+self-motion across at least one step, and it is that integration which resolves the symmetry.
+
+\subsection{Two natural readouts fail, in two different ways}
+
+Decomposing each unit's rate map into the four characters of $C_4$ gives an isotypic power
+spectrum $P_0 \dots P_3$. Rotational autocorrelation, the quantity used in earlier analyses of
+this system, is exactly $\mathrm{RA} = P_0 - P_2$. It is therefore \emph{blind to $C_2$
+structure}: invariance under $R^2$ annihilates the odd characters $P_1$ and $P_3$ while leaving
+$P_0$ and $P_2$ untouched, so a perfectly $C_2$-folded code and pure noise both read
+$\mathrm{RA}\approx0$. Empirically, on a clean 17-network sweep, RA cannot separate s2 from s1
+($p = 0.095$), whereas odd power $P_1 + P_3$ separates them completely ($p = 0.0079$, the exact
+floor at $n=5$ vs.\ $5$).
+
+Odd power, however, is itself confounded. Under \textit{axis} it falls in the $C_1$ arena too,
+where there is no symmetry: the drop $\mathrm{odd}(\textit{parity}) - \mathrm{odd}(\textit{axis})$
+is $0.079$ in s1, $0.093$ in s2 and $0.099$ in s4, so $80\%$ of the s4-sized effect is present
+where nothing can fold, and it reaches $p = 0.00216$ in s1 --- a confident report of a fold that
+does not exist. Odd power conflates genuine collapse onto the quotient with the encoding merely
+reshaping the rate-map spectrum. Orbit-phase decoding is immune to that and returns a clean null.
+
+We therefore report phase decoding as the primary readout and the isotypic spectrum as a
+secondary, descriptive one. We note this explicitly because the confounded readout would have
+supported the same qualitative conclusion, by an argument that does not hold.
+
+\section{Discussion}
+
+The result is a statement about group actions rather than about information channels. A
+self-motion signal resolves exactly those symmetries under which it is not itself invariant.
+Head direction is blind to translation --- translating the world does not change a compass
+reading --- and therefore cannot disambiguate translationally repeated compartments, whereas it
+is not blind to rotation and can disambiguate rotationally related ones.
+
+\subsection*{The dissociation exists in the animal data}
+
+\citet{spiers2015} recorded CA1 place cells in four visually identical compartments arranged in a
+row off a connecting corridor, and found ``a high degree of spatial repetition with a slight
+degree of rate-based discrimination''. Those compartments are translationally related, and the
+authors conclude that ``path integration is not used, or at least not spontaneously'' to separate
+them. \citet{grieves2016} then ran the same four compartments in two arrangements. Parallel, all
+facing the same way and therefore translationally related: ``place cells often exhibited repeated
+fields''. Radial, at $60^\circ$ to one another and therefore rotationally related:
+``significantly less place field repetition was apparent'' (all $p < 0.0001$). The dissociation
+survived removal of the orientation landmark, so it is not carried by extra-maze vision, and the
+authors attribute it to ``directional information derived from the animal's self-motion'',
+hypothesising the head-direction system as the source.
+
+Our result supplies the reason. A compass is \emph{invariant} under translation and
+\emph{equivariant} under rotation. The input process is therefore $G$-equivariant in the parallel
+arrangement and not in the radial one, so a predictive code must fold onto the quotient in the
+first case and may lift it in the second. Repetition is not a failure of the hippocampus; it is
+what a predictive code must do when its self-motion signal cannot see the symmetry.
+
+Two things follow that the animal data cannot establish. First, the effect is a property of
+\emph{invariance}, not of how much the compass tells you: two encodings carrying the same single
+bit dissociate completely (Table~\ref{tab:phase}). Second, it is a property of \emph{prediction}:
+under a matched reconstruction objective the compass is inert (Table~\ref{tab:horizon}), so head
+direction cannot disambiguate compartments unless the objective forces the network to integrate
+it. Whether a purely reconstructive circuit would show repetition even in the radial arrangement
+is, to our knowledge, untested in animals.
+
+The account also yields a lesion prediction. Lesions of the anterodorsal thalamus degrade the
+head-direction signal and destabilise hippocampal place fields \citep{calton2003}. We predict
+something sharper: such animals should show field \emph{repetition} in the \emph{radial}
+arrangement, where intact animals do not, because without a compass rotation joins translation as
+a symmetry the animal cannot resolve. In the model this is the \textit{const} encoding, which
+folds the $C_2$ arena to chance (Table~\ref{tab:phase}).
+
+
+\subsection*{What the model reproduces, and what it does not}
+
+\begin{table}[t]
+\centering
+\small
+\caption{The model against the animal literature. ``Reproduced'' means the model shows the
+phenomenon without being fitted to it; ``absent'' means the phenomenon cannot exist in this
+architecture and we do not claim it.}
+\label{tab:bio}
+\begin{tabular}{p{0.30\textwidth}p{0.24\textwidth}p{0.30\textwidth}l}
+\toprule
+observation in animals & source & in this model & verdict \\
+\midrule
+Fields repeat across translationally related identical compartments; path integration does not
+separate them
+& \citet{spiers2015} & translation leaves the compass invariant, so the code folds onto $X/G$
+& reproduced \\[4pt]
+Repetition in parallel compartments, markedly less in radial ones; survives removal of the
+orientation landmark; attributed to self-motion
+& \citet{grieves2016} & rotation makes the compass equivariant, so the code lifts
+& reproduced \\[4pt]
+Multi-field firing increases with the rotational symmetry of the arena
+& \citet{muller1987, knierim1995} & folding onto $X/G$ makes one unit fire at all $|G|$ orbit-mates
+& reproduced \\[4pt]
+Head-direction input is required for a stable map; ADN lesions destabilise place fields
+& \citet{calton2003} & the \textit{const} encoding folds the $C_2$ arena to chance
+& consistent \\[4pt]
+Head direction plus recurrence plus prediction are needed for offline replay
+& \citet{levenstein2024} & offline trajectories exceed the coverage of a wake path of equal
+length only with the full compass and $k \ge 1$; coverage falls monotonically as the compass
+is ablated ($1.30 \to 0.80 \to 0.45 \to 0.31 \times$ wake), and the autoencoder never leaves
+$0.37\times$. Replay appears at the same horizon as symmetry resolution and improves no
+further with a longer one
+& reproduced \\[4pt]
+Rate remapping: a slight rate-based discrimination between otherwise repeated fields
+& \citet{spiers2015} & absent. In the parallel arrangement the fields repeat perfectly
+(repetition $+0.997$) and the compartment is not decodable even by a nearest-neighbour
+readout at cells it has already seen ($0.514$, chance $0.5$). The fold is complete; the
+animals retain a residual rate signal that this network does not
+& not reproduced \\[4pt]
+Grid cells on a toroidal population manifold, invariant across environments and sleep
+& \citet{gardner2022toroidal} & no grid cells (gridness $\le 0.08$); the torus cannot exist here
+& absent \\[4pt]
+Head-direction cells lie on a ring manifold that matures before place and grid coding
+& \citet{taube1990, langston2010} & head direction is supplied as a four-point input, not learned
+& absent \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two rows marked \emph{absent} are architectural, not empirical: head direction enters this
+network as an oracle input rather than being learned, and no non-negativity constraint is imposed,
+which is the condition under which hexagonal grids emerge in trained path integrators
+\citep{sorscher2023unified}. Nothing here bears on the ring or toroidal manifolds of entorhinal
+cortex, and we make no claim about them.
+
+The objective control constrains the mechanism further. That a matched autoencoder --- same
+wiring, same compass --- shows no effect at all rules out the possibility that the ordering is
+built into the input pipeline rather than into the learning. It is prediction that recruits
+self-motion.
+
+\paragraph{Limitations.} The arenas are discrete $18\times18$ grids with four headings, so the
+head-direction ``ring'' has four points and no continuous ring topology; nothing here speaks to
+the ring or toroidal manifolds reported in entorhinal cortex \citep{gardner2022toroidal}. The networks
+develop place-like but not grid-like tuning (gridness over the 100 most spatially tuned units:
+mean $-0.35$, maximum $+0.08$, none above the conventional $0.3$ threshold), which is expected
+given that head direction is supplied as an input rather than learned and that no
+non-negativity constraint is imposed \citep{sorscher2023unified}; the toroidal code of
+\citet{gardner2022toroidal} cannot exist in this model, and we do not claim it. The architecture has no
+excitatory--inhibitory separation. Finally, symmetry here is a property of the landmark layout,
+not of the arena geometry, which is square and therefore $C_4$-symmetric in every condition.
+
+\section{Methods}
+
+\paragraph{Architecture and training.} We use \texttt{pRNN\_th} \citep{levenstein2024} unchanged:
+a layer-normalised recurrent cell, hidden size 500, truncation $T = 200$, rollout horizon $k=5$
+unless stated, observation size 147 ($7\times7\times3$), action size 5. Training uses RMSprop
+($\alpha = 0.95$, $\epsilon = 10^{-6}$) with four parameter groups at per-group learning rates
+$\lambda\sqrt{1/H}$ for $W_{\text{rec}}, W_{\text{out}}$, $\lambda\sqrt{1/(n_{\text{obs}} +
+n_{\text{act}})}$ for $W_{\text{in}}$ and $0.1\lambda$ for the bias, with bias-only weight decay;
+$\lambda = 2\times10^{-3}$, batch size 8, gradient clipped per model to norm 1, 80{,}000 steps.
+
+\paragraph{Arenas.} $18\times18$ MiniGrid arenas (324 positions) with landmark layouts of $C_1$,
+$C_2$ and $C_4$ rotational symmetry. The observational discriminability index (ODI; the Spearman
+correlation between heading-averaged observation distance and spatial distance across all pairs
+of positions) is \emph{not} matched across the three arenas, and cannot be: symmetric landmarks
+make distinct positions observationally identical, so discriminability necessarily falls with
+symmetry order. Measured over all 324 positions, $\mathrm{ODI} = 0.336$ ($C_1$), $0.288$ ($C_2$),
+$0.262$ ($C_4$). An earlier report of these arenas described them as ``matched at
+$\mathrm{ODI}=0.336$''; that value is the $C_1$ arena's ODI alone.
+
+This does not confound the results, for two reasons. The decisive contrast --- \textit{axis} vs.\
+\textit{parity} --- is made \emph{within} one arena, on the same trajectories, so the observation
+stream and its ODI are identical between the two arms; the only difference is a $4\times4$ matrix
+on the heading block. And across arenas, ODI does not predict the readout: with a full compass,
+phase decoding is $0.981$, $0.978$ and $0.984$ for $C_1$, $C_2$, $C_4$ (Pearson $r=-0.36$ against
+ODI, $p=0.77$), with the least discriminable arena scoring highest. Trajectories: 10{,}000 per
+arena, 200 steps, random start position and heading, random-walk policy.
+
+\paragraph{Head-direction encodings.} The heading block of the action vector is left-multiplied
+by a fixed $4\times4$ matrix: identity (\textit{full}); $\tfrac12(I + P^2)$ where $P$ is the
+cyclic shift (\textit{axis}); the block-averaging matrix pairing $\{E,S\}$ and $\{W,N\}$
+(\textit{parity}); and $\tfrac14\mathbf{1}\mathbf{1}^\top$ (\textit{const}). Column sums are
+preserved, so activation magnitude is unchanged. Entropies under a uniform heading prior are
+$2, 1, 1, 0$ bits.
+
+\paragraph{Ensemble training.} All networks sharing a computation graph (arena, encoding and seed
+all leave it unchanged; the horizon $k$ does not) are trained as a single job using
+\texttt{torch.func.stack\_module\_state} with \texttt{vmap(functional\_call)}, which lowers every
+per-model matrix multiply to one batched multiply and makes the kernel-launch count independent
+of the number of models. Forward passes are bit-exact against separate runs; gradients are
+bit-exact with noise disabled and agree to $2.3\times10^{-10}$ absolute with the production noise
+on (\texttt{bmm} reassociation). Per-model gradient clipping, the four-group RMSprop and the
+sum-of-per-model-means loss are all preserved; each is checked against the reference
+implementation by test.
+
+\paragraph{Orbit-phase decoding.} Hidden states are collected over 20{,}000 timesteps and averaged
+per position. Orbits are $\{x, R^2x\}$ under the $180^\circ$ rotation (or the four-element $C_4$
+orbits where stated); the arena side is even, so no rotation has an integer fixed point and every
+orbit has exactly $|G|$ cells. Phase labels are balanced, and cross-validation folds hold out
+whole orbits (\texttt{GroupKFold}), so the decoder must generalise a phase direction rather than
+memorise orbits. We report the accuracy of a logistic decoder, together with the $R^2$ of ridge
+decoders for the raw position and for the position within the fundamental domain. The latter is
+not a positive control --- recovering a folded coordinate from an unfolded code requires a
+nonlinear map --- so the sanity check that a code still represents space is
+$\max(R^2_{\text{raw}}, R^2_{\text{domain}})$.
+
+\paragraph{Isotypic spectrum.} Each unit's rate map is decomposed into the four characters of
+$C_4$; $P_k$ is the normalised power in character $k$, $\sum_k P_k = 1$, and $P_1 = P_3$ for real
+maps. $\mathrm{RA} = P_0 - P_2$ and $\mathrm{odd} = P_1 + P_3$.
+
+\paragraph{Statistics.} All contrasts are two-sided exact Mann--Whitney $U$ tests on per-network
+values. The planned contrasts are \textit{axis} vs.\ \textit{parity} within each arena; with
+$n=6$ vs.\ $6$ the exact two-sided floor is $2/\binom{12}{6} = 0.00216$, and $p$-values at that
+value indicate complete separation. Bonferroni correction across the three planned contrasts is
+applied where stated. No results were excluded; models failing a criterion are reported as such
+rather than dropped.
+
+\section*{Data and code availability}
+
+All code, tests and the analysis pipeline are available at
+\url{https://github.com/<repo>} (\texttt{project5\_symmetry/}). The test suite pins the claims
+that fail silently: the bit-exactness of the ensemble against per-model training, that the $k=0$
+target is exactly the anchor observation, that a synthetic $C_2$-folded code reads chance phase
+while a code with no spatial signal is distinguishable from it, and that the isotypic identity
+$\mathrm{RA} = P_0 - P_2$ holds. Trained checkpoints and per-network readouts are archived with
+the manuscript.
+
+\section*{Author contributions}
+M.V.S.R. designed the study, implemented the models and analyses, ran the experiments and wrote
+the manuscript.
+
+\section*{Competing interests}
+The author declares no competing interests.
+
+\section*{Use of AI tools}
+Large language models were used for code review, refactoring, and drafting assistance. All
+experiments, statistics and scientific claims were specified, executed and verified by the
+author; every number reported here is produced by the archived analysis scripts.
+
+\bibliographystyle{plainnat}
+\bibliography{../references}
+
+\end{document}
