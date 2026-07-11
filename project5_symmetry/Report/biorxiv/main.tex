@@ -432,6 +432,17 @@ in every arena, and $448$ of the $500$ units retain a place field under \textit{
 $C_1$ arena, falling to about $318$ in the $C_4$ arena. A folded code is therefore reproducible rather than degenerate, and the compass
 governs how the map is laid out rather than whether one forms.
 
+The collapse can also be read in the metric used to score remapping in the hippocampus. The
+population-vector correlation between a position and its symmetry image \citep{leutgeb2005} ---
+near one when the two share a representation, near zero when the code separates them --- is
+$0.98$ under the invariant encodings in the $C_2$ and $C_4$ arenas and about $0.28$ under
+\textit{full}, with the matched non-invariant encoding intermediate (\textit{parity}, $0.58$ in
+$C_2$; $n = 10$ per encoding). By this measure the network fails to remap between
+symmetry-related locations exactly when the compass is invariant under the symmetry --- the two
+copies are written as one place --- whereas with a full compass they are separated as strongly as
+unrelated positions. The same invariant encoding gives a weaker correlation in the $C_1$ arena
+($0.71$ for \textit{axis}), where there is no arena symmetry to complete the fold.
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig2_fold.pdf}
@@ -467,6 +478,15 @@ partial symmetry even in the $C_1$ arena ($0.61$ for \textit{axis}), which the a
 symmetry then completes. The four-fold version of the index reaches $0.97$ only for
 \textit{const} in the $C_4$ arena, the single fully $C_4$-invariant condition. Each map
 acquires precisely the symmetry the compass cannot break.
+
+Scored by the criteria applied to real recordings, the trained population is a realistic
+mixture rather than a bank of identical units: $76$--$96\%$ of units qualify as place cells
+(Skaggs spatial information above threshold) and about $30\%$ are border-modulated (a third or
+more of their rate-map mass in the outer ring), a composition that is stable across encodings and
+arenas. Folding therefore multiplies fields and rearranges where they sit without changing the
+cell-type makeup of the map --- the multi-field, spatially repeating cells it produces are the
+in-silico counterpart of the repeated place fields recorded in symmetric environments
+\citep{muller1987, grieves2016}.
 
 \subsection{The same dissociation appears across observationally identical compartments}
 
@@ -670,8 +690,18 @@ We also tested whether
 population-manifold topology crystallizes before metric geometry, a proposed developmental
 ordering. With a shuffle-null Betti estimator the effect does not hold in these arenas:
 position is linearly decodable at $R^2 = 0.79$ in the untrained network, metric geometry
-develops gradually, and loop topology is not reliably recovered even at convergence, so we make
-no topology-before-geometry claim. All results use a single architecture (hidden size $500$,
+develops gradually. Loop topology is readout-dependent: the linear PCA-6 estimator does not
+reliably recover it, yet a spectral (Laplacian) embedding recovers the annulus's single loop in
+every network and the open arena's trivial topology, both under-detected by PCA-6
+(\texttt{topology\_robustness.csv}). The two-loop theta and figure-8 arenas are not cleanly
+recovered by any embedding --- the higher-dimensional linear reduction that occasionally finds
+them also hallucinates a loop in the open arena. Simple loop topology is thus present but visible
+only through a nonlinear readout, and higher-genus topology is not reliably recovered, so we make
+no strong topology-before-geometry claim. The place fields track the animal's current position rather
+than a future one: rebuilding each rate map on the position up to five steps ahead does not
+sharpen it at any prediction horizon, so the network's predictive character is expressed in its
+offline replay rather than in a spatial lead of its fields (though the discrete one-cell-per-step
+grid would not resolve a sub-cell anticipatory shift). All results use a single architecture (hidden size $500$,
 prediction horizon $k=5$) at one arena size; the horizon sweep shows the fold is present from
 $k=1$ and the initialisation study varies the recurrent weights, but hidden size and arena size
 are not swept. The architecture has no excitatory--inhibitory separation.
