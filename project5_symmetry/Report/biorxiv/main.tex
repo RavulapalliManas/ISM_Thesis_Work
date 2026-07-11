@@ -195,8 +195,8 @@ before any decoder is applied. When the arena is symmetric and the head-directio
 invariant to that symmetry, the fields repeat: a unit in the $C_2$ arena under \textit{axis}
 fires at a location and again at its $180^\circ$ image, and a unit in the $C_4$ arena under
 \textit{const} fires at all four $90^\circ$ copies. A single unit reports every member of a
-symmetry orbit as the same place, which is the fold seen directly in the tuning. The rest of
-this section makes the effect quantitative and isolates what controls it.
+symmetry orbit as the same place. The sections that follow quantify this and isolate what
+controls it.
 
 \begin{figure}[t]
 \centering
@@ -383,10 +383,13 @@ minimum of $\max(R^2_{\text{raw}}, R^2_{\text{domain}})$ across all 24 autoencod
 $0.858$. A single step of prediction restores the effect in full, and extending the horizon to
 five adds nothing: the dependence on $k$ is a step, not a gradient.
 
-The interpretation is direct. Reconstruction never requires the network to integrate
-self-motion, so the compass is not recruited and the observation stream --- which is
-$C_2$-symmetric by construction --- determines the code. Prediction requires integrating
-self-motion across at least one step, and it is that integration which resolves the symmetry.
+The reason is that the autoencoder's target is the current observation, which the compass
+cannot help predict, so the objective gives the network no reason to integrate self-motion and
+the $C_2$-symmetric observation stream determines the code. Prediction of a future observation
+requires integrating self-motion across at least one step, and it is that integration which
+resolves the symmetry. The control therefore isolates a property of the objective rather than of
+reconstruction as such: an objective that does not require self-motion integration does not
+recruit the compass, whatever else it reconstructs.
 
 \begin{figure}[t]
 \centering
@@ -623,12 +626,16 @@ direction cannot disambiguate compartments unless the objective forces the netwo
 it. Whether a purely reconstructive circuit would show repetition even in the radial arrangement
 is, to our knowledge, untested in animals.
 
-The account also yields a lesion prediction. Lesions of the anterodorsal thalamus degrade the
-head-direction signal and destabilise hippocampal place fields \citep{calton2003}. We predict
-something sharper: such animals should show field \emph{repetition} in the \emph{radial}
-arrangement, where intact animals do not, because without a compass rotation joins translation as
-a symmetry the animal cannot resolve. In the model this is the \textit{const} encoding, which
-folds the $C_2$ arena to near chance (Table~\ref{tab:phase}).
+The account also yields a lesion prediction, with a dose attached. Lesions of the anterodorsal
+thalamus degrade the head-direction signal and destabilise hippocampal place fields
+\citep{calton2003}. We predict that degrading the compass should bring field \emph{repetition}
+into the \emph{radial} arrangement, where intact animals show little, because without direction
+rotation joins translation as a symmetry the animal cannot resolve. The robustness control sets
+the threshold high, though: in the model a compass corrupted on $30\%$ of steps still resolves
+the fold, and full repetition appears only in the \textit{const} limit of near-total directional
+loss (which folds the $C_2$ arena to near chance, Table~\ref{tab:phase}). A partial ADN lesion
+should therefore produce partial repetition, graded by how much of the head-direction signal
+survives.
 
 
 \subsection*{What the model reproduces, and what it does not}
@@ -688,10 +695,11 @@ which is the condition under which hexagonal grids emerge in trained path integr
 \citep{sorscher2023unified}. Nothing here bears on the ring or toroidal manifolds of entorhinal
 cortex, and we make no claim about them.
 
-The objective control constrains the mechanism further. That a matched autoencoder --- same
-wiring, same compass --- shows no effect at all rules out the possibility that the ordering is
-built into the input pipeline rather than into the learning. It is prediction that recruits
-self-motion.
+The objective control constrains the mechanism further: a matched autoencoder with the same
+wiring and the same compass folds every encoding alike ($p = 0.59$), which rules out the fold
+being a property of the input pipeline rather than of the learning. It is an objective that
+requires predicting a future observation, not reconstructing the present one, that recruits the
+compass.
 
 \paragraph{Limitations.} The arenas are discrete $18\times18$ grids with four headings, so the
 head-direction ``ring'' has four points and no continuous ring topology; nothing here speaks to
