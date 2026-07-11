@@ -116,6 +116,19 @@ python3 $D/run_tda.py           --runs runs/multi/topology --data-root data/topo
 python3 $D/rate_maps.py         --runs runs/hd_invariance --conds s1/full s2/full s2/axis s4/const \
     --out rate_maps.npz         # for the place-cell figure
 python3 $D/manifold_pc.py       --runs runs/multi/topology --data-root data/topology --out manifold_pc.npz
+
+# --- neuroscience + geometry read-outs (CPU) ---
+RD=project5_symmetry/Report/data
+python3 $D/remapping.py         --runs runs/hd_invariance --data-root data/symmetry --out $RD/remapping.csv
+python3 $D/cell_types.py        --runs runs/hd_invariance --data-root data/symmetry --out $RD/cell_types.csv
+python3 $D/prospective.py       --runs runs/horizon/k0 runs/horizon/k1 runs/horizon/k3 runs/hd_invariance \
+    --data-root data/symmetry --hd full --out $RD/prospective.csv          # anticipatory-firing null
+python3 $D/manifold_robustness.py --runs runs/hd_invariance --data-root data/symmetry --out $RD/manifold_robustness.csv
+python3 $D/topology_robustness.py --runs runs/multi/topology --data-root data/topology --out $RD/topology_robustness.csv
+python3 $D/diffusion_maps.py    --topo-runs runs/multi/topology --topo-data data/topology \
+    --fold-runs runs/hd_invariance --fold-data data/symmetry \
+    --out-csv $RD/diffusion_maps.csv --out-fig project5_symmetry/Report/biorxiv/figures/figS_diffusion.pdf
+python3 $D/run_compartments4.py --runs runs/multi/compartment4 --data-root data/compartment4 --out $RD/compartments4.csv
 ```
 
 ### 3. Figures
@@ -135,7 +148,8 @@ python3 project5_symmetry/analysis/make_paper_figures.py \
 
 ```bash
 cd project5_symmetry/Report/biorxiv
-pdflatex main && bibtex main && pdflatex main && pdflatex main
+# main.tex uses the eLife class, which requires XeLaTeX (unicode-math, opensans, STIX)
+xelatex main && bibtex main && xelatex main && xelatex main
 pdflatex supplementary && pdflatex supplementary
 ```
 
@@ -157,6 +171,15 @@ Every value in the paper is reproducible from a CSV in `project5_symmetry/Report
 | Noisy-compass robustness | `phase_noisy.csv` |
 | Prediction-horizon sweep | `phase_horizon_k*.csv`, `phase_groupB.csv` |
 | Initialisation study (supplementary) | `speed_*.csv`, `spectral_*.csv` |
+| Isotypic spectrum (RA vs odd power) | `isotypic_symmetry.csv`, `isotypic_hd.csv` |
+| Fold as remapping (population-vector correlation) | `remapping.csv` |
+| Cell-type composition (place/border, multi-field) | `cell_types.csv` |
+| Nonlinear-decoder control (kNN/MLP) | `phase_nonlinear.csv` |
+| Fold not a PCA artefact (PCA/Isomap/t-SNE); diffusion-map geometry | `manifold_robustness.csv`, `diffusion_maps.csv` |
+| Topology recovery by embedding (PCA/Isomap/spectral) | `topology_robustness.csv` |
+| Generality: hidden-size {250,1000} and arena-size {12,24} sweeps | `phase_h*.csv`, `phase_a*.csv` |
+| Lesion dose-response (HD corruption 0.15/0.50/0.70) | `phase_noise*.csv` |
+| Four-room Spiers compartments | `compartments4.csv` |
 
 The topology-before-geometry analysis is reported as a **null** (loop topology is not reliably
 recovered; `tda_topology.csv`); it is stated as such in the paper's Limitations.
