@@ -16,6 +16,8 @@ survive loss of the compute pod.
 
 - `phase_s4_c4.csv` -- C4 four-way phase decoding in the s4 arena (Table 3; n=4, 16 networks).
 - `phase_nonlinear.csv` -- nonlinear phase-decoding control (linear/kNN/MLP, C2 arena).
+- `manifold_robustness.csv` -- fold ratio in the full hidden space and under PCA, Isomap and
+  t-SNE, showing the fold (ratio < 1 for axis/C2, > 1 otherwise) is not a PCA artefact.
 - `isotypic_symmetry.csv` -- C4 isotypic spectrum (P0..P3, RA, odd) for the clean 17-network
   full-HD sweep; RA vs odd s1-vs-s2 separation ("Two natural readouts fail").
 - `isotypic_hd.csv` -- same spectrum for the 112 HD-invariance networks; the confounded

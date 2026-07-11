@@ -197,7 +197,11 @@ orbit phase. Under \textit{full} and \textit{parity} the two phases occupy separ
 under \textit{axis} in the $C_2$ arena they superimpose. The fold ratio --- distance between a
 cell and its $180^\circ$ image, in units of the distance to a spatial neighbour --- is 2.68,
 2.10 and 0.39 for the three $C_2$-arena encodings shown, and 1.89 for \textit{axis} in the
-$C_1$ arena, where the same encoding folds nothing.}
+$C_1$ arena, where the same encoding folds nothing. The ratio is a property of the full hidden
+space, not of the linear projection: the folded \textit{axis}/$C_2$ case reads below one and
+every non-folded case above one under distance-preserving nonlinear embeddings (Isomap, t-SNE)
+as well as PCA. We reduce with PCA because the claim is metric --- two positions coincide ---
+and unlike neighbour-graph embeddings PCA preserves distances rather than reshaping them.}
 \label{fig:manifold}
 \end{figure}
 
