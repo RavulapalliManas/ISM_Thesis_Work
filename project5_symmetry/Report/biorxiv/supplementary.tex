@@ -87,6 +87,28 @@ acquiring, the arena's topology.}
 \end{figure}
 
 \clearpage
+\section{Diffusion-map geometry of the manifolds}
+
+Diffusion maps embed a point cloud through the eigenfunctions of a Markov random walk built on it,
+so the embedding respects diffusion distance --- a density-robust, geometry-aware metric --- and
+the eigenvalue spectrum reads out intrinsic dimension. Both structures survive this nonlinear
+readout.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth]{figures/figS_diffusion.pdf}
+\caption{Diffusion-map embeddings. \textbf{Top:} topology arenas, coloured by arena angle. The
+open arena shows no angular loop in the leading diffusion coordinates (loop score $0.09$), whereas
+the annulus, theta and figure-8 arenas do ($0.61$--$0.83$); the manifolds nonetheless remain
+moderately high-dimensional (intrinsic dimension $5$--$7$), consistent with the persistent-homology
+result that a single loop is recoverable but higher-genus topology is not. \textbf{Bottom:} the
+$C_2$ fold, coloured by orbit tag. The diffusion distance between a position and its $180^\circ$
+image, in units of the distance to a spatial neighbour, is $3.79$ under \textit{full} and $2.72$
+under \textit{parity} but collapses to $0.22$ under \textit{axis}: the fold is a property of the
+diffusion geometry, not of any linear projection.}
+\end{figure}
+
+\clearpage
 \section{Initialization and learning speed}
 
 The recurrent matrix is not initialized at random alone: the architecture adds a

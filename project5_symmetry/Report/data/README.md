@@ -28,6 +28,8 @@ survive loss of the compute pod.
   reported as such -- the place fields track current position, not a future one.
 - `topology_robustness.csv` -- Betti-1 estimate under PCA-6/PCA-20/Isomap/spectral embeddings,
   testing whether the topology-before-geometry null is a linear-reduction artefact.
+- `diffusion_maps.csv` -- diffusion-map geometry: topology loop scores + intrinsic dimension, and
+  the C2 fold ratio in diffusion distance (axis 0.22 vs full 3.79). Figure: figS_diffusion.pdf.
 - `isotypic_symmetry.csv` -- C4 isotypic spectrum (P0..P3, RA, odd) for the clean 17-network
   full-HD sweep; RA vs odd s1-vs-s2 separation ("Two natural readouts fail").
 - `isotypic_hd.csv` -- same spectrum for the 112 HD-invariance networks; the confounded
