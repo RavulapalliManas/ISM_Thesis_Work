@@ -462,6 +462,143 @@ def figS_celltypes(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+def _phase(data, name):
+    p = data / f'{name}.csv'
+    return _read(p) if p.exists() else []
+
+
+def _acc(rows, cond, hd):
+    return _mean_sem([_f(r, 'phase_acc') for r in rows
+                      if r['condition'] == cond and r['hd_mode'] == hd])
+
+
+def fig5_generality(data: Path, figs: Path):
+    """Generality of the fold: arena size, hidden size, HD-lesion dose, learned compass."""
+    base = _phase(data, 'phase_full_n10')          # baseline: hidden 500, arena 18, noise 0
+    fig, ax = plt.subplots(2, 2, figsize=(WIDE, 4.7))
+
+    def _sweep(a_, points, xlabel, marker, hds=('axis', 'parity')):
+        for hd in hds:
+            xs, ms, es = [], [], []
+            for x, nm in points:
+                rows = base if nm is None else _phase(data, nm)
+                if not rows:
+                    continue
+                m, e = _acc(rows, 's2', hd)
+                if np.isfinite(m):
+                    xs.append(x); ms.append(m); es.append(e)
+            if xs:
+                a_.errorbar(xs, ms, yerr=es, marker=marker, ms=4, color=HD_COLOR[hd],
+                            label=hd, capsize=2, lw=1.3, elinewidth=0.7)
+        a_.axhline(0.5, ls='--', color='#999', lw=0.8)
+        a_.set_xlabel(xlabel); a_.set_ylabel('orbit-phase accuracy'); a_.set_ylim(0.45, 1.02)
+
+    _sweep(ax[0, 0], [(12, 'phase_a12'), (18, None), (24, 'phase_a24'), (30, 'phase_a30')],
+           'arena size', 'o')
+    _panel(ax[0, 0], 'a'); ax[0, 0].legend(fontsize=6, loc='center right')
+    _sweep(ax[0, 1], [(250, 'phase_h250'), (500, None), (1000, 'phase_h1000')], 'hidden units', 's')
+    _panel(ax[0, 1], 'b')
+    # (c) HD-lesion dose-response, all encodings
+    levels = [(0.0, None), (0.15, 'phase_noise015'), (0.30, 'phase_noisy'),
+              (0.50, 'phase_noise050'), (0.70, 'phase_noise070')]
+    for hd in HD_ORDER:
+        xs, ms, es = [], [], []
+        for nz, nm in levels:
+            rows = base if nm is None else _phase(data, nm)
+            if not rows:
+                continue
+            m, e = _acc(rows, 's2', hd)
+            if np.isfinite(m):
+                xs.append(nz); ms.append(m); es.append(e)
+        if xs:
+            ax[1, 0].errorbar(xs, ms, yerr=es, marker='o', ms=4, color=HD_COLOR[hd],
+                              label=hd, capsize=2, lw=1.3, elinewidth=0.7)
+    ax[1, 0].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[1, 0].set_xlabel('head-direction corruption'); ax[1, 0].set_ylabel('orbit-phase accuracy')
+    ax[1, 0].set_ylim(0.45, 1.02); _panel(ax[1, 0], 'c'); ax[1, 0].legend(fontsize=6, ncol=2)
+    # (d) learned (angular-velocity) compass, by arena
+    lrn = _phase(data, 'phase_learned_c2')
+    conds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in lrn)]
+    ms, es = zip(*[_mean_sem([_f(r, 'phase_acc') for r in lrn if r['condition'] == c])
+                   for c in conds]) if conds else ([], [])
+    ax[1, 1].bar(range(len(conds)), ms, 0.62, yerr=es, capsize=2,
+                 color=[COND_SHADE[c] for c in conds], edgecolor='k', lw=0.4, error_kw={'lw': 0.7})
+    ax[1, 1].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[1, 1].set_xticks(range(len(conds))); ax[1, 1].set_xticklabels([COND_CN[c] for c in conds])
+    ax[1, 1].set_ylabel('orbit-phase accuracy'); ax[1, 1].set_ylim(0.45, 1.02)
+    ax[1, 1].set_title('learned compass', fontsize=7); _panel(ax[1, 1], 'd')
+    fig.tight_layout()
+    out = figs / 'fig5_generality.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def fig6_brain(data: Path, figs: Path):
+    """To the brain: 4-room repetition, real CA1 directional correlation, city-block model."""
+    fig, ax = plt.subplots(1, 3, figsize=(WIDE, 2.7))
+    # (a) four-room Spiers
+    c4 = _read(data / 'compartments4.csv') if (data / 'compartments4.csv').exists() else []
+    mets = [('room_gen', 'room\ndecode'), ('room_seen', 'room\nkNN'),
+            ('repetition', 'field\nrepeat'), ('within_r2', 'within\n$R^2$')]
+    if c4:
+        ms, es = zip(*[_mean_sem([_f(r, k) for r in c4]) for k, _ in mets])
+        ax[0].bar(range(4), ms, 0.66, yerr=es, capsize=2,
+                  color=['#1F3B5C', '#1F3B5C', '#3A6B6B', '#9C4A2F'], edgecolor='k', lw=0.4,
+                  error_kw={'lw': 0.7})
+        ax[0].axhline(0.25, ls='--', color='#999', lw=0.8)
+        ax[0].set_xticks(range(4)); ax[0].set_xticklabels([m[1] for m in mets], fontsize=6)
+        ax[0].set_ylabel('value'); ax[0].set_ylim(-0.1, 1.05)
+    ax[0].set_title('four-room maze (model)', fontsize=7); _panel(ax[0], 'a')
+    # (b) real CA1 directional-index correlation, same-orientation field pairs
+    fd = _read(data / 'hockeimer_field_di.csv') if (data / 'hockeimer_field_di.csv').exists() else []
+    xs, ys = [], []
+    if fd:
+        by = {}
+        for r in fd:
+            if r['rep'] in ('True', 'TRUE', True):
+                by.setdefault((r['cell'], r['orient']), []).append(_f(r, 'di'))
+        for v in by.values():
+            for i in range(len(v)):
+                for j in range(len(v)):
+                    if i != j:
+                        xs.append(v[i]); ys.append(v[j])
+    if xs:
+        ax[1].scatter(xs, ys, s=7, color='#1F3B5C', alpha=0.4, edgecolors='none')
+        xr = np.array([-1, 1]); b = np.polyfit(xs, ys, 1)
+        ax[1].plot(xr, b[0] * xr + b[1], color='#9C4A2F', lw=1.5)
+        r = np.corrcoef(xs, ys)[0, 1]
+        ax[1].text(0.05, 0.92, f'$r={r:.2f}$', transform=ax[1].transAxes, fontsize=7)
+        ax[1].set_xlim(-1, 1); ax[1].set_ylim(-1, 1)
+        ax[1].set_xlabel('field $i$ directional index'); ax[1].set_ylabel('field $j$ directional index')
+    ax[1].set_title('real CA1 (Hockeimer)', fontsize=7); _panel(ax[1], 'b')
+    # (c) city-block model directional correlation (if available)
+    cb = _read(data / 'cityblock.csv') if (data / 'cityblock.csv').exists() else []
+    cx, cy = [], []
+    if cb:
+        by = {}
+        for r in cb:
+            by.setdefault((r['seed'], r['unit'], r['orient']), []).append(_f(r, 'di'))
+        for v in by.values():
+            for i in range(len(v)):
+                for j in range(len(v)):
+                    if i != j:
+                        cx.append(v[i]); cy.append(v[j])
+    if cx:
+        ax[2].scatter(cx, cy, s=6, color='#3A6B6B', alpha=0.35, edgecolors='none')
+        xr = np.array([-1, 1]); b = np.polyfit(cx, cy, 1)
+        ax[2].plot(xr, b[0] * xr + b[1], color='#9C4A2F', lw=1.5)
+        rc = np.corrcoef(cx, cy)[0, 1]
+        ax[2].text(0.05, 0.92, f'$r={rc:.2f}$', transform=ax[2].transAxes, fontsize=7)
+        ax[2].set_xlim(-1, 1); ax[2].set_ylim(-1, 1); ax[2].set_xlabel('field $i$ DI'); ax[2].set_ylabel('field $j$ DI')
+    else:
+        ax[2].text(0.5, 0.5, 'city-block\n(training)', ha='center', va='center',
+                   transform=ax[2].transAxes, fontsize=7, color='#999')
+        ax[2].set_xticks([]); ax[2].set_yticks([])
+    ax[2].set_title('city-block model', fontsize=7); _panel(ax[2], 'c')
+    fig.tight_layout()
+    out = figs / 'fig6_brain.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True)
@@ -471,8 +608,8 @@ def main():
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
     allfigs = {'fig1': fig1_setup, 'fig2': fig2_fold, 'fig3': fig3_function,
-               'fig4': fig4_geometry, 'init': figS_init, 'units': figS_units,
-               'celltypes': figS_celltypes}
+               'fig4': fig4_geometry, 'fig5': fig5_generality, 'fig6': fig6_brain,
+               'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
             continue
