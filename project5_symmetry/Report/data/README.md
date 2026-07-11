@@ -18,6 +18,9 @@ survive loss of the compute pod.
 
 - `phase_s4_c4.csv` -- C4 four-way phase decoding in the s4 arena (Table 3; n=4, 16 networks).
 - `phase_nonlinear.csv` -- nonlinear phase-decoding control (linear/kNN/MLP, C2 arena).
+- `phase_learned_c2.csv` -- LEARNED (angular-velocity) compass: folds C2 (0.531) and C4 (0.525)
+  arenas, decodes C1 (0.969); the fold arises from an unanchored path-integrated compass, no
+  imposed encoding. Retires the oracle-HD limitation.
 - `manifold_robustness.csv` -- fold ratio in the full hidden space and under PCA, Isomap and
   t-SNE, showing the fold (ratio < 1 for axis/C2, > 1 otherwise) is not a PCA artefact.
 - `remapping.csv` -- population-vector correlation between symmetry-related positions

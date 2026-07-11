@@ -393,6 +393,28 @@ networks the separation narrows only slightly (from $0.403$), driven by a small 
 it does when clean. (These networks were trained for $30{,}000$ steps rather than
 $80{,}000$; the effect is already complete by then.)
 
+\subsection{A learned, unanchored compass folds symmetric arenas on its own}
+
+The strongest form of the test removes the oracle entirely. Rather than degrade a supplied
+compass, we withheld absolute heading and gave the network only \emph{angular velocity} --- the
+per-step turn --- so it had to integrate its own heading, unanchored, as a path-integrating
+head-direction system does. An integrated compass is defined only up to a global rotation, so it
+is invariant under any rotation of the arena and cannot, by itself, separate a position from its
+symmetry image.
+
+The learned compass reproduces the fold from first principles. In the asymmetric arena the
+network decodes orbit phase almost perfectly ($0.969$, $n=2$), because the arena's unique
+landmarks anchor absolute position. In the $C_2$ arena it falls to chance ($0.531$, chance
+$0.500$, $n=10$), folding the two halves onto one map --- raw position is not recoverable
+($R^2 = -0.08$) while position \emph{within} the fundamental domain is ($R^2 = 0.89$): the
+network knows where it is inside a copy, not which copy. In the $C_4$ arena it folds likewise
+($0.525$, $n=8$; $R^2_{\text{domain}} = -0.47$, the four-fold signature a $C_2$ decoder cannot
+see). This is the same fold the hand-designed \textit{axis} and \textit{const} encodings produce,
+now arising from the compass itself. The fold is therefore not an artefact of imposing an
+invariant encoding: it is the generic consequence of a self-motion signal that carries no
+absolute reference under the arena's symmetry --- the situation of a biological compass that has
+lost its landmark anchor.
+
 \subsection{Two natural readouts fail, in two different ways}
 
 Decomposing each unit's rate map into the four characters of $C_4$ gives an isotypic power
@@ -694,9 +716,10 @@ mean $-0.35$, maximum $+0.08$, none above the conventional $0.3$ threshold), whi
 given that head direction is supplied as an input rather than learned and that no
 non-negativity constraint is imposed \citep{sorscher2023unified}; the toroidal code of
 \citet{gardner2022toroidal} cannot exist in this model, and we do not claim it. The
-head-direction signal is a noiseless oracle, whereas the biological compass drifts and is
-re-anchored by vision; a control that corrupts the compass on $30\%$ of steps (Results) leaves
-the dissociation intact, but a fully learned, continuously drifting compass is not tested here.
+head-direction signal is supplied rather than continuous: a control corrupting the compass on
+$30\%$ of steps leaves the dissociation intact, and a \emph{learned} compass integrated from
+angular velocity alone reproduces the fold on its own (Results), but a continuous compass that
+drifts and is re-anchored by vision over time is not modelled here.
 We also tested whether
 population-manifold topology crystallizes before metric geometry, a proposed developmental
 ordering. With a shuffle-null Betti estimator the effect does not hold in these arenas:
