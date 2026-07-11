@@ -92,11 +92,14 @@ group-theoretic ceiling exactly: a $G$-folded code cannot exceed $1/|G|$ phase a
 for the only $C_4$-invariant one). Finally, the entire effect is contingent on the objective:
 with a matched autoencoder --- identical architecture, identical HD input, reconstruction
 instead of prediction --- the full two-bit compass is worthless and every encoding folds
-($p = 0.59$). One step of prediction restores it completely. We conclude that a self-motion
-signal resolves only those symmetries under which it is not itself invariant, and only when
-the objective forces the network to integrate it. Along the way we show that two natural
-readouts, rotational autocorrelation and odd isotypic power, are respectively blind to and
-confounded by this phenomenon.
+($p = 0.59$). One step of prediction restores it completely. The mechanism has external
+validity and is robust: it reproduces the place-field repetition seen across visually identical
+compartments in rodents \citep{grieves2016}, folding translationally related rooms and lifting
+rotationally related ones, and it survives a head-direction signal corrupted on a third of its
+steps. We conclude that a self-motion signal resolves only those symmetries under which it is
+not itself invariant, and only when the objective forces the network to integrate it. Along the
+way we show that two natural readouts, rotational autocorrelation and odd isotypic power, are
+respectively blind to and confounded by this phenomenon.
 \end{abstract}
 
 \vspace{1em}
@@ -129,10 +132,18 @@ $G$-invariant, and no amount of that signal can lift the ambiguity --- the code 
 onto the quotient $X/G$. An encoding carrying exactly the same number of bits, but not
 invariant under $g$, lifts it completely.
 
-Two further results follow from the same design. Read through the $C_4$ quotient rather than
-the $C_2$ one, the folding produces a hard, quantitative ceiling ($1/|G|$) that the trained
-networks hit. And the whole phenomenon is a property of \emph{predictive} learning: under a
-matched reconstruction objective the compass does nothing at all.
+The same design yields a sequence of further results. The fold is visible directly in
+single-cell tuning: the place fields the networks grow without spatial supervision repeat at
+symmetry-related locations when the compass is invariant, once under $C_2$ and four times under
+$C_4$. Read through the $C_4$ quotient, the folding produces a hard $1/|G|$ ceiling that the
+networks hit exactly. The effect is a property of \emph{predictive} learning, since a matched
+reconstruction objective folds every encoding alike, and it survives a compass corrupted on a
+third of its steps. It also reproduces an experiment: place cells in visually identical
+compartments repeat when the compartments are translationally related and separate when they
+are rotationally related, the dissociation \citet{grieves2016} reported in the rodent
+hippocampus. Throughout we distinguish a folded code from a broken one; the folded networks
+build a reproducible spatial map and merely discard which copy of the fundamental domain the
+animal occupies.
 
 \section{Results}
 
