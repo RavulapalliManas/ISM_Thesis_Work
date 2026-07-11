@@ -1,2 +1,0 @@
-"""Geometry and statistics metrics."""
-

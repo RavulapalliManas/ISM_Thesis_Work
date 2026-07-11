@@ -1,2 +1,0 @@
-"""Publication-grade figure generation."""
-
