@@ -393,6 +393,40 @@ def fig_fields(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+def fig_encodings(data: Path, figs: Path):
+    """The four head-direction encodings as 4x4 matrices on the heading block {E,S,W,N}.
+    Matrices are the exact transforms from environments/hd_encodings.py. axis and const are the
+    ones invariant under the 180-deg rotation (they fold the C2 arena); const is the only one
+    invariant under the full C4 group."""
+    H = ['E', 'S', 'W', 'N']
+    mats = {
+        'full':   np.eye(4),
+        'parity': np.array([[.5, .5, 0, 0], [.5, .5, 0, 0], [0, 0, .5, .5], [0, 0, .5, .5]]),
+        'axis':   np.array([[.5, 0, .5, 0], [0, .5, 0, .5], [.5, 0, .5, 0], [0, .5, 0, .5]]),
+        'const':  np.full((4, 4), 0.25)}
+    bits = {'full': 2.0, 'parity': 1.0, 'axis': 1.0, 'const': 0.0}
+    c2 = {'axis': True, 'const': True}
+    c4 = {'const': True}
+    fig, axes = plt.subplots(1, 4, figsize=(WIDE, 2.0))
+    for ax, m in zip(axes, HD_ORDER):
+        M = mats[m]
+        ax.imshow(M, cmap='Greys', vmin=0, vmax=1, interpolation='nearest')
+        ax.set_xticks(range(4)); ax.set_yticks(range(4))
+        ax.set_xticklabels(H, fontsize=7); ax.set_yticklabels(H, fontsize=7)
+        ax.set_title(m, fontsize=9, color=HD_COLOR[m], fontweight='bold', pad=3)
+        tag = f'{bits[m]:.0f} bit' + ('' if bits[m] == 1 else 's')
+        inv = []
+        if c2.get(m): inv.append('$C_2$')
+        if c4.get(m): inv.append('$C_4$')
+        tag += '\ninv: ' + (', '.join(inv) if inv else 'none')
+        ax.set_xlabel(tag, fontsize=7.5)
+        for s in ax.spines.values():
+            s.set_edgecolor('#999999')
+    fig.tight_layout()
+    out = figs / 'fig_encodings.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def fig_manifold_pc(data: Path, figs: Path):
     """Population manifolds of the topology arenas, PCA to 3-D, one point per passable cell,
     coloured by the cell's angle around the arena centre. A ring manifold shows the colour
@@ -465,8 +499,9 @@ def main():
     a = ap.parse_args()
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
-    allfigs = {'place_cells': fig_place_cells, 'place_cells_all': fig_place_cells_all,
-               'fields': fig_fields, 'manifold_pc': fig_manifold_pc, 'horizon': fig_horizon,
+    allfigs = {'encodings': fig_encodings, 'place_cells': fig_place_cells,
+               'place_cells_all': fig_place_cells_all, 'fields': fig_fields,
+               'manifold_pc': fig_manifold_pc, 'horizon': fig_horizon,
                'map_quality': fig_map_quality, 'compartments': fig_compartments,
                'init': fig_init, 'topology': fig_topology}
     for name, fn in allfigs.items():

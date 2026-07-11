@@ -174,9 +174,22 @@ encoding & bits & $C_2$-invariant & $C_4$-invariant \\
 \end{tabular}
 \end{table}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_encodings.pdf}
+\caption{The four head-direction encodings, as $4\times4$ transforms of the one-hot heading
+block $\{$E, S, W, N$\}$. \textit{full} is the identity (two bits); \textit{parity} and
+\textit{axis} each collapse the compass to one bit but partition the headings differently;
+\textit{const} discards it entirely. \textit{axis} and \textit{const} are invariant under the
+$180^\circ$ rotation and so fold the $C_2$ arena, while \textit{const} is the only encoding
+invariant under the full $C_4$ group. \textit{axis} and \textit{parity} carry identical
+information and differ only in this invariance.}
+\label{fig:encodings}
+\end{figure}
+
 The two hypotheses make opposite predictions. If folding tracks how much information the
-compass carries, \textit{axis} and \textit{parity} behave alike. If it tracks invariance,
-\textit{axis} folds and \textit{parity} does not.
+compass carries, \textit{axis} and \textit{parity} behave alike (Fig.~\ref{fig:encodings}). If
+it tracks invariance, \textit{axis} folds and \textit{parity} does not.
 
 \subsection{Predictive learning grows place cells, and symmetry makes them repeat}
 
