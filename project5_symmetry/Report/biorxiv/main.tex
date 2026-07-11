@@ -1,63 +1,17 @@
-% bioRxiv preprint format.
-% Build:  latexmk -pdf main.tex
+% eLife house format. Build with XeLaTeX (the class uses unicode-math):
+%   xelatex main; bibtex main; xelatex main; xelatex main
 % Every number traces to a CSV in ../data/ (see ../data/README.md).
 
-\documentclass[10pt, letterpaper]{article}
+\documentclass[9pt,lineno]{elife}
 
-\usepackage[letterpaper, top=2.2cm, bottom=2.4cm, left=2.3cm, right=2.3cm]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{textcomp}
-\usepackage{amsmath, amssymb}
-\usepackage{newtxtext}
-\usepackage[scaled=0.92]{helvet}
-\let\Bbbk\relax                 % avoid the newtxmath/amssymb \Bbbk clash
-\usepackage{newtxmath}
-\usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{microtype}
-\usepackage{authblk}
-\usepackage{titlesec}
-\usepackage{xcolor}
-\usepackage{caption}
-\usepackage{fancyhdr}
-\usepackage{setspace}
-\usepackage[round, authoryear]{natbib}
-\usepackage[hidelinks]{hyperref}
+\graphicspath{{figures/}}
 
-\definecolor{sec}{RGB}{22,45,74}
-\setstretch{1.05}
-
-% Sans-serif navy section headings, tight spacing (the preprint look).
-\titleformat{\section}{\sffamily\large\bfseries\color{sec}}{\thesection}{0.6em}{}
-\titleformat{\subsection}{\sffamily\normalsize\bfseries\color{sec}}{\thesubsection}{0.6em}{}
-\titlespacing*{\section}{0pt}{1.5ex}{0.6ex}
-\titlespacing*{\subsection}{0pt}{1.1ex}{0.4ex}
-
-\captionsetup{labelfont={bf,sf}, font=small, labelsep=period, justification=justified}
-
-\renewcommand\Authfont{\sffamily\large}
-\renewcommand\Affilfont{\sffamily\small}
-\setlength{\affilsep}{0.4em}
-
-% Abstract as a full-width ruled block with a run-in heading.
-\renewenvironment{abstract}
-  {\vspace{0.2em}\noindent{\color{sec}\rule{\linewidth}{1pt}}\par\vspace{0.5em}\small
-   \noindent\textbf{\sffamily\color{sec}Abstract.}\hspace{0.6em}\ignorespaces}
-  {\par\vspace{0.5em}\noindent{\color{sec}\rule{\linewidth}{0.5pt}}\par\normalsize\vspace{0.3em}}
-
-\pagestyle{fancy}\fancyhf{}
-\renewcommand{\headrulewidth}{0pt}\renewcommand{\footrulewidth}{0pt}
-\fancyhead[L]{\sffamily\footnotesize\color{sec}Symmetry determines what a predictive map collapses}
-\fancyfoot[C]{\sffamily\footnotesize\thepage}
-
-\title{\sffamily\bfseries\color{sec}Symmetry, not information, determines what a predictive
-cognitive map collapses, and only prediction resolves it}
+\title{Head-direction invariance, not information, determines whether a predictive cognitive
+map folds under symmetry}
 
 \author[1]{Manas Venkata Sai Ravulapalli}
 \affil[1]{Ashoka University, Sonipat, India}
-
-\date{}
+\corr{manasvenkatasai.ravulapalli\_ug2023@ashoka.edu.in}{MR}
 
 \begin{document}
 \maketitle
@@ -95,10 +49,6 @@ not itself invariant, and only when the objective forces the network to integrat
 way we show that two natural readouts, rotational autocorrelation and odd isotypic power, are
 respectively blind to and confounded by this phenomenon.
 \end{abstract}
-
-\vspace{1em}
-\noindent\textbf{Keywords:} predictive learning; cognitive map; hippocampus; head direction;
-rotational symmetry; group representation; recurrent neural network
 
 \section{Introduction}
 
@@ -170,26 +120,29 @@ encoding & bits & $C_2$-invariant & $C_4$-invariant \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_encodings.pdf}
-\caption{The four head-direction encodings, as $4\times4$ transforms of the one-hot heading
-block $\{$E, S, W, N$\}$. \textit{full} is the identity (two bits); \textit{parity} and
-\textit{axis} each collapse the compass to one bit but partition the headings differently;
-\textit{const} discards it entirely. \textit{axis} and \textit{const} are invariant under the
-$180^\circ$ rotation and so fold the $C_2$ arena, while \textit{const} is the only encoding
-invariant under the full $C_4$ group. \textit{axis} and \textit{parity} carry identical
-information and differ only in this invariance.}
-\label{fig:encodings}
+\includegraphics[width=\textwidth]{figures/fig1_setup.pdf}
+\caption{\textbf{Design and phenotype.} (\textbf{a}) The four head-direction encodings, as
+$4\times4$ transforms of the one-hot heading block $\{$E,S,W,N$\}$; grey level is the matrix
+weight. \textit{full} is the identity (two bits); \textit{parity} and \textit{axis} collapse the
+compass to one bit with different partitions; \textit{const} discards it. \textit{axis} and
+\textit{const} are invariant under the $180^\circ$ rotation and fold the $C_2$ arena;
+\textit{const} is the only encoding invariant under the full $C_4$ group. \textit{axis} and
+\textit{parity} carry identical information and differ only in invariance. (\textbf{b}) Mean
+firing-rate maps (smoothed, peak-normalised) of example units. Fields are single and sharp when
+the code does not fold, and repeat at the symmetry-related locations --- once under $C_2$
+(\textit{axis} encoding) and four times under $C_4$ (\textit{const}).}
+\label{fig:setup}
 \end{figure}
 
 The two hypotheses make opposite predictions. If folding tracks how much information the
-compass carries, \textit{axis} and \textit{parity} behave alike (Fig.~\ref{fig:encodings}). If
+compass carries, \textit{axis} and \textit{parity} behave alike (Fig.~\ref{fig:setup}a). If
 it tracks invariance, \textit{axis} folds and \textit{parity} does not.
 
 \subsection{Predictive learning grows place cells, and symmetry makes them repeat}
 
 Trained on prediction alone, the networks develop units with localised spatial firing fields,
 the place cells reported for this objective by \citet{levenstein2024}
-(Fig.~\ref{fig:placecells}). In the asymmetric arena under the full compass, about $480$ of the
+(Fig.~\ref{fig:setup}b). In the asymmetric arena under the full compass, about $480$ of the
 $500$ units carry a place field (a median of about two fields per unit). The effect of symmetry is visible in the rate maps
 before any decoder is applied. When the arena is symmetric and the head-direction encoding is
 invariant to that symmetry, the fields repeat: a unit in the $C_2$ arena under \textit{axis}
@@ -198,19 +151,6 @@ fires at a location and again at its $180^\circ$ image, and a unit in the $C_4$ 
 symmetry orbit as the same place. The sections that follow quantify this and isolate what
 controls it.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/fig_place_cells.pdf}
-\caption{Place cells and their folding. Each tile is one hidden unit's mean firing-rate map
-over the arena, smoothed for display and normalised to its own peak; rows are conditions and
-columns are example units. Top row: in the asymmetric arena under the full compass, units
-have single, sharp place fields. Second row: the same holds in the $C_2$ arena when the full
-compass is available. Third row ($C_2$ arena, \textit{axis} encoding) and fourth row ($C_4$
-arena, \textit{const} encoding): when the head-direction encoding is invariant to the arena's
-symmetry, each field repeats at the symmetry-related locations, once under $C_2$ and four times
-under $C_4$.}
-\label{fig:placecells}
-\end{figure}
 
 \subsection{Invariance, not information, folds the code}
 
@@ -348,7 +288,7 @@ a network is free to discard information its loss does not reward. This is what 
 shows. At $k=0$ the input still separates $1228$ of the $1296$ states under \textit{full} --- the
 compass is right there --- yet all four encodings collapse to within $0.005$ of one another
 (Table~\ref{tab:horizon}), landing on the \emph{observation-only} bound of $0.500$. The spread
-across encodings is $0.0052$ at $k=0$ against $0.427$ at $k=5$.
+across encodings is $0.0052$ at $k=0$ against $0.427$ at $k=5$ (Fig.~\ref{fig:function}a).
 
 So the compass is not absent under reconstruction; it is \emph{discarded}. Reconstructing
 $o_t$ never requires knowing which of two identical-looking places you occupy. Predicting $o_{t+1}$
@@ -393,16 +333,18 @@ recruit the compass, whatever else it reconstructs.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_horizon.pdf}
-\caption{Symmetry resolution and offline replay across the prediction horizon $k$, in the
-$C_2$ arena, for the four head-direction encodings. Left: orbit-phase decoding accuracy
-(chance $0.5$). The two encodings that are not $C_2$-invariant (\textit{full}, \textit{parity})
-resolve the fold at $k \geq 1$, while the two invariant ones (\textit{axis}, \textit{const})
-stay at chance. Right: coverage of the self-generated offline trajectory as a fraction of a
-wake path of equal length; the dashed line marks wake coverage. Both readouts step up at
-$k = 1$ and are ordered by how much of the compass the encoding retains. Points are mean
-$\pm$ s.e.m.\ over $n = 6$ networks.}
-\label{fig:horizon}
+\includegraphics[width=\textwidth]{figures/fig3_function.pdf}
+\caption{\textbf{Functional consequences of the fold.} (\textbf{a}) Orbit-phase decoding
+accuracy vs prediction horizon $k$ in the $C_2$ arena (chance $0.5$); the non-invariant
+encodings (\textit{full}, \textit{parity}) resolve the fold at $k \geq 1$, the invariant ones
+(\textit{axis}, \textit{const}) stay near chance. (\textbf{b}) Coverage of the self-generated
+offline trajectory as a fraction of a wake path of equal length (dashed line, wake). Both step
+up at $k = 1$ and are ordered by how much of the compass the encoding keeps; points are mean
+$\pm$ s.e.m., $n = 6$. (\textbf{c}) Place-field repetition across two observationally identical
+compartments ($n = 8$ each): under translation the fields repeat and the room is undecodable
+(chance $0.5$), under rotation the fields do not repeat and the room decodes; within-room
+position ($R^2$) stays high in both. Dots are individual networks.}
+\label{fig:function}
 \end{figure}
 
 \subsection{Offline replay emerges at the same horizon as symmetry resolution}
@@ -410,7 +352,7 @@ $\pm$ s.e.m.\ over $n = 6$ networks.}
 A predictive network can be run offline, driven by its own predicted observation in place of a
 real one, so that it generates trajectories without moving through the arena
 \citep{levenstein2024}. We generated $200$-step offline trajectories from each $C_2$ network and
-decoded position with a ridge decoder fit on waking activity (Fig.~\ref{fig:horizon}, right).
+decoded position with a ridge decoder fit on waking activity (Fig.~\ref{fig:function}b).
 For each trajectory we measured the fraction of the arena it covered, relative to a waking
 trajectory of the same length; a $200$-step walk visits only $27\%$ of the arena, so the raw
 fraction is hard to read on its own.
@@ -477,7 +419,7 @@ supported the same qualitative conclusion, by an argument that does not hold.
 Because the folded encodings decode orbit phase near chance (about $0.55$, reliably just above
 the $0.5$ floor but far below the $\sim\!0.95$ of the non-invariant encodings), we asked whether they had learned a
 spatial map at all, or whether ablating the compass had degraded the representation more
-broadly. Two measures argue that the map is intact (Fig.~\ref{fig:mapquality}). Spatial
+broadly. Two measures argue that the map is intact (Fig.~\ref{fig:fold}c,d). Spatial
 representational similarity, the Spearman correlation between neural distance and Euclidean
 distance across pairs of positions, fell as the compass was ablated, from $0.70$ under
 \textit{full} to $0.32$ under \textit{const} in the $C_1$ arena, and lower still in the
@@ -491,19 +433,24 @@ governs how the map is laid out rather than whether one forms.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_map_quality.pdf}
-\caption{A map forms and folds reproducibly. Left: spatial representational similarity falls as
-the head-direction encoding is ablated (\textit{full} to \textit{const}) and as arena symmetry
-increases ($C_1$ to $C_4$), the signature of a code collapsing onto the quotient. Right: the
-cross-seed correlation between independently trained networks stays above $0.96$ throughout, so
-the folding is consistent rather than degenerate. Bars are mean $\pm$ s.e.m.\ over networks.}
-\label{fig:mapquality}
+\includegraphics[width=\textwidth]{figures/fig2_fold.pdf}
+\caption{\textbf{Quantifying the fold.} (\textbf{a}) Mean place fields per unit; rises with both
+arena symmetry and encoding invariance, but also in the $C_1$ arena where nothing folds, so
+field count alone is confounded. (\textbf{b}) Rate-map $C_2$ symmetry index (correlation of a
+unit's map with its $180^\circ$ rotation), the fold-specific readout; it saturates near $0.97$
+only when the encoding is invariant to the arena's symmetry. (\textbf{c}) Spatial
+representational similarity falls as the encoding is ablated and as arena symmetry increases,
+the signature of collapse onto the quotient. (\textbf{d}) Cross-seed correlation between
+independently trained networks stays above $0.96$ throughout ($y$ zoomed to $0.9$--$1.0$): the
+fold is reproducible, not degenerate. Arenas $C_1/C_2/C_4$; bars are mean $\pm$ s.e.m.\ over
+networks.}
+\label{fig:fold}
 \end{figure}
 
 \subsection{Folding multiplies place fields and imprints the arena's symmetry on each map}
 
 The fold is visible cell by cell, not only in the population decoder. We characterised every
-unit's firing-rate map and counted its place fields (Fig.~\ref{fig:fields}). Fields per unit
+unit's firing-rate map and counted its place fields (Fig.~\ref{fig:fold}a). Fields per unit
 rise with both arena symmetry and encoding invariance, from $1.78$ under \textit{full} in the
 $C_1$ arena to $3.39$ under \textit{const} in the $C_4$ arena. On its own this count is a
 confounded readout: it rises even in the $C_1$ arena, where nothing can fold ($2.44$ fields
@@ -511,7 +458,7 @@ under \textit{const} against $1.78$ under \textit{full}), because a more invaria
 yields more multi-peaked units regardless of symmetry. The fold-specific question is whether
 the extra fields sit at group-related positions. We measure this as the correlation between a
 unit's rate map and its own $180^\circ$ rotation, a per-cell index of $C_2$ symmetry
-(Fig.~\ref{fig:fields}B). The index saturates near $0.97$ exactly when the encoding is
+(Fig.~\ref{fig:fold}b). The index saturates near $0.97$ exactly when the encoding is
 $C_2$-invariant and the arena is symmetric (\textit{axis} and \textit{const} in the $C_2$ and
 $C_4$ arenas), while the matched non-invariant encoding stays low (\textit{parity}, $0.36$ in
 $C_2$) and \textit{full} stays low throughout ($\le 0.16$). An invariant encoding alone induces
@@ -519,18 +466,6 @@ partial symmetry even in the $C_1$ arena ($0.61$ for \textit{axis}), which the a
 symmetry then completes. The four-fold version of the index reaches $0.97$ only for
 \textit{const} in the $C_4$ arena, the single fully $C_4$-invariant condition. Each map
 acquires precisely the symmetry the compass cannot break.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/fig_fields.pdf}
-\caption{Place-field structure across arenas and encodings. (A) Mean number of place fields per
-unit. It increases with both arena symmetry and encoding invariance, but also in the $C_1$
-arena where nothing folds, so it is confounded. (B) The rate-map $C_2$ symmetry index, the
-correlation of a unit's map with its $180^\circ$ rotation. This fold-specific measure saturates
-near $0.97$ only when the encoding is invariant to the arena's symmetry, and stays low for the
-non-invariant encodings. Bars are mean $\pm$ s.e.m.\ over networks.}
-\label{fig:fields}
-\end{figure}
 
 \subsection{The same dissociation appears across observationally identical compartments}
 
@@ -542,7 +477,7 @@ heading the observations coincided exactly. In one arrangement the rooms were re
 translation, under which the compass reads the same in both; in the other by a rotation, under
 which it does not. We trained networks on each arrangement and, for every network, decoded which
 room the animal occupied and measured whether individual units repeated their firing fields
-between the rooms (Fig.~\ref{fig:compartments}).
+between the rooms (Fig.~\ref{fig:function}c).
 
 The two arrangements gave opposite results ($n=8$ networks each). Under translation the fields
 repeated almost exactly across the rooms (repetition $0.997$) and the room could not be decoded
@@ -555,16 +490,6 @@ on all four measures (Mann--Whitney $p = 1.6\times10^{-4}$, the exact two-sided 
 vs.\ $8$). \citet{grieves2016} reported this same contrast in CA1, and here it follows from
 nothing but the group action of the arena on the compass.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.85\textwidth]{figures/fig_compartments.pdf}
-\caption{Place-field repetition across two observationally identical compartments. Under
-translation (parallel rooms) fields repeat and the room is undecodable, at chance even for a
-decoder tested on cells it has seen. Under rotation (radial rooms) fields do not repeat and the
-room is fully decodable. Within-room position ($R^2$) is high in both, so neither network has
-stopped coding space. Bars are mean $\pm$ s.e.m.; dots are individual networks.}
-\label{fig:compartments}
-\end{figure}
 
 \section{Discussion}
 
@@ -792,7 +717,6 @@ Large language models were used for code review, refactoring, and drafting assis
 experiments, statistics and scientific claims were specified, executed and verified by the
 author; every number reported here is produced by the archived analysis scripts.
 
-\bibliographystyle{plainnat}
 \bibliography{../references}
 
 \end{document}

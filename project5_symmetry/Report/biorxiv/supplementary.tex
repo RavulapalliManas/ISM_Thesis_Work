@@ -24,7 +24,7 @@
 \fancyfoot[C]{\sffamily\footnotesize S\thepage}
 
 \title{\sffamily\bfseries\color{sec}Supplementary Information\\[2pt]
-\large\mdseries Symmetry, not information, determines what a predictive cognitive map collapses}
+\large\mdseries Head-direction invariance, not information, determines whether a predictive cognitive map folds under symmetry}
 \author{\sffamily Manas Venkata Sai Ravulapalli}
 \date{}
 
@@ -75,7 +75,7 @@ group, and fields repeat at all four $90^\circ$-related locations.}
 
 \begin{figure}[h!]
 \centering
-\includegraphics[width=\textwidth]{figures/fig_manifold_pc.pdf}
+\includegraphics[width=\textwidth]{figures/fig4_geometry.pdf}
 \caption{Position-conditioned population manifolds for the four topology arenas, PCA to three
 dimensions (one point per passable cell, coloured by angle around the arena centre). Position is
 mapped smoothly in every arena, but the manifolds are high-dimensional: three principal
@@ -84,33 +84,6 @@ for the annulus ($b_1 = 1$) or the theta and figure-8 arenas ($b_1 = 2$). This i
 with the persistent-homology analysis, which does not recover the arenas' loop topology (main
 text, Limitations): the code is metrically organised well before, and without ever cleanly
 acquiring, the arena's topology.}
-\end{figure}
-
-\clearpage
-\section{Map quality and offline replay}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=\textwidth]{figures/fig_map_quality.pdf}
-\caption{Spatial representational similarity falls as the head-direction encoding is ablated and as
-arena symmetry increases (left), while the cross-seed correlation between independently trained
-networks stays high (right). A folded code is reproducible rather than degenerate.}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=\textwidth]{figures/fig_horizon.pdf}
-\caption{Symmetry resolution (left) and offline replay coverage (right) as a function of the
-prediction horizon $k$, for the four head-direction encodings in the $C_2$ arena. Both step up at
-$k=1$ and are graded by how much of the compass the encoding retains.}
-\end{figure}
-
-\begin{figure}[h!]
-\centering
-\includegraphics[width=0.7\textwidth]{figures/fig_init.pdf}
-\caption{Learning speed by recurrent initialisation, measured as area under the training-loss curve
-(lower is faster). A pure leak learns fastest; the abandoned Kaiming initialisation is slowest but
-converges without instability.}
 \end{figure}
 
 \clearpage
@@ -132,7 +105,7 @@ reported here for completeness.
 
 \begin{figure}[h!]
 \centering
-\includegraphics[width=0.75\textwidth]{figures/fig_init.pdf}
+\includegraphics[width=0.75\textwidth]{figures/figS_init.pdf}
 \caption{Learning speed by recurrent initialization, measured as area under the training-loss
 curve (lower is faster), ranked. A pure leak with no random recurrence learns fastest; adding
 random mixing slows learning monotonically. The abandoned Kaiming initialization is slowest but

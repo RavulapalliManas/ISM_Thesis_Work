@@ -82,6 +82,7 @@ project5_symmetry/results2/
 *.fls
 *.log
 *.out
+*.suppinfo
 *.synctex.gz
 *.toc
 
