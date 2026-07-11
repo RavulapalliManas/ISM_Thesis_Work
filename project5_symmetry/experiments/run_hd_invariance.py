@@ -104,7 +104,7 @@ def parse_seeds(pairs):
     return out
 
 
-def sample_batches(stores, spec, B, hd_stack, hd_noise=0.0):
+def sample_batches(stores, spec, B, hd_stack, hd_noise=0.0, learned_hd=False):
     """One independent batch per model, from that model's condition, with that
     model's HD transform applied to the heading block.
 
@@ -116,6 +116,11 @@ def sample_batches(stores, spec, B, hd_stack, hd_noise=0.0):
     rotated by a random +/-90 deg with probability `hd_noise`, so the network learns
     under a noisy head-direction signal. The corruption is applied to the true heading,
     not the encoded block, so it composes with any encoding.
+
+    `learned_hd` replaces the absolute compass with ANGULAR VELOCITY: the per-step turn
+    (none / +90 / 180 / -90 as a 4-way one-hot). The network is then given no absolute
+    heading and must integrate the turns itself, so any heading it forms is defined only
+    up to a global rotation -- an unanchored, path-integrated compass.
     """
     order = list(dict.fromkeys(c for c, _, _ in spec))
     obs_parts, act_parts = [], []
@@ -127,6 +132,12 @@ def sample_batches(stores, spec, B, hd_stack, hd_noise=0.0):
     obs = torch.cat(obs_parts, 0)
     act = torch.cat(act_parts, 0)                       # (S, B, T, 5)
     speed, hd = act[..., :1], act[..., 1:]
+    if learned_hd:
+        idx = hd.argmax(-1)                             # (S, B, T) absolute heading
+        turn = (idx - torch.roll(idx, 1, dims=-1)) % 4  # per-step turn (angular velocity)
+        turn[..., 0] = 0                                # no reference at the first step
+        hd = torch.nn.functional.one_hot(turn, 4).to(hd.dtype)
+        return obs, torch.cat([speed, hd], dim=-1)
     if hd_noise > 0:
         idx = hd.argmax(-1)                             # (S, B, T) true heading
         delta = torch.randint(0, 2, idx.shape, device=hd.device) * 2 - 1   # +/-1
@@ -163,6 +174,9 @@ def main():
     ap.add_argument('--seed-offset', type=int, default=0,
                     help='shift seed ids, to extend an existing run with fresh seeds')
     ap.add_argument('--hd-modes', nargs='+', default=list(MODES))
+    ap.add_argument('--learned-hd', action='store_true',
+                    help='replace the oracle compass with angular velocity (turns); the network '
+                         'integrates its own heading. Forces a single "learned" condition per arena.')
     ap.add_argument('--hidden-size', type=int, default=HIDDEN_SIZE,
                     help='recurrent width; a distinct size is a distinct graph (separate compile)')
     ap.add_argument('--arena-size', type=int, default=18,
@@ -176,6 +190,8 @@ def main():
     _enable_tf32(device)
     k = a.k
     hidden_size = a.hidden_size
+    if a.learned_hd:
+        a.hd_modes = ['learned']        # one integrated-compass condition per arena
     seeds = parse_seeds(a.seeds) if a.seeds else dict(DEFAULT_SEEDS)
     spec = [(c, h, s + a.seed_offset) for c, h, s in build_spec(seeds, a.hd_modes)]
     conditions = list(seeds)
@@ -194,14 +210,17 @@ def main():
         stores[cond] = PackedTrajectoryStore(str(d), device=device)
         print(f'  {cond}: {len(stores[cond])} trajectories', flush=True)
 
-    hd_stack = torch.stack([hd_matrix(hd, device=device) for _, hd, _ in spec])   # (S,4,4)
+    if a.learned_hd:
+        hd_stack = torch.eye(4, device=device).expand(S, 4, 4).contiguous()  # unused; see sample_batches
+    else:
+        hd_stack = torch.stack([hd_matrix(hd, device=device) for _, hd, _ in spec])   # (S,4,4)
 
     # Distinct, deterministic init per cell. NOT hash() -- that is salted per
     # process, so the run would not reproduce across restarts.
     models = build_models_k([init_seed(c, hd, s, conditions, a.hd_modes)
                             for c, hd, s in spec], device, k, hidden_size)
 
-    obs, act = sample_batches(stores, spec, B, hd_stack)
+    obs, act = sample_batches(stores, spec, B, hd_stack, learned_hd=a.learned_hd)
     state = torch.rand(S, B, hidden_size, device=device) * HIDDEN_INIT_SIGMA
     nm = NOISE_STD * torch.randn(S, B, T, hidden_size, device=device)
     nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, hidden_size, device=device)
@@ -221,7 +240,7 @@ def main():
         gfn = torch.compile(gfn, mode=a.compile)
 
     meta = {'obs_size': OBS, 'k': k, 'trunc': T, 'hidden_size': hidden_size, 'F': F,
-            'arena_size': a.arena_size, 'hd_noise': a.hd_noise,
+            'arena_size': a.arena_size, 'hd_noise': a.hd_noise, 'learned_hd': a.learned_hd,
             'batch_size': B, 'noise_std': NOISE_STD, 'dropout_p': DROPOUT_P,
             'hidden_init_sigma': HIDDEN_INIT_SIGMA, 'pred_offset': PRED_OFFSET,
             'n_steps': a.n_steps, 'runner': 'ensemble_vmap_hd_invariance'}
@@ -230,7 +249,7 @@ def main():
     print('compiling + training...', flush=True)
     t0 = time.perf_counter()
     for step in range(1, a.n_steps + 1):
-        obs, act = sample_batches(stores, spec, B, hd_stack, a.hd_noise)
+        obs, act = sample_batches(stores, spec, B, hd_stack, a.hd_noise, learned_hd=a.learned_hd)
         state = torch.rand(S, B, hidden_size, device=device) * HIDDEN_INIT_SIGMA
         nm = NOISE_STD * torch.randn(S, B, T, hidden_size, device=device)
         nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, hidden_size, device=device)

@@ -73,9 +73,20 @@ def is_invariant(mode: str, generator: int) -> bool:
 
 
 def apply_hd(act: torch.Tensor, mode: str) -> torch.Tensor:
-    """act (..., 5) = [speed, onehot(heading)]. Transform the heading block only."""
+    """act (..., 5) = [speed, onehot(heading)]. Transform the heading block only.
+
+    `mode='learned'` replaces the absolute compass with angular velocity (the per-step turn),
+    matching run_hd_invariance.sample_batches, so a network trained with a learned compass is
+    evaluated on the same input it saw.
+    """
     if mode == 'full':
         return act
+    if mode == 'learned':
+        idx = act[..., 1:].argmax(-1)
+        turn = (idx - torch.roll(idx, 1, dims=-1)) % 4
+        turn[..., 0] = 0                                 # no reference at the first step
+        hd = torch.nn.functional.one_hot(turn, 4).to(act.dtype)
+        return torch.cat([act[..., :1], hd], dim=-1)
     M = hd_matrix(mode, device=act.device, dtype=act.dtype)
     speed, hd = act[..., :1], act[..., 1:]
     return torch.cat([speed, hd @ M.T], dim=-1)
