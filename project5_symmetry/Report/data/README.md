@@ -30,6 +30,11 @@ survive loss of the compute pod.
   testing whether the topology-before-geometry null is a linear-reduction artefact.
 - `diffusion_maps.csv` -- diffusion-map geometry: topology loop scores + intrinsic dimension, and
   the C2 fold ratio in diffusion distance (axis 0.22 vs full 3.79). Figure: figS_diffusion.pdf.
+- `hockeimer_field_di.csv`, `hockeimer_summary.csv` -- REAL-DATA test of the HD-invariance
+  prediction in Hockeimer et al. (2023) CA1 city-block data (JHU doi:10.7281/T15HMQD4, external).
+  Repeating fields in same-orientation (translation-related) alleys share directional preference
+  (pair r=+0.23, shuffle p=0.007; mixed-model ICC=0.31, 5 rats) -- the fold in real neurons.
+  Regenerate with analysis/hockeimer_reanalysis.py from the downloaded dataset.
 - `isotypic_symmetry.csv` -- C4 isotypic spectrum (P0..P3, RA, odd) for the clean 17-network
   full-HD sweep; RA vs odd s1-vs-s2 separation ("Two natural readouts fail").
 - `isotypic_hd.csv` -- same spectrum for the 112 HD-invariance networks; the confounded
