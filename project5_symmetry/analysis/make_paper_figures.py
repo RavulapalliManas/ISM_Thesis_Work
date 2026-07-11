@@ -23,10 +23,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec  # noqa: E402
 
-# Colourblind-safe (Wong 2011), fixed per head-direction encoding across every figure.
-HD_COLOR = {'full': '#0072B2', 'parity': '#009E73', 'axis': '#D55E00', 'const': '#7F7F7F'}
+# Muted, formal palette (still colourblind-distinguishable), fixed per HD encoding everywhere.
+HD_COLOR = {'full': '#1F3B5C', 'parity': '#3A6B6B', 'axis': '#9C4A2F', 'const': '#8A8A8A'}
 HD_ORDER = ['full', 'parity', 'axis', 'const']
-TWO = {'translation': '#0072B2', 'rotation': '#D55E00'}
+TWO = {'translation': '#1F3B5C', 'rotation': '#9C4A2F'}
 COND_CN = {'s1': '$C_1$', 's2': '$C_2$', 's4': '$C_4$'}       # arena naming, everywhere
 COND_SHADE = {'s1': '#BBBBBB', 's2': '#6E6E6E', 's4': '#222222'}
 INK = '#222222'
