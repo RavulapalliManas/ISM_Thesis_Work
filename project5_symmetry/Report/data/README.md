@@ -15,7 +15,12 @@ survive loss of the compute pod.
 - `speed_*.csv`, `spectral_*.csv` -- initialization study.
 
 - `phase_s4_c4.csv` -- C4 four-way phase decoding in the s4 arena (Table 3; n=4, 16 networks).
-- `phase_nonlinear.csv` -- nonlinear phase-decoding control.
+- `phase_nonlinear.csv` -- nonlinear phase-decoding control (linear/kNN/MLP, C2 arena).
+- `isotypic_symmetry.csv` -- C4 isotypic spectrum (P0..P3, RA, odd) for the clean 17-network
+  full-HD sweep; RA vs odd s1-vs-s2 separation ("Two natural readouts fail").
+- `isotypic_hd.csv` -- same spectrum for the 112 HD-invariance networks; the confounded
+  odd(parity) - odd(axis) drop per arena. Both from `../../analysis/run_spectrum.py`; the
+  reported p-values are two-sided Mann--Whitney U on the `RA`/`odd` columns.
 
 Numbers not backed by a CSV here are deterministic arena enumerations (the Eq. bound's
 distinguishable/predicted columns, the 6.6% and 1228/1296 counts, the ODI values) or are
