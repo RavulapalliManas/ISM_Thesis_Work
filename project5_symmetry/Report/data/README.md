@@ -6,7 +6,9 @@ survive loss of the compute pod.
 
 - `phase_full_n10.csv` -- orbit-phase decoding, n=10 (s1/s2), n=8 (s4). Table 2, abstract.
 - `phase_groupB.csv`, `phase_horizon_k{0,1,3}.csv` -- horizon sweep (k=0..5).
-- `compartments.csv` -- in-silico Grieves, n=8 per arrangement.
+- `compartments.csv` -- in-silico Grieves (2-room), n=8 per arrangement.
+- `compartments4.csv` -- full Spiers four-in-a-row: 4 translation-related identical rooms fold
+  completely (room decode 0.26 vs chance 0.25, repetition 0.99, within-room R2=0.96, n=8).
 - `field_stats.csv` -- place-field counts + rate-map symmetry index.
 - `map_quality_group{A,B}.csv` -- sRSA and cross-seed correlation.
 - `replay_k{0,1,3,5}.csv` -- offline replay coverage vs wake/shuffle.
