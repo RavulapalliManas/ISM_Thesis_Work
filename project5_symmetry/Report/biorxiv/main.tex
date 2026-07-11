@@ -1,12 +1,6 @@
 % bioRxiv preprint format.
 % Build:  latexmk -pdf main.tex
-%
-% NOTE ON STATUS. The symmetry / head-direction / objective results below are complete
-% (n = 6 per cell for s1 and s2, n = 4 for s4). 153 trained networks: 64 in the symmetry x
-% encoding sweep, 72 across the three extra prediction horizons, 17 in the isotypic re-run.
-% topology-before-geometry and initialisation studies are running; their sections are
-% deliberately absent rather than sketched. Do not add a number to this file that is not
-% in outputs/gpu_runs/*.csv.
+% Every number traces to a CSV in ../data/ (see ../data/README.md).
 
 \documentclass[10pt, letterpaper]{article}
 
@@ -86,17 +80,17 @@ rotationally-equivalent positions produced a population state? --- we find that 
 arena the two encodings differ by $0.40$ in accuracy (complete separation, $p = 1.1\times10^{-5}$
 at $n = 10$ vs.\ $10$), while in the $C_1$ arena, where there is no symmetry to collapse onto,
 they are indistinguishable ($p = 0.97$). Information quantity does not fold the code; invariance
-does. Read through its own $C_4$ quotient, the $C_4$ arena reproduces the
-group-theoretic ceiling exactly: a $G$-folded code cannot exceed $1/|G|$ phase accuracy
-($0.482$ against a predicted $0.500$ for a $C_2$-invariant encoding; $0.275$ against $0.250$
-for the only $C_4$-invariant one). Finally, the entire effect is contingent on the objective:
+does. Read through its own $C_4$ quotient, the $C_4$ arena approaches the
+group-theoretic ceiling: a $G$-folded code cannot exceed $1/|G|$ phase accuracy, and the
+invariant encodings fall to within a few percent of it ($0.482$ against a predicted $0.500$ for
+a $C_2$-invariant encoding; $0.275$ against $0.250$ for the only $C_4$-invariant one). Finally,
+the entire effect is contingent on the objective:
 with a matched autoencoder --- identical architecture, identical HD input, reconstruction
 instead of prediction --- the full two-bit compass is worthless and every encoding folds
-($p = 0.59$). One step of prediction restores it completely. The mechanism has external
-validity and is robust: it reproduces the place-field repetition seen across visually identical
-compartments in rodents \citep{grieves2016}, folding translationally related rooms and lifting
-rotationally related ones, and it survives a head-direction signal corrupted on a third of its
-steps. We conclude that a self-motion signal resolves only those symmetries under which it is
+($p = 0.59$). One step of prediction restores it. The same mechanism reproduces the place-field
+repetition seen across visually identical compartments in rodents \citep{grieves2016}, folding
+translationally related rooms and lifting rotationally related ones, and it survives a
+head-direction signal corrupted on a third of its steps. We conclude that a self-motion signal resolves only those symmetries under which it is
 not itself invariant, and only when the objective forces the network to integrate it. Along the
 way we show that two natural readouts, rotational autocorrelation and odd isotypic power, are
 respectively blind to and confounded by this phenomenon.
@@ -136,7 +130,7 @@ The same design yields a sequence of further results. The fold is visible direct
 single-cell tuning: the place fields the networks grow without spatial supervision repeat at
 symmetry-related locations when the compass is invariant, once under $C_2$ and four times under
 $C_4$. Read through the $C_4$ quotient, the folding produces a hard $1/|G|$ ceiling that the
-networks hit exactly. The effect is a property of \emph{predictive} learning, since a matched
+networks approach to within a few percent. The effect is a property of \emph{predictive} learning, since a matched
 reconstruction objective folds every encoding alike, and it survives a compass corrupted on a
 third of its steps. It also reproduces an experiment: place cells in visually identical
 compartments repeat when the compartments are translationally related and separate when they
@@ -195,8 +189,8 @@ it tracks invariance, \textit{axis} folds and \textit{parity} does not.
 
 Trained on prediction alone, the networks develop units with localised spatial firing fields,
 the place cells reported for this objective by \citet{levenstein2024}
-(Fig.~\ref{fig:placecells}). In the asymmetric arena under the full compass, over $480$ of the
-$500$ units carry a single, sharp field. The effect of symmetry is visible in the rate maps
+(Fig.~\ref{fig:placecells}). In the asymmetric arena under the full compass, about $480$ of the
+$500$ units carry a place field (a median of about two fields per unit). The effect of symmetry is visible in the rate maps
 before any decoder is applied. When the arena is symmetric and the head-direction encoding is
 invariant to that symmetry, the fields repeat: a unit in the $C_2$ arena under \textit{axis}
 fires at a location and again at its $180^\circ$ image, and a unit in the $C_4$ arena under
@@ -274,9 +268,12 @@ $C_1$ arena, where the same encoding folds nothing.}
 
 A code folded onto $X/G$ cannot name the element of an orbit, only the coset, so a $|G|$-way
 phase decoder is bounded above by $1/|G|$. Reading the $C_4$ arena through its own quotient
-(four-way phase, chance $0.250$) recovers this exactly (Table~\ref{tab:c4}). \textit{const} is
-the only $C_4$-invariant encoding, and the only one to reach the $C_4$ floor. \textit{axis} is
-$C_2$- but not $C_4$-invariant, and sits at the $C_2$ ceiling of $0.5$.
+(four-way phase, chance $0.250$) recovers this pattern (Table~\ref{tab:c4}). \textit{const} is
+the only $C_4$-invariant encoding, and the only one to fall to the $C_4$ floor ($0.275$, just
+above $0.250$). \textit{axis} is $C_2$- but not $C_4$-invariant, and sits near the $C_2$ ceiling
+of $0.5$ ($0.482$). The folded values sit within a few percent of their predicted floors rather
+than exactly on them; the small residual is consistent with finite-sample decoding, and the
+decisive quantity is which floor each encoding falls to, not the residual.
 
 This also resolves \textit{const} in the $C_4$ arena. Read through the $C_4$ quotient it is
 plainly a live spatial code --- its $C_4$ fundamental-domain $R^2$ is $+0.646$ (minimum $+0.535$
@@ -319,26 +316,29 @@ training at all.
 
 \begin{table}[t]
 \centering
-\caption{The bound of Eq.~\ref{eq:bound}, computed from the arenas, against the trained networks.
-Across the twelve cells, Pearson $r = 0.996$ ($p = 1.3\times10^{-11}$), mean absolute error
-$0.031$, no free parameters.}
+\caption{The bound of Eq.~\ref{eq:bound}, computed from the arenas with no free parameters,
+against the trained networks. Every encoding falls to the accuracy its input-distinguishability
+predicts; the mean absolute error across the twelve cells is $0.031$. (We report the bound as a
+bound, not a fit: the predicted values are near-degenerate --- clustered at $1.0$ and at the
+folding floors --- so a correlation coefficient across cells would merely register that
+separation.)}
 \label{tab:bound}
 \begin{tabular}{llccc}
 \toprule
 arena & encoding & distinguishable & predicted & measured \\
 \midrule
-s1 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.981 / 0.973 \\
-s1 & \textit{axis} / \textit{const}  & 0.934 & 0.967 & 0.970 / 0.967 \\
-s2 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.978 / 0.953 \\
-s2 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.553 / 0.551 \\
-s4 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.984 / 0.930 \\
-s4 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.547 / 0.520 \\
+s1 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.981 / 0.972 \\
+s1 & \textit{axis} / \textit{const}  & 0.934 & 0.967 & 0.971 / 0.966 \\
+s2 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.978 / 0.955 \\
+s2 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.552 / 0.552 \\
+s4 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.984 / 0.933 \\
+s4 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.544 / 0.521 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Table~\ref{tab:bound} also settles a number that would otherwise look like a failure. In the
-$C_1$ arena \textit{axis} reaches $0.970$ rather than $1.000$ --- because $6.6\%$ of states there
+$C_1$ arena \textit{axis} reaches $0.971$ rather than $1.000$ --- because $6.6\%$ of states there
 are \emph{accidentally} observationally identical to their $C_2$ partner, putting the bound at
 $0.967$. \textit{axis} and \textit{const} sit exactly on it. They were not failing to fold; they
 were folding on precisely the ambiguous fraction.
@@ -378,7 +378,7 @@ $k$ & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} & \textit
 \end{table}
 
 Under reconstruction the full two-bit compass buys nothing: every encoding folds, and all four
-sit at chance (Table~\ref{tab:horizon}). These are folded codes, not broken ones --- the
+sit near chance (Table~\ref{tab:horizon}). These are folded codes, not broken ones --- the
 minimum of $\max(R^2_{\text{raw}}, R^2_{\text{domain}})$ across all 24 autoencoder networks is
 $0.858$. A single step of prediction restores the effect in full, and extending the horizon to
 five adds nothing: the dependence on $k$ is a step, not a gradient.
@@ -456,7 +456,8 @@ supported the same qualitative conclusion, by an argument that does not hold.
 
 \subsection{Folding leaves a reproducible spatial map intact}
 
-Because the folded encodings decode orbit phase at chance, we asked whether they had learned a
+Because the folded encodings decode orbit phase near chance (about $0.55$, reliably just above
+the $0.5$ floor but far below the $\sim\!0.95$ of the non-invariant encodings), we asked whether they had learned a
 spatial map at all, or whether ablating the compass had degraded the representation more
 broadly. Two measures argue that the map is intact (Fig.~\ref{fig:mapquality}). Spatial
 representational similarity, the Spearman correlation between neural distance and Euclidean
@@ -466,8 +467,8 @@ symmetric arenas. This is the expected consequence of folding: a position and it
 sit on top of one another in the neural space while lying far apart in the arena, weakening the
 correlation between the two distances. The correlation between the position-conditioned codes of
 independently trained networks behaved oppositely and stayed above $0.96$ under every encoding
-in every arena, and at least $448$ of the $500$ units retained a place field even under
-\textit{const}. A folded code is therefore reproducible rather than degenerate, and the compass
+in every arena, and $448$ of the $500$ units retain a place field under \textit{const} in the
+$C_1$ arena, falling to about $318$ in the $C_4$ arena. A folded code is therefore reproducible rather than degenerate, and the compass
 governs how the map is laid out rather than whether one forms.
 
 \begin{figure}[t]
@@ -495,7 +496,7 @@ unit's rate map and its own $180^\circ$ rotation, a per-cell index of $C_2$ symm
 (Fig.~\ref{fig:fields}B). The index saturates near $0.97$ exactly when the encoding is
 $C_2$-invariant and the arena is symmetric (\textit{axis} and \textit{const} in the $C_2$ and
 $C_4$ arenas), while the matched non-invariant encoding stays low (\textit{parity}, $0.36$ in
-$C_2$) and \textit{full} stays near zero throughout. An invariant encoding alone induces
+$C_2$) and \textit{full} stays low throughout ($\le 0.16$). An invariant encoding alone induces
 partial symmetry even in the $C_1$ arena ($0.61$ for \textit{axis}), which the arena's own
 symmetry then completes. The four-fold version of the index reaches $0.97$ only for
 \textit{const} in the $C_4$ arena, the single fully $C_4$-invariant condition. Each map
@@ -627,7 +628,7 @@ head-direction signal and destabilise hippocampal place fields \citep{calton2003
 something sharper: such animals should show field \emph{repetition} in the \emph{radial}
 arrangement, where intact animals do not, because without a compass rotation joins translation as
 a symmetry the animal cannot resolve. In the model this is the \textit{const} encoding, which
-folds the $C_2$ arena to chance (Table~\ref{tab:phase}).
+folds the $C_2$ arena to near chance (Table~\ref{tab:phase}).
 
 
 \subsection*{What the model reproduces, and what it does not}
@@ -656,7 +657,7 @@ Multi-field firing increases with the rotational symmetry of the arena
 & \citet{muller1987, knierim1995} & folding onto $X/G$ makes one unit fire at all $|G|$ orbit-mates
 & reproduced \\[4pt]
 Head-direction input is required for a stable map; ADN lesions destabilise place fields
-& \citet{calton2003} & the \textit{const} encoding folds the $C_2$ arena to chance
+& \citet{calton2003} & the \textit{const} encoding folds the $C_2$ arena to near chance
 & consistent \\[4pt]
 Head direction plus recurrence plus prediction are needed for offline replay
 & \citet{levenstein2024} & offline trajectories exceed the coverage of a wake path of equal
@@ -738,8 +739,8 @@ This does not confound the results, for two reasons. The decisive contrast --- \
 \textit{parity} --- is made \emph{within} one arena, on the same trajectories, so the observation
 stream and its ODI are identical between the two arms; the only difference is a $4\times4$ matrix
 on the heading block. And across arenas, ODI does not predict the readout: with a full compass,
-phase decoding is $0.981$, $0.978$ and $0.984$ for $C_1$, $C_2$, $C_4$ (Pearson $r=-0.36$ against
-ODI, $p=0.77$), with the least discriminable arena scoring highest. Trajectories: 10{,}000 per
+phase decoding is $0.981$, $0.978$ and $0.984$ for $C_1$, $C_2$, $C_4$ (Pearson $r=-0.37$ against
+ODI, $p=0.76$, $n=3$ arenas), with the least discriminable arena scoring highest. Trajectories: 10{,}000 per
 arena, 200 steps, random start position and heading, random-walk policy.
 
 \paragraph{Head-direction encodings.} The heading block of the action vector is left-multiplied
@@ -775,11 +776,15 @@ $C_4$; $P_k$ is the normalised power in character $k$, $\sum_k P_k = 1$, and $P_
 maps. $\mathrm{RA} = P_0 - P_2$ and $\mathrm{odd} = P_1 + P_3$.
 
 \paragraph{Statistics.} All contrasts are two-sided exact Mann--Whitney $U$ tests on per-network
-values. The planned contrasts are \textit{axis} vs.\ \textit{parity} within each arena; with
-$n=6$ vs.\ $6$ the exact two-sided floor is $2/\binom{12}{6} = 0.00216$, and $p$-values at that
-value indicate complete separation. Bonferroni correction across the three planned contrasts is
-applied where stated. No results were excluded; models failing a criterion are reported as such
-rather than dropped.
+values. The planned contrasts are \textit{axis} vs.\ \textit{parity} within each arena, at
+$n = 10$ per cell for s1 and s2 and $n = 8$ for s4; at $n = 10$ vs.\ $10$ the exact two-sided
+floor is $2/\binom{20}{10} = 1.1\times10^{-5}$, and a $p$-value at that floor indicates complete
+separation (every network in one group above every network in the other). Bonferroni correction
+across the three planned arena contrasts is applied where stated. Secondary experiments carry
+their own $n$: the prediction-horizon and noisy-compass sweeps use $n = 6$ per cell (floor
+$0.00216$), the isotypic re-run $n = 5$ (floor $0.0079$). Folded decoding accuracies are compared
+to their $1/|G|$ floor by a one-sample $t$-test where a residual is claimed. No results were
+excluded; models failing a criterion are reported as such rather than dropped.
 
 \section*{Data and code availability}
 

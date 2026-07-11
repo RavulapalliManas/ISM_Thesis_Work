@@ -13,3 +13,10 @@ survive loss of the compute pod.
 - `sequenceness.csv` -- replay sequenceness with time-shift and cell-shuffle nulls.
 - `tda_topology.csv` -- topology-before-geometry (null result; see Limitations).
 - `speed_*.csv`, `spectral_*.csv` -- initialization study.
+
+- `phase_s4_c4.csv` -- C4 four-way phase decoding in the s4 arena (Table 3; n=4, 16 networks).
+- `phase_nonlinear.csv` -- nonlinear phase-decoding control.
+
+Numbers not backed by a CSV here are deterministic arena enumerations (the Eq. bound's
+distinguishable/predicted columns, the 6.6% and 1228/1296 counts, the ODI values) or are
+figure-derived (manifold fold ratios, gridness); all are reproducible from the analysis scripts.
