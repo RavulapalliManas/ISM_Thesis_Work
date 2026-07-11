@@ -59,48 +59,48 @@ ARENA = 18
 GROUP_ORDER = {'c2': 2, 'c4': 4}          # chance accuracy is 1/order
 
 
-def rot90(xy: np.ndarray) -> np.ndarray:
+def rot90(xy: np.ndarray, arena: int = ARENA) -> np.ndarray:
     """Quarter turn on 1-based grid coords: (x, y) -> (y, N+1-x). Order 4."""
-    return np.stack([xy[:, 1], (ARENA + 1) - xy[:, 0]], 1)
+    return np.stack([xy[:, 1], (arena + 1) - xy[:, 0]], 1)
 
 
-def rot180(xy: np.ndarray) -> np.ndarray:
-    """1-based grid coords, so x + x' = ARENA + 1."""
-    return (ARENA + 1) - xy
+def rot180(xy: np.ndarray, arena: int = ARENA) -> np.ndarray:
+    """1-based grid coords, so x + x' = arena + 1."""
+    return (arena + 1) - xy
 
 
-def images(pos: np.ndarray, group: str) -> np.ndarray:
+def images(pos: np.ndarray, group: str, arena: int = ARENA) -> np.ndarray:
     """(n, |G|, 2) -- the orbit of every position, element 0 being the identity."""
     if group == 'c2':
-        return np.stack([pos, rot180(pos)], 1)
+        return np.stack([pos, rot180(pos, arena)], 1)
     if group == 'c4':
-        r1 = rot90(pos)
-        r2 = rot90(r1)
-        return np.stack([pos, r1, r2, rot90(r2)], 1)
+        r1 = rot90(pos, arena)
+        r2 = rot90(r1, arena)
+        return np.stack([pos, r1, r2, rot90(r2, arena)], 1)
     raise ValueError(f'unknown group {group!r}')
 
 
-def orbit_and_phase(pos: np.ndarray, group: str = 'c2') -> tuple[np.ndarray, np.ndarray]:
+def orbit_and_phase(pos: np.ndarray, group: str = 'c2', arena: int = ARENA) -> tuple[np.ndarray, np.ndarray]:
     """Orbit id (its canonical representative) and phase (which group element maps the
     canonical representative onto this position).
 
-    ARENA is even, so no rotation has an integer fixed point and every orbit has exactly
-    |G| distinct cells -- no positions need excluding, and chance is exactly 1/|G|.
+    The arena size is even, so no rotation has an integer fixed point and every orbit has
+    exactly |G| distinct cells -- no positions need excluding, and chance is exactly 1/|G|.
     """
-    im = images(pos, group)                                    # (n, |G|, 2)
+    im = images(pos, group, arena)                             # (n, |G|, 2)
     order = im.shape[1]
     for j in range(1, order):
         assert not np.any((im[:, j] == pos).all(1)), f'rotation {j} has a fixed point'
-    key = im[:, :, 0] * (ARENA + 1) + im[:, :, 1]              # lexicographic rank
+    key = im[:, :, 0] * (arena + 1) + im[:, :, 1]              # lexicographic rank
     phase = key.argmin(axis=1)
     orbit = key.min(axis=1)
     return orbit, phase
 
 
-def canonical(pos: np.ndarray, group: str = 'c2') -> np.ndarray:
+def canonical(pos: np.ndarray, group: str = 'c2', arena: int = ARENA) -> np.ndarray:
     """Position within the fundamental domain of `group`."""
-    im = images(pos, group)
-    key = im[:, :, 0] * (ARENA + 1) + im[:, :, 1]
+    im = images(pos, group, arena)
+    key = im[:, :, 0] * (arena + 1) + im[:, :, 1]
     return im[np.arange(len(pos)), key.argmin(axis=1)]
 
 
@@ -113,12 +113,12 @@ def _balance(y: np.ndarray, rng) -> np.ndarray:
     return keep
 
 
-def decode(hidden, pos, group='c2', n_splits=5, seed=0):
+def decode(hidden, pos, group='c2', n_splits=5, seed=0, arena=ARENA):
     rng = np.random.default_rng(seed)
-    orbit, phase = orbit_and_phase(pos, group)
+    orbit, phase = orbit_and_phase(pos, group, arena)
     keep = _balance(phase, rng)
     H, y, g = hidden[keep], phase[keep], orbit[keep]
-    canon = canonical(pos, group)[keep]
+    canon = canonical(pos, group, arena)[keep]
     raw = pos[keep]
 
     accs, dom_r2, raw_r2 = [], [], []
@@ -158,10 +158,11 @@ def main():
         if cond not in datasets:
             datasets[cond] = TrajectoryDataset(str(Path(a.data_root) / cond))
         model = model_from_checkpoint(ck, device)
+        arena = int(ck['meta'].get('arena_size', ARENA))
         hidden, pos = collect(model, datasets[cond], hd, a.n_states, device)
-        acc, raw_r2, dom_r2 = decode(hidden, pos, group=a.group)
+        acc, raw_r2, dom_r2 = decode(hidden, pos, group=a.group, arena=arena)
         rows.append({'condition': cond, 'hd_mode': hd, 'k': ck['meta']['k'], 'seed': seed,
-                     'group': a.group, 'chance': 1.0 / GROUP_ORDER[a.group],
+                     'arena': arena, 'group': a.group, 'chance': 1.0 / GROUP_ORDER[a.group],
                      'phase_acc': acc, 'raw_r2': raw_r2, 'domain_r2': dom_r2,
                      'spatial': max(raw_r2, dom_r2), 'path': str(path)})
         print(f'  [{i}/{len(ckpts)}] {cond}/{hd}/k{ck["meta"]["k"]}/seed{seed:02d}  '

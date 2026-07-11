@@ -78,15 +78,16 @@ def init_seed(cond, hd, seed, conditions=None, hd_modes=MODES):
     return 1000 * CONDITIONS.index(cond) + 100 * list(hd_modes).index(hd) + seed
 
 
-def build_models_k(init_seeds, device, k):
+def build_models_k(init_seeds, device, k, hidden_size=HIDDEN_SIZE):
     """Like run_ensemble_sweep.build_models, but with the rollout horizon as a
     parameter. Each distinct k is a distinct graph, hence a distinct inductor
     compile -- so one k per ensemble, and the conditions x hd x seeds inside it.
+    A distinct hidden_size is likewise a distinct graph (one compile per size).
     """
     models = []
     for s in init_seeds:
         torch.manual_seed(s)
-        models.append(pRNN_th(obs_size=OBS, act_size=ACT, k=k, hidden_size=HIDDEN_SIZE,
+        models.append(pRNN_th(obs_size=OBS, act_size=ACT, k=k, hidden_size=hidden_size,
                               cell=LayerNormRNNCellEager, dropp=DROPOUT_P, trunc=T,
                               neuralTimescale=2, predOffset=PRED_OFFSET,
                               hidden_init_sigma=HIDDEN_INIT_SIGMA).to(device))
@@ -162,6 +163,10 @@ def main():
     ap.add_argument('--seed-offset', type=int, default=0,
                     help='shift seed ids, to extend an existing run with fresh seeds')
     ap.add_argument('--hd-modes', nargs='+', default=list(MODES))
+    ap.add_argument('--hidden-size', type=int, default=HIDDEN_SIZE,
+                    help='recurrent width; a distinct size is a distinct graph (separate compile)')
+    ap.add_argument('--arena-size', type=int, default=18,
+                    help='arena side length; obs stays FxF so the graph is unchanged, only the data differs')
     ap.add_argument('--dataset-workers', type=int, default=64)
     ap.add_argument('--compile', default='default', choices=['default', 'none'])
     ap.add_argument('--log-every', type=int, default=200)
@@ -170,6 +175,7 @@ def main():
     device = torch.device('cuda')
     _enable_tf32(device)
     k = a.k
+    hidden_size = a.hidden_size
     seeds = parse_seeds(a.seeds) if a.seeds else dict(DEFAULT_SEEDS)
     spec = [(c, h, s + a.seed_offset) for c, h, s in build_spec(seeds, a.hd_modes)]
     conditions = list(seeds)
@@ -179,11 +185,12 @@ def main():
     print(f'device : {torch.cuda.get_device_name(0)}  torch {torch.__version__}')
     print(f'models : S={S}  seeds {seeds}  x {len(a.hd_modes)} hd modes')
     print(f'hd     : {a.hd_modes}')
-    print(f'config : B={B} T={T} k={k} steps={a.n_steps} compile={a.compile}\n', flush=True)
+    print(f'config : B={B} T={T} k={k} hidden={hidden_size} arena={a.arena_size} '
+          f'steps={a.n_steps} compile={a.compile}\n', flush=True)
 
     stores = {}
     for cond in conditions:
-        d = ensure_data(cond, a.data_root, a.n_traj, a.dataset_workers)
+        d = ensure_data(cond, a.data_root, a.n_traj, a.dataset_workers, size=a.arena_size)
         stores[cond] = PackedTrajectoryStore(str(d), device=device)
         print(f'  {cond}: {len(stores[cond])} trajectories', flush=True)
 
@@ -192,12 +199,12 @@ def main():
     # Distinct, deterministic init per cell. NOT hash() -- that is salted per
     # process, so the run would not reproduce across restarts.
     models = build_models_k([init_seed(c, hd, s, conditions, a.hd_modes)
-                            for c, hd, s in spec], device, k)
+                            for c, hd, s in spec], device, k, hidden_size)
 
     obs, act = sample_batches(stores, spec, B, hd_stack)
-    state = torch.rand(S, B, HIDDEN_SIZE, device=device) * HIDDEN_INIT_SIGMA
-    nm = NOISE_STD * torch.randn(S, B, T, HIDDEN_SIZE, device=device)
-    nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, HIDDEN_SIZE, device=device)
+    state = torch.rand(S, B, hidden_size, device=device) * HIDDEN_INIT_SIGMA
+    nm = NOISE_STD * torch.randn(S, B, T, hidden_size, device=device)
+    nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, hidden_size, device=device)
     aidx = _sample_anchor_idx(T_k, device, ANCHOR_SUBSAMPLE_N)
     for i, m in enumerate(models):
         m.eval()
@@ -213,7 +220,8 @@ def main():
     if a.compile != 'none':
         gfn = torch.compile(gfn, mode=a.compile)
 
-    meta = {'obs_size': OBS, 'k': k, 'trunc': T, 'hidden_size': HIDDEN_SIZE, 'F': F,
+    meta = {'obs_size': OBS, 'k': k, 'trunc': T, 'hidden_size': hidden_size, 'F': F,
+            'arena_size': a.arena_size, 'hd_noise': a.hd_noise,
             'batch_size': B, 'noise_std': NOISE_STD, 'dropout_p': DROPOUT_P,
             'hidden_init_sigma': HIDDEN_INIT_SIGMA, 'pred_offset': PRED_OFFSET,
             'n_steps': a.n_steps, 'runner': 'ensemble_vmap_hd_invariance'}
@@ -223,9 +231,9 @@ def main():
     t0 = time.perf_counter()
     for step in range(1, a.n_steps + 1):
         obs, act = sample_batches(stores, spec, B, hd_stack, a.hd_noise)
-        state = torch.rand(S, B, HIDDEN_SIZE, device=device) * HIDDEN_INIT_SIGMA
-        nm = NOISE_STD * torch.randn(S, B, T, HIDDEN_SIZE, device=device)
-        nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, HIDDEN_SIZE, device=device)
+        state = torch.rand(S, B, hidden_size, device=device) * HIDDEN_INIT_SIGMA
+        nm = NOISE_STD * torch.randn(S, B, T, hidden_size, device=device)
+        nr = NOISE_STD * torch.randn(S, B, k, ANCHOR_SUBSAMPLE_N, hidden_size, device=device)
         aidx = _sample_anchor_idx(T_k, device, ANCHOR_SUBSAMPLE_N)
 
         grads, losses = gfn(leaves, obs, act, state, nm, nr, aidx)

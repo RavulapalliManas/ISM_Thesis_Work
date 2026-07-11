@@ -92,17 +92,20 @@ def _sample_anchor_idx(T_k: int, device, anchor_subsample_n: int):
     return torch.sort(idx).values
 
 
-def build_env(condition):
+def build_env(condition, size=18):
     return PixelObsWrapper(
-        SymmetryArena(shape='square', size=18, U=0, F=F, seed=0,
+        SymmetryArena(shape='square', size=size, U=0, F=F, seed=0,
                       use_landmarks=True, symmetry_condition=condition),
         tile_size=1)
 
 
-def ensure_data(condition, data_root, n_traj, workers):
-    d = Path(data_root) / condition
-    generate_dataset(build_env(condition), n_traj=n_traj, T=T, out_dir=str(d),
-                     n_workers=workers, desc=f'{condition} trajectories')
+def ensure_data(condition, data_root, n_traj, workers, size=18):
+    # Default size keeps the original path (data_root/cond) for backward compat;
+    # a non-default arena size gets its own dir so size-N data never collides
+    # with the size-18 sweep in the same data_root.
+    d = Path(data_root) / (condition if size == 18 else f'{condition}_s{size}')
+    generate_dataset(build_env(condition, size), n_traj=n_traj, T=T, out_dir=str(d),
+                     n_workers=workers, desc=f'{condition}(size {size}) trajectories')
     return d
 
 
