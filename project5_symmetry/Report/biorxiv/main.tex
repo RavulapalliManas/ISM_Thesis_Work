@@ -678,6 +678,33 @@ are not swept. The architecture has no excitatory--inhibitory separation.
 Finally, symmetry here is a property of the landmark layout, not of the arena geometry, which is
 square and therefore $C_4$-symmetric in every condition.
 
+\subsection*{Outlook}
+
+The broader appeal of predictive learning is that a single, domain-general objective --- predict
+the next observation --- grows structured spatial representations with no hand-built spatial
+prior, in artificial networks as in the hippocampus \citep{levenstein2024, stachenfeld2017}. What
+this study adds is that the geometry of the learned code is then set by the symmetry structure of
+the agent's interaction with the world --- the group action of the environment on the self-motion
+signal --- rather than by the architecture. That makes the paradigm a controlled developmental
+probe. Because the representation is learned rather than wired in, each factor that shapes it in
+an animal, and is there confounded or fixed, becomes a variable that can be turned on its own: the
+geometry of the enclosure, including irregular and non-convex ones; the information content and
+invariance of the self-motion signal, as here; the locomotor policy and the trajectory statistics
+it induces; and the task the agent is trained under. Charting how the code changes along these
+axes is a way to ask which features of an environment and an agent are responsible for which
+features of the representation.
+
+Architecture is a variable of the same kind. The present network receives head direction as an
+oracle input and places no non-negativity constraint on its units, and it accordingly grows
+place-like but not grid-like tuning; hexagonal grids emerge in trained path integrators precisely
+when those constraints are imposed \citep{sorscher2023unified}. Progressively more biological
+designs --- a head-direction signal that is learned and allowed to drift rather than supplied,
+non-negative rates, separate path-integration and sensory streams, and modules for planning ---
+would let one ask which ingredients are necessary for the joint emergence of place and grid cells
+and for the developmental order in which they appear. The aim of such a program is to turn the
+catalogue of spatial cell types into a set of consequences that follow from an objective, an
+architecture, and an experience, of which the symmetry-driven fold reported here is one.
+
 \section{Methods}
 
 \paragraph{Architecture and training.} We use \texttt{pRNN\_th} \citep{levenstein2024} unchanged:
