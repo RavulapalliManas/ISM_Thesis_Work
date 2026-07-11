@@ -325,9 +325,6 @@ def fig4_geometry(data: Path, figs: Path):
         for p in (ax.xaxis, ax.yaxis, ax.zaxis):
             p.pane.set_edgecolor('#dddddd'); p.pane.set_alpha(0.25)
         ax.grid(False)
-        if i == 0:
-            ax.text2D(-0.05, 1.02, 'a', transform=ax.transAxes, fontsize=8, fontweight='bold',
-                      va='bottom', ha='right', color=INK, family=_family)
     # angular colour wheel key
     caw = fig.add_subplot(gs[len(lays)], projection='polar')
     th = np.linspace(-np.pi, np.pi, 256)
