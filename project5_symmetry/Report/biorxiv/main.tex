@@ -599,6 +599,58 @@ being a property of the input pipeline rather than of the learning. It is an obj
 requires predicting a future observation, not reconstructing the present one, that recruits the
 compass.
 
+\subsection*{Relation to other models of the spatial code}
+
+The parallel-versus-radial dissociation is a discriminating test among models of place-cell
+firing, because the two arrangements are built from the same compartments and are locally
+identical in both. A model that fixes firing from local sensory or boundary geometry alone must
+therefore predict the same repetition in each: the boundary-vector account \citep{hartley2000},
+in which a field is a fixed function of the distances to walls, gives identical fields wherever
+the local geometry recurs, parallel or radial. A reconstruction objective behaves the same way
+for the same reason, and our autoencoder control confirms it --- with the compass held identical
+it folds every encoding alike. Continuous-attractor path integrators \citep{burak2009,
+sorscher2023unified} build the metric in by construction and do not speak to what happens when
+observations alias. The successor representation \citep{stachenfeld2017, momennejad2017successor}
+is predictive, but over a state space that is supplied rather than inferred from aliased
+observations, so whether two symmetric compartments are one state or two is an assumption, not a
+result (Table~\ref{tab:models}).
+
+What predictive learning adds is a derivation. Trained only to predict its next view from
+self-motion, the network folds or lifts the identical compartments according to whether the
+compass is invariant under the arrangement's symmetry, reproducing the animal dissociation from a
+single group-theoretic principle rather than fitting it. The contribution is therefore not that
+prediction grows place cells \citep{levenstein2024}, but that it specifies \emph{when} the
+spatial code collapses under symmetry and when it does not --- a question the other model classes
+leave open.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{Where models of the spatial code stand on the symmetry dissociation. The decisive column
+is the last: the parallel and radial arrangements are locally identical, so any model that reads
+firing from local geometry or the current observation predicts the same repetition in both, and
+cannot produce the dissociation \citet{grieves2016} observed.}
+\label{tab:models}
+\begin{tabular}{p{0.30\textwidth}p{0.15\textwidth}p{0.18\textwidth}p{0.25\textwidth}}
+\toprule
+model class & fields learned from experience & repetition in identical rooms &
+parallel-vs-radial dissociation \\
+\midrule
+Continuous attractor / path integration \citep{burak2009, sorscher2023unified}
+& metric built in & not addressed & no \\[3pt]
+Boundary-vector / geometry \citep{hartley2000}
+& partly & yes & no --- predicts repetition in both \\[3pt]
+Successor representation \citep{stachenfeld2017}
+& yes (predictive) & depends on the given state space & not addressed \\[3pt]
+Reconstruction / autoencoder (this work, control)
+& yes & yes & no --- folds both ($p=0.59$) \\[3pt]
+Predictive RNN \citep{levenstein2024}, this work
+& yes (emergent) & yes & \textbf{yes}, set by HD invariance \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Limitations.} The arenas are discrete $18\times18$ grids with four headings, so the
 head-direction ``ring'' has four points and no continuous ring topology; nothing here speaks to
 the ring or toroidal manifolds reported in entorhinal cortex \citep{gardner2022toroidal}. The networks
