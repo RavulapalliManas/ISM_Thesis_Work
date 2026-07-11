@@ -66,3 +66,45 @@ project5_symmetry/results2/
 
 # Mac
 .DS_Store.minimax-skills/ 
+
+# macOS AppleDouble metadata (created on exFAT/FAT external drives)
+._*
+.DS_Store
+.AppleDouble
+.Spotlight-V100
+.Trashes
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Large run artifacts (checkpoints, trajectories, tarballs)
+outputs/gpu_runs/**/*.pt
+outputs/gpu_runs/*.tgz
+outputs/gpu_runs/symmetry_sweep/
+*.npz
+
+# Large data / compute artifacts kept aside on local drive, never in the repo
+outputs/
+runs/
+*.pt
+*.npz
+prnn_backup/
+# macOS external-drive metadata
+._*
+.AppleDouble
+# LaTeX build junk
+*.aux
+*.out
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz

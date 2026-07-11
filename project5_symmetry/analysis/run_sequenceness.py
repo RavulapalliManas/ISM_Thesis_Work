@@ -96,10 +96,11 @@ def main():
         H, Pos = collect(model, ds[cond], hd, a.n_states, dev)
         sc = StandardScaler().fit(H)
         dec = Ridge(alpha=1.0).fit(sc.transform(H), Pos.astype(float))
-        # cell-shuffled decoder: same fit but on column-permuted hidden states
         rng = np.random.default_rng(seed)
+        # cell-shuffle null: feed the TRAINED decoder scrambled units at readout. Fitting and
+        # predicting under the same permutation would be a no-op (least squares is invariant to
+        # feature order), so the mismatch is essential.
         perm = rng.permutation(H.shape[1])
-        dec_shuf = Ridge(alpha=1.0).fit(sc.transform(H)[:, perm], Pos.astype(float))
 
         obs_scores, exceeds, shuf_scores = [], [], []
         wake_scores = []
@@ -109,7 +110,7 @@ def main():
             Ht = offline_rollout(model, h0, acts).numpy()
             X = sc.transform(Ht)
             s_obs, null95, exc = sequenceness(dec.predict(X), seed=r)
-            s_shuf, _, _ = sequenceness(dec_shuf.predict(X[:, perm]), seed=r)
+            s_shuf, _, _ = sequenceness(dec.predict(X[:, perm]), seed=r)
             obs_scores.append(s_obs); exceeds.append(exc); shuf_scores.append(s_shuf)
         # wake reference: sequenceness of real trajectory segments
         for r in range(a.n_rollouts):

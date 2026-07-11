@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from utils.Architectures import pRNN_th
+from utils.Architectures import pRNN_th, prnn_state_dict
 from utils.thetaRNN import LayerNormRNNCell
 
 from project5_symmetry.training.dataset import TrajectoryDataset, PackedTrajectoryStore
@@ -336,14 +336,18 @@ def _train_legacy(
     else:
         obs_static = act_static = noise_static = None
 
-    # Change 2: compile only the RNN cell, not the whole model.
-    # The cell (LayerNormRNNCell) is pure PyTorch matmuls + F.layer_norm + ReLU —
-    # Dynamo traces it cleanly. The outer thetaRNNLayer Python loop and pRNN_th's
-    # restructure_inputs() (which uses numpy Toeplitz) cannot be compiled without
-    # graph breaks, so we leave them as-is.
-    # Bug 2 fix: build optimizer BEFORE torch.compile so parameter references
-    # are clean (model.rnn.cell.weight_ih etc. live on the original module,
-    # not the OptimizedModule wrapper).
+    # Compiling only the cell is a leftover from when the cell was a
+    # jit.ScriptModule. Dynamo cannot trace TorchScript, so that combination
+    # captured zero graphs while still paying the wrapper's guard overhead on
+    # every one of the T calls per step (measured: net slowdown).
+    #
+    # restructure_inputs()'s numpy Toeplitz is NOT a graph-break source: it is
+    # built once and cached in a registered buffer, so it costs ~1 ms and runs
+    # only on the first forward. With the eager cell, pRNN_th.forward traces into
+    # a single graph with zero breaks, so the whole model can be compiled.
+    #
+    # Build the optimizer BEFORE torch.compile so parameter references stay on the
+    # original module rather than the OptimizedModule wrapper.
     optimizer = _build_optimizer(model, batch_size=batch_size)
 
     use_cuda_graph = (device.type == 'cuda')
@@ -528,7 +532,7 @@ def _train_legacy(
             ckpt = os.path.join(out_dir, f'ckpt_{step}.pt')
             torch.save({
                 'step': step,
-                'model': model.state_dict(),
+                'model': prnn_state_dict(model),
                 'optimizer': optimizer.state_dict(),
                 'meta': {
                     'obs_scale': OBS_SCALE,
@@ -550,7 +554,7 @@ def _train_legacy(
     ckpt = os.path.join(out_dir, 'ckpt_final.pt')
     torch.save({
         'step': step,
-        'model': model.state_dict(),
+        'model': prnn_state_dict(model),
         'optimizer': optimizer.state_dict(),
         'meta': {
             'obs_scale': OBS_SCALE,
@@ -650,7 +654,7 @@ def _save_checkpoint(ckpt_path: str, step: int, model: pRNN_th, optimizer, trunc
     torch.save(
         {
             'step': step,
-            'model': model.state_dict(),
+            'model': prnn_state_dict(model),
             'optimizer': optimizer.state_dict(),
             'meta': meta,
         },

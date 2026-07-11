@@ -49,7 +49,7 @@ from project5_symmetry.training.train import (
     train,
     train_parallel_seeds,
 )
-from utils.Architectures import pRNN_th
+from utils.Architectures import pRNN_th, load_prnn_state_dict
 from utils.thetaRNN import LayerNormRNNCell
 
 
@@ -123,7 +123,7 @@ def _load_trained_model(seed_dir, obs_size, act_size, device):
             raise FileNotFoundError(f"No checkpoint found in {seed_dir}")
         ckpt_path = alt[-1]
     state = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(state['model_state_dict'] if 'model_state_dict' in state else state)
+    load_prnn_state_dict(model, state)
     model.eval()
     return model
 

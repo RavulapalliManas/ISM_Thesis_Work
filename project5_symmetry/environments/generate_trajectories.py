@@ -12,6 +12,7 @@ Why no RandomActionAgent from utils/agent.py?
 """
 
 import os
+import importlib
 import numpy as np
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
@@ -106,11 +107,30 @@ def collect_trajectory(wrapped_env, T: int, rng: np.random.Generator = None) -> 
 # Multiprocessing worker
 # ------------------------------------------------------------------
 
+def _build_env(spec):
+    """Rebuild the env inside a worker. MiniGrid envs are not picklable, so we ship a
+    recipe rather than the object.
+
+    `spec` is either ('kwargs', arena_kwargs) -- a plain SymmetryArena -- or
+    ('factory', (module, function, kwargs)) for any subclass. The kwargs form used to be
+    the only path, and it silently DOWNCAST every subclass to SymmetryArena: the
+    TopologyArena's walls vanished and agents walked through them for 10,000 trajectories
+    per arena. Always pass a factory for a subclass.
+    """
+    kind, payload = spec
+    if kind == 'kwargs':
+        return PixelObsWrapper(SymmetryArena(**payload), tile_size=1)
+    if kind == 'factory':
+        module, function, kwargs = payload
+        return getattr(importlib.import_module(module), function)(**kwargs)
+    raise ValueError(f'unknown env spec {kind!r}')
+
+
 def _worker(args) -> int:
     """Generate a batch of trajectories, save to disk. Returns count written."""
-    indices, arena_kwargs, T, out_dir = args
+    indices, spec, T, out_dir = args
     rng = np.random.default_rng(seed=indices[0])
-    env = PixelObsWrapper(SymmetryArena(**arena_kwargs), tile_size=1)
+    env = _build_env(spec)
     for i in indices:
         traj = collect_trajectory(env, T, rng=rng)
         np.savez_compressed(
@@ -130,6 +150,8 @@ def generate_dataset(
     out_dir: str,
     n_workers: int = 12,
     desc: str = 'Trajectories',
+    env_factory=None,
+    factory_kwargs: dict | None = None,
 ):
     """
     Generate n_traj trajectories of T steps and save to out_dir.
@@ -150,19 +172,28 @@ def generate_dataset(
         return
 
     inner = wrapped_env.unwrapped
-    arena_kwargs = {
-        'shape': inner.arena_shape,
-        'size':  inner.arena_size,
-        'U':     inner.U,
-        'F':     inner.agent_view_size,
-        'seed':  inner._landmark_seed,
-        'use_landmarks': inner.use_landmarks,
-        'symmetry_condition': getattr(inner, 'symmetry_condition', None),
-    }
+    if env_factory is not None:
+        spec = ('factory', (env_factory.__module__, env_factory.__name__,
+                            dict(factory_kwargs or {})))
+    elif type(inner) is not SymmetryArena:
+        raise TypeError(
+            f'{type(inner).__name__} is a SymmetryArena subclass, but no env_factory was '
+            f'given. Workers rebuild the env from a recipe; without a factory the subclass '
+            f'is silently downcast to SymmetryArena and its walls disappear.')
+    else:
+        spec = ('kwargs', {
+            'shape': inner.arena_shape,
+            'size':  inner.arena_size,
+            'U':     inner.U,
+            'F':     inner.agent_view_size,
+            'seed':  inner._landmark_seed,
+            'use_landmarks': inner.use_landmarks,
+            'symmetry_condition': getattr(inner, 'symmetry_condition', None),
+        })
 
     n_workers = min(n_workers, len(pending), cpu_count())
     chunks   = [pending[i::n_workers] for i in range(n_workers)]
-    job_args = [(chunk, arena_kwargs, T, out_dir) for chunk in chunks if chunk]
+    job_args = [(chunk, spec, T, out_dir) for chunk in chunks if chunk]
 
     # tqdm tracks chunks completing; total shows individual files
     with tqdm(total=n_traj, initial=already_done,

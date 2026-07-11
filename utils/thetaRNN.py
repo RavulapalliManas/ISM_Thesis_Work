@@ -9,6 +9,8 @@ https://github.com/pytorch/pytorch/blob/master/benchmarks/fastrnns/custom_lstms.
 @author: dl2820
 """
 
+import os
+
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Parameter
@@ -248,16 +250,19 @@ class AdaptingRNNCell(nn.Module):
 
 
 
-class LayerNormRNNCell(jit.ScriptModule):
-    # Change 5: replaced custom LayerNorm with a single fused F.layer_norm call
-    #           (one CUDA kernel instead of two separate passes).
-    # Change 6: jit.ScriptModule + @jit.script_method → compiled to C++ at class
-    #           definition time, eliminating the Python interpreter on every cell call.
+class LayerNormRNNCellScript(jit.ScriptModule):
+    # LEGACY. Kept so old runs can be reproduced bit-for-bit and so the
+    # equivalence harness can diff old-vs-new in a single process.
+    #
+    # Do NOT use for new training: jit.ScriptModule is opaque to TorchDynamo, so
+    # torch.compile captures *zero* graphs through it (verified with
+    # dynamo.explain: graph_count=0). Use LayerNormRNNCellEager instead, which
+    # traces the whole unroll into one graph with no breaks.
     #
     # State convention: Tuple[Tensor, int] where int is an unused placeholder kept
     # for API compatibility with AdaptingLayerNormRNNCell (which stores adapt state).
     def __init__(self, input_size: int, hidden_size: int, musig: List[float] = [0.0, 1.0]):
-        super(LayerNormRNNCell, self).__init__()
+        super(LayerNormRNNCellScript, self).__init__()
         self.input_size  = input_size
         self.hidden_size = hidden_size
 
@@ -284,6 +289,61 @@ class LayerNormRNNCell(jit.ScriptModule):
         x = (x - mean) / (std + 1e-4)
         hy = self.actfun(x + self.bias + internal)
         return hy, (hy, 0)
+
+
+class LayerNormRNNCellEager(nn.Module):
+    """Same math as LayerNormRNNCellScript, as a plain nn.Module.
+
+    The normalisation is deliberately hand-rolled rather than F.layer_norm: this
+    divides by (std + 1e-4), whereas F.layer_norm adds eps to the *variance*.
+    They are not the same function. Do not "simplify" it.
+
+    Parameter names/shapes match the legacy cell, so old state_dicts load as-is
+    (after stripping any `_orig_mod.` prefix left by a previous torch.compile).
+    """
+
+    def __init__(self, input_size: int, hidden_size: int, musig: List[float] = [0.0, 1.0]):
+        super(LayerNormRNNCellEager, self).__init__()
+        self.input_size  = input_size
+        self.hidden_size = hidden_size
+
+        rootk_h = np.sqrt(1.0 / hidden_size)
+        rootk_i = np.sqrt(1.0 / input_size)
+        self.weight_ih = Parameter(torch.rand(hidden_size, input_size) * 2 * rootk_i - rootk_i)
+        self.weight_hh = Parameter(torch.rand(hidden_size, hidden_size) * 2 * rootk_h - rootk_h)
+        self.bias  = Parameter(torch.zeros(hidden_size))
+        self.scale = Parameter(torch.ones(hidden_size), requires_grad=False)
+
+        self.actfun = torch.nn.ReLU()
+
+    def project_input(self, inp: Tensor) -> Tensor:
+        """W_ih @ x for every timestep at once.
+
+        The input-to-hidden projection does not depend on the recurrent state, so
+        it can be lifted out of the timestep loop as a single large GEMM instead
+        of T small ones. Row-wise the arithmetic is unchanged.
+        """
+        return inp @ self.weight_ih.t()
+
+    def forward_projected(self, xproj: Tensor, internal: Tensor, hx: Tensor) -> Tensor:
+        x = xproj + hx @ self.weight_hh.t()
+        mean = x.mean(dim=-1, keepdim=True)
+        std = x.std(dim=-1, keepdim=True, unbiased=False)
+        x = (x - mean) / (std + 1e-4)
+        return self.actfun(x + self.bias + internal)
+
+    def forward(self, input: Tensor, internal: Tensor,
+                state: Tuple[Tensor, int]) -> Tuple[Tensor, Tuple[Tensor, int]]:
+        hy = self.forward_projected(self.project_input(input), internal, state[0])
+        return hy, (hy, 0)
+
+
+# New training runs get the eager cell (torch.compile can actually see it).
+# PRNN_SCRIPT_CELL=1 restores the legacy TorchScript cell.
+if os.environ.get('PRNN_SCRIPT_CELL', '0') == '1':
+    LayerNormRNNCell = LayerNormRNNCellScript
+else:
+    LayerNormRNNCell = LayerNormRNNCellEager
 
 
 

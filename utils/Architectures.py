@@ -8,6 +8,8 @@ Created on Thu May  5 12:17:33 2022
 
 """ Preditive net modules below """
 
+import os
+
 from torch import nn
 import torch
 import numpy as np
@@ -16,6 +18,41 @@ from scipy.stats import norm
 from utils.thetaRNN import thetaRNNLayer, RNNCell, LayerNormRNNCell, AdaptingLayerNormRNNCell, AdaptingRNNCell
 
 from utils.pytorchInits import CANN_
+
+_VALIDATE_ANCHOR_IDX = os.environ.get('PRNN_VALIDATE_ANCHOR_IDX', '0') == '1'
+_HOIST_INPUT_PROJ    = os.environ.get('PRNN_HOIST_INPUT_PROJ', '0') == '1'
+
+
+def strip_compile_prefix(state_dict):
+    """Drop the `_orig_mod.` segments torch.compile inserts into state_dict keys.
+
+    Assigning `model.rnn.cell = torch.compile(model.rnn.cell)` replaces the cell
+    with an OptimizedModule, so `model.state_dict()` yields
+    `rnn.cell._orig_mod.weight_ih` instead of `rnn.cell.weight_ih`. Every
+    checkpoint written while the cell was compiled carries that prefix, and no
+    plain pRNN_th accepts it.
+    """
+    return {k.replace('._orig_mod.', '.').replace('_orig_mod.', '', 1) if '_orig_mod.' in k
+            else k: v for k, v in state_dict.items()}
+
+
+def prnn_state_dict(model):
+    """state_dict for checkpointing, immune to whether the cell is compiled."""
+    return strip_compile_prefix(model.state_dict())
+
+
+def load_prnn_state_dict(model, state, strict=True):
+    """Load a checkpoint written by any version of the trainer.
+
+    Accepts the raw checkpoint dict, the inner state_dict, and either the current
+    `model` key or the older `model_state_dict` key; strips any compile prefix.
+    """
+    if isinstance(state, dict):
+        for key in ('model', 'model_state_dict', 'state_dict'):
+            if key in state and isinstance(state[key], dict):
+                state = state[key]
+                break
+    return model.load_state_dict(strip_compile_prefix(state), strict=strict)
 
 
 class pRNN(nn.Module):
@@ -276,8 +313,13 @@ class pRNN_th(pRNN):
         anchor_idx = anchor_idx.to(device=device, dtype=torch.long).reshape(-1)
         if anchor_idx.numel() == 0:
             raise ValueError('anchor_idx must contain at least one anchor')
-        if anchor_idx.min().item() < 0 or anchor_idx.max().item() >= T_k:
-            raise ValueError(f'anchor_idx must be within [0, {T_k - 1}]')
+        # The bounds check costs two .item() calls, i.e. two device syncs and two
+        # TorchDynamo graph breaks, on *every* forward. The only production caller
+        # (train._sample_anchor_idx) builds the indices with randperm(T_k), so they
+        # cannot go out of range. Opt in with PRNN_VALIDATE_ANCHOR_IDX=1.
+        if _VALIDATE_ANCHOR_IDX:
+            if anchor_idx.min().item() < 0 or anchor_idx.max().item() >= T_k:
+                raise ValueError(f'anchor_idx must be within [0, {T_k - 1}]')
         return torch.sort(anchor_idx).values
 
     def _prepare_main_noise(self, noise_main, B, T_act, H, device):
@@ -318,16 +360,37 @@ class pRNN_th(pRNN):
             hx = torch.empty(B, H, device=device).uniform_(0.0, self.rnn.hidden_init_sigma)
 
         noise_main = self._prepare_main_noise(noise_main, B, T_act, H, device)
-        state_tuple = (hx, 0)
+        cell = self.rnn.cell
+        trunc = self.rnn.trunc
         h_list = []
 
-        for t in range(T_act):
-            if t % self.rnn.trunc == 0 and t > 0:
-                state_tuple = (state_tuple[0].detach(), 0)
+        # The input-to-hidden projection is independent of the recurrent state, so
+        # it can be lifted out of the loop: one (B*T, in) x (in, H) GEMM replaces T
+        # small ones.
+        #
+        # The FORWARD is bit-exact. The BACKWARD is not: grad_W_ih becomes a single
+        # GEMM instead of T accumulated outer products, which reorders the
+        # floating-point summation (~1e-6 relative, amplified by Adam over steps).
+        # So this is off by default and must be opted into with
+        # PRNN_HOIST_INPUT_PROJ=1. On GPU, torch.compile fuses the unroll anyway,
+        # which is where the real win is.
+        if _HOIST_INPUT_PROJ and hasattr(cell, 'forward_projected'):
+            x_all = torch.cat([obs[:, :T_act, :], act], dim=-1)
+            xproj = cell.project_input(x_all)
+            for t in range(T_act):
+                if t % trunc == 0 and t > 0:
+                    hx = hx.detach()
+                hx = cell.forward_projected(xproj[:, t, :], noise_main[:, t, :], hx)
+                h_list.append(hx)
+        else:
+            state_tuple = (hx, 0)
+            for t in range(T_act):
+                if t % trunc == 0 and t > 0:
+                    state_tuple = (state_tuple[0].detach(), 0)
 
-            x_main = torch.cat([obs[:, t, :], act[:, t, :]], dim=-1)
-            hx, state_tuple = self.rnn.cell(x_main, noise_main[:, t, :], state_tuple)
-            h_list.append(hx)
+                x_main = torch.cat([obs[:, t, :], act[:, t, :]], dim=-1)
+                hx, state_tuple = cell(x_main, noise_main[:, t, :], state_tuple)
+                h_list.append(hx)
 
         return torch.stack(h_list, dim=1)
 
