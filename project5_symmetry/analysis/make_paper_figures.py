@@ -432,6 +432,39 @@ def figS_units(data: Path, figs: Path):
         print(f'  wrote {out.name}')
 
 
+def figS_celltypes(data: Path, figs: Path):
+    p = data / 'cell_types.csv'
+    if not p.exists():
+        print('  skip figS_celltypes: missing cell_types.csv'); return
+    rows = _read(p)
+    conds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in rows)]
+    fig, ax = plt.subplots(1, 2, figsize=(5.35, 2.5))
+    # (a) place- and border-cell fraction by HD encoding, pooled across arenas (composition stable)
+    x = np.arange(len(HD_ORDER)); w = 0.38
+    for off, key, lab, col in [(-w / 2, 'frac_place', 'place cells', '#1F3B5C'),
+                               (w / 2, 'frac_border', 'border-modulated', '#9C4A2F')]:
+        m, e = zip(*[_mean_sem([_f(r, key) for r in rows if r['hd_mode'] == hd]) for hd in HD_ORDER])
+        ax[0].bar(x + off, m, w, yerr=e, capsize=1.5, color=col, edgecolor='k', lw=0.4,
+                  error_kw={'lw': 0.6}, label=lab)
+    ax[0].set_xticks(x); ax[0].set_xticklabels(HD_ORDER, rotation=20)
+    ax[0].set_ylabel('fraction of units'); ax[0].set_ylim(0, 1.05)
+    ax[0].legend(fontsize=6, loc='lower left'); _panel(ax[0], 'a')
+    # (b) fields per place cell by encoding x arena -- the fold multiplies fields
+    ww = 0.8 / len(conds)
+    for i, c in enumerate(conds):
+        m, e = zip(*[_mean_sem([_f(r, 'mean_fields_place') for r in rows
+                    if r['condition'] == c and r['hd_mode'] == hd]) for hd in HD_ORDER])
+        ax[1].bar(x + (i - (len(conds) - 1) / 2) * ww, m, ww, yerr=e, capsize=1.5,
+                  color=COND_SHADE.get(c, '#888'), edgecolor='k', lw=0.4,
+                  error_kw={'lw': 0.6}, label=COND_CN.get(c, c))
+    ax[1].set_xticks(x); ax[1].set_xticklabels(HD_ORDER, rotation=20)
+    ax[1].set_ylabel('fields per place cell'); ax[1].legend(fontsize=6, loc='upper left')
+    _panel(ax[1], 'b')
+    fig.tight_layout()
+    out = figs / 'figS_celltypes.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True)
@@ -441,7 +474,8 @@ def main():
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
     allfigs = {'fig1': fig1_setup, 'fig2': fig2_fold, 'fig3': fig3_function,
-               'fig4': fig4_geometry, 'init': figS_init, 'units': figS_units}
+               'fig4': fig4_geometry, 'init': figS_init, 'units': figS_units,
+               'celltypes': figS_celltypes}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
             continue
