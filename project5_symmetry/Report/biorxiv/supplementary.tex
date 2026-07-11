@@ -113,4 +113,31 @@ $k=1$ and are graded by how much of the compass the encoding retains.}
 converges without instability.}
 \end{figure}
 
+\clearpage
+\section{Initialization and learning speed}
+
+The recurrent matrix is not initialized at random alone: the architecture adds a
+leaky-integrator term $(1 - 1/\tau)\,I$, and a comment in the original code records that a
+Kaiming initialization was tried and discarded because it ``blows up''. We varied the
+initialization along three axes --- the identity time constant $\tau$, the gain of the random
+component, and its structure --- and summarised each run by the area under its training-loss
+curve (Fig.~\ref{figS:init}). Learning speed ordered monotonically with the amount of random
+recurrent mixing present at initialization. A pure leak, $W = 0.5\,I$ with no random recurrence,
+learned fastest; larger random components learned more slowly, and the two Kaiming variants were
+slowest of all. Neither Kaiming variant diverged: its loss fell monotonically to within $33\%$
+of the default by area, with no sign of instability. The blow-up recorded in the original comment
+belongs to the plain recurrent cell, not to the layer-normalised cell this network uses. This
+analysis bears on training dynamics rather than on the symmetry results of the main text, and is
+reported here for completeness.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/fig_init.pdf}
+\caption{Learning speed by recurrent initialization, measured as area under the training-loss
+curve (lower is faster), ranked. A pure leak with no random recurrence learns fastest; adding
+random mixing slows learning monotonically. The abandoned Kaiming initialization is slowest but
+converges without instability. Dots are individual networks.}
+\label{figS:init}
+\end{figure}
+
 \end{document}

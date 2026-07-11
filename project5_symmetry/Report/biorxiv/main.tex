@@ -435,6 +435,21 @@ $0.53$, close to the waking reference of $0.56$ and well above the cell-shuffle 
 whereas the folded \textit{axis} and \textit{const} encodings fall to that floor ($0.20$ against
 $0.17$). Coherent replay, like coverage, requires the head-direction signal the fold discards.
 
+\subsection{The dissociation survives a noisy compass}
+
+The head-direction signal used so far is a noiseless oracle, whereas the biological compass
+drifts and is re-anchored by vision. To test whether the fold depends on a perfect signal, we
+retrained the $C_2$ networks with the reported heading corrupted: on $30\%$ of steps the compass
+was rotated by a random $\pm 90^\circ$ before encoding. The dissociation is preserved. Orbit-phase
+decoding is $0.556$ under \textit{axis} and $0.922$ under \textit{parity}, a separation of
+$0.367$ that remains complete: every \textit{parity} network scores above every \textit{axis}
+network (Mann--Whitney $U = 0$, $p = 0.0022$ at $n = 6$ vs.\ $6$). Relative to the clean
+networks the separation narrows only slightly (from $0.403$), driven by a small drop in
+\textit{parity} resolution ($0.955 \to 0.922$) while the folded \textit{axis} code is unchanged
+($0.552 \to 0.556$). A compass corrupted on a third of steps still folds the same symmetries
+it does when clean. (These networks were trained for $30{,}000$ steps rather than
+$80{,}000$; the effect is already complete by then.)
+
 \subsection{Two natural readouts fail, in two different ways}
 
 Decomposing each unit's rate map into the four characters of $C_4$ gives an isotypic power
@@ -550,45 +565,6 @@ room is fully decodable. Within-room position ($R^2$) is high in both, so neithe
 stopped coding space. Bars are mean $\pm$ s.e.m.; dots are individual networks.}
 \label{fig:compartments}
 \end{figure}
-
-\subsection{Initialization sets the speed of learning, not its stability}
-
-The recurrent matrix is not initialized at random alone: the architecture adds a
-leaky-integrator term $(1 - 1/\tau)\,I$, and a comment in the original code records that a
-Kaiming initialization was tried and discarded because it ``blows up''. We varied the
-initialization along three axes, the identity time constant $\tau$, the gain of the random
-component, and its structure, and summarised each run by the area under its training-loss curve
-(Fig.~\ref{fig:init}). Learning speed ordered monotonically with the amount of random recurrent
-mixing present at initialization. A pure leak, $W = 0.5\,I$ with no random recurrence, learned
-fastest; larger random components learned more slowly, and the two Kaiming variants were slowest
-of all. Neither Kaiming variant diverged: its loss fell monotonically to within $33\%$ of the
-default by area, with no sign of instability. The blow-up recorded in the original comment
-belongs to the plain recurrent cell, not to the layer-normalised cell this network uses.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.9\textwidth]{figures/fig_init.pdf}
-\caption{Learning speed by recurrent initialization, measured as area under the training-loss
-curve (lower is faster), ranked. A pure leak with no random recurrence learns fastest; adding
-random mixing slows learning monotonically. The abandoned Kaiming initialization is slowest but
-converges without instability. Dots are individual networks.}
-\label{fig:init}
-\end{figure}
-
-\subsection{The dissociation survives a noisy compass}
-
-The head-direction signal used so far is a noiseless oracle, whereas the biological compass
-drifts and is re-anchored by vision. To test whether the fold depends on a perfect signal, we
-retrained the $C_2$ networks with the reported heading corrupted: on $30\%$ of steps the compass
-was rotated by a random $\pm 90^\circ$ before encoding. The dissociation is preserved. Orbit-phase
-decoding is $0.556$ under \textit{axis} and $0.922$ under \textit{parity}, a separation of
-$0.367$ that remains complete: every \textit{parity} network scores above every \textit{axis}
-network (Mann--Whitney $U = 0$, $p = 0.0022$ at $n = 6$ vs.\ $6$). Relative to the clean
-networks the separation narrows only slightly (from $0.403$), driven by a small drop in
-\textit{parity} resolution ($0.955 \to 0.922$) while the folded \textit{axis} code is unchanged
-($0.552 \to 0.556$). A compass corrupted on a third of steps still folds exactly the symmetries
-under which it is invariant. (These networks were trained for $30{,}000$ steps rather than
-$80{,}000$; the effect is already complete by then.)
 
 \section{Discussion}
 
