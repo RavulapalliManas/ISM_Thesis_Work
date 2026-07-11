@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from project5_symmetry.environments.compartment_arenas import (MODES as COMP_MODES,  # noqa: E402
                                                                make_compartment_env)
 from project5_symmetry.environments.compartment4 import make_compartment4_env  # noqa: E402
+from project5_symmetry.environments.cityblock import make_cityblock_env  # noqa: E402
 from project5_symmetry.environments.generate_trajectories import generate_dataset  # noqa: E402
 from project5_symmetry.environments.topology_arenas import (EXPECTED_B1,  # noqa: E402
                                                             LAYOUTS, betti,
@@ -72,6 +73,9 @@ def build_spec(n_seeds: int, groups: tuple[str, ...], seed0: int = 0) -> list[di
     if 'compartment4' in groups:
         spec += [{'group': 'compartment4', 'store': 'compartment4/parallel', 'name': 'parallel',
                   'init': None, 'seed': s} for s in seeds]
+    if 'cityblock' in groups:
+        spec += [{'group': 'cityblock', 'store': 'cityblock/lattice', 'name': 'lattice',
+                  'init': None, 'seed': s} for s in seeds]
     return spec
 
 
@@ -89,7 +93,7 @@ def torch_seed(e: dict) -> int:
 
 def hash_name(name: str) -> int:
     """Small deterministic index. NOT hash(): that is salted per process."""
-    table = list(LAYOUTS) + list(COMP_MODES) + ['parallel']
+    table = list(LAYOUTS) + list(COMP_MODES) + ['parallel', 'lattice']
     return table.index(name) + 1 if name in table else 0
 
 
@@ -105,6 +109,11 @@ def ensure_store(store: str, data_root: str, n_traj: int, workers: int) -> Path:
         generate_dataset(make_compartment4_env(F=F, seed=0), n_traj=n_traj, T=T,
                          out_dir=str(d), n_workers=workers, desc=name,
                          env_factory=make_compartment4_env,
+                         factory_kwargs={'F': F, 'seed': 0})
+    elif kind == 'cityblock':
+        generate_dataset(make_cityblock_env(F=F, seed=0), n_traj=n_traj, T=T,
+                         out_dir=str(d), n_workers=workers, desc=name,
+                         env_factory=make_cityblock_env,
                          factory_kwargs={'F': F, 'seed': 0})
     else:
         generate_dataset(make_compartment_env(name, F=F, seed=0), n_traj=n_traj, T=T,
