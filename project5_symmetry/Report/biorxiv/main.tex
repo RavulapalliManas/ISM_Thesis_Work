@@ -38,11 +38,11 @@ recruits the compass, restores the fold, and lets the network dream; weakening t
 degrades the map and the replay together, in the same order. Map and replay are therefore the same
 variable, self-motion integration forced by prediction, read out two ways, which is what makes
 this a unifying account rather than a phenomenon tied to one readout. A learned, unanchored compass
-builds the fold on its own. The pure predictive code folds completely, whereas a real code should
-keep a residual; we predict that a faint symmetry-breaking cue yields rate modulation across
-compartments without lifting the fold, the partial repetition reported in rodents
-\citep{grieves2016, spiers2015}. A cognitive map represents space only up to the symmetries its own
-motion cannot break.
+builds the fold on its own. The pure predictive code folds completely; a graded symmetry-breaking
+cue sweep, powered to resolve a genuine information ramp, found no rate-based signature of the
+partial repetition reported in rodents \citep{grieves2016, spiers2015}, only a small
+chance-exceeding residual already present with no added cue. A cognitive map represents space only
+up to the symmetries its own motion cannot break.
 \end{abstract}
 
 \begin{keywords}
@@ -971,10 +971,10 @@ spatial lead of its fields
 & tested, not found \\[4pt]
 Rate remapping: a slight rate-based discrimination between otherwise repeated fields
 & \citet{spiers2015} & the pure predictive model folds completely (repetition $+0.997$,
-compartment undecodable at $0.515$, chance $0.5$); we predict the residual rate signal appears once
-a faint symmetry-breaking cue is added, as a rate modulation across compartments that leaves
-position folded (Discussion)
-& predicted \\[4pt]
+compartment undecodable at $0.515$, chance $0.5$); a graded-cue sweep (Discussion) found no
+rate-based discrimination at any cue strength and no departure of repetition from ceiling; a
+small, chance-exceeding room-decode residual is present already at zero added cue
+& tested, not found \\[4pt]
 Grid cells on a toroidal population manifold, invariant across environments and sleep
 & \citet{gardner2022toroidal} & no grid cells (gridness $\le 0.08$); the torus cannot exist here
 & absent \\[4pt]
@@ -991,36 +991,50 @@ which is the condition under which hexagonal grids emerge in trained path integr
 \citep{sorscher2023unified}. Nothing here bears on the ring or toroidal manifolds of entorhinal
 cortex, and we make no claim about them.
 
-The row marked \emph{predicted} is the one place the model and the animals part on the fold itself,
-and it points to a test. Spiers reported repetition \emph{with} a slight rate-based discrimination,
-and Grieves reported purely local remapping: the animals keep, in the rate channel, some trace of
-which compartment they are in. Our network, given perfectly identical rooms, keeps none, and folds
-completely. The two are reconciled by noting that real compartments are never perfectly identical.
-A cognitive map should therefore not collapse exactly onto $X/G$ but toward it, up to a residual
-set by whatever faint cue does distinguish the rooms. This is a concrete, falsifiable prediction: a
-symmetry-breaking channel too weak to lift position should still modulate rate, producing repeated
-fields that carry a consistent rate difference between compartments, which is Spiers' signature.
-An experiment that adds such a cue to the parallel arrangement and sweeps its strength would test
-it directly, and would place the complete fold reported here as the zero-cue limit of a graded
-phenomenon.
+The row marked \emph{tested, not found} is the one place the model and the animals part on the
+fold itself, and we tested it directly. Spiers reported repetition \emph{with} a slight rate-based
+discrimination, and Grieves reported purely local remapping: the animals keep, in the rate channel,
+some trace of which compartment they are in. Our network, given perfectly identical rooms, keeps
+none, and folds completely. We reasoned that real compartments are never perfectly identical, so a
+cognitive map should not collapse exactly onto $X/G$ but toward it, up to a residual set by whatever
+faint cue does distinguish the rooms, and set out to test whether a symmetry-breaking channel too
+weak to lift position would still modulate rate, producing repeated fields that carry a consistent
+rate difference between compartments (Spiers' signature), with the complete fold reported here as
+the zero-cue limit of a graded phenomenon.
 
 Eq.~\ref{eq:bound} lets that curve be predicted before any network is trained, by evaluating the same
-input-distinguishability bound on the cued arena. Applied to a candidate cue, a uniform brightness
-shift on room B's egocentric view of amplitude $\varepsilon$, added to every pixel and clipped to the
-valid range, the bound is a step rather than a ramp: below the one-part-in-255 rounding threshold
+input-distinguishability bound on the cued arena. A first attempt, a uniform brightness shift on
+room B's egocentric view of amplitude $\varepsilon$, added to every pixel and clipped to the valid
+range, turned out to give a step rather than a ramp: below the one-part-in-255 rounding threshold
 ($\varepsilon < 1/510$) the cue changes no pixel and the input is exactly as aliased as at
 $\varepsilon = 0$ (bound $0.500$); at or above it, every cued state becomes distinguishable from its
-uncued image and the bound jumps to $1.000$. The amplitudes $0.05$--$0.4$ planned for this sweep all
-sit at the ceiling, not on a ramp between the two floors: at the input level this cue can only be
-invisible or (in principle) fully resolving, never faint in the graded sense the prediction requires.
-Whether a network trained under this cue shows a graded response is then a question of learning
-dynamics and sample efficiency rather than of available information, which is a weaker and less
-clean claim than the one the prediction is meant to support. A cue built to vary smoothly in the
-information it carries, for instance additive pixel noise of fixed variance competing against a
-small, fixed-amplitude signal, or a fractional-probability cue applied on only a subset of steps,
-would put the bound itself on a ramp and let the predicted curve be tested as designed; the uniform
-whole-view tint currently implemented (\texttt{environments/arena.py}) does not, and should be
-replaced before the swept experiment is run.
+uncued image and the bound jumps to $1.000$. The amplitudes $0.05$--$0.4$ used in that attempt all
+sat at the ceiling, not on a ramp between the two floors, so we replaced it with a cue built to vary
+smoothly in the information it carries: fixed per-pixel Gaussian noise ($\sigma=0.05$) competing
+against a room-B tint swept in float precision to target single-step discriminabilities
+$d'=\varepsilon\sqrt{N}/\sigma$ evenly spaced over $\{0,\dots,3\}$
+(\texttt{environments/arena.py}, \texttt{experiments/run\_multi.py}). This puts the bound itself on
+a ramp, and training confirms it: both a generalization and a within-trajectory room decoder rise
+smoothly and monotonically with $d'$ (Spearman $\rho=0.92$ and $0.99$, $n=64$, $p<10^{-25}$; $d'=0$
+vs.\ $d'=3$, exact two-sided Mann--Whitney $U$, $p=0.000155$, $n=8$ vs.\ $8$), so the sweep now
+tests the prediction as designed.
+
+The prediction itself is not borne out. Field-shape repetition stays at ceiling across the entire
+sweep ($\approx 0.997$, $p=0.88$ comparing $d'=0$ to $d'=3$, $\rho=0.17$, n.s.), and a
+rate-asymmetry readout built for this test (the median relative firing-rate difference between
+rooms, computed on the top-100-variance units with no position matching) is flat throughout
+($p=0.88$, $\rho=0.02$, n.s.): we find no evidence this measure picks up a rate-based signal at
+all, let alone one that leads position as the prediction required. Room decodability itself rises
+with $d'$ but stays well below the conservative single-observation Bayes ceiling at every point
+tested (e.g.\ at $d'=3$, generalization accuracy $0.59$ against a ceiling of $0.93$ for $T=1$),
+consistent with information being present in the input but not fully recruited by the network,
+rather than recruited into a graded rate code. This is an honest negative on the specific
+rate-leads-position prediction, as pre-registered. Reconciliation with Spiers' partial fold has to
+come, in this architecture, from the residual already present at zero added cue (generalization
+room decode $0.510$, itself significantly above chance, Wilcoxon $p=0.023$, $n=8$) rather than
+from a graded rate-versus-position dissociation: some trace of compartment identity survives even
+the ``perfectly identical rooms'' limit, but it does not grow into the kind of rate code Spiers
+observed as the cue is strengthened.
 
 The objective control constrains the mechanism further: a matched autoencoder with the same
 wiring and the same compass folds every encoding alike ($p = 0.59$), which rules out the fold
@@ -1287,6 +1301,29 @@ consequently, a decoder artefact to be read against as an empirical floor; they 
 the trained networks themselves, a small residual above the nominal chance the permutation test
 above confirms is not noise. We attribute it, as in the Discussion, to finite training never
 reaching the exactly invariant solution a population-level, infinitely-trained network would.
+
+\paragraph{Within-episode phase (Experiment 0).} The across-episode analysis above shows absolute
+orbit phase is undecodable in steady state, but that alone cannot distinguish a code that never
+carries phase information from one that carries it locally, right after an episode begins, and
+loses it as the trajectory accumulates. We tested this directly with a per-episode-relative label,
+$z(t) = \text{phase}(t) \oplus \text{phase}(0)$, decoded with a logistic model under
+\texttt{GroupKFold}-by-episode and \texttt{class\_weight='balanced'}, reporting balanced accuracy
+(chance $=0.5$ regardless of $z$'s base rate) as a function of dwell time since episode start. An
+earlier version of this analysis, reporting raw accuracy, was invalidated by a majority-class
+confound: under a random walk, $P(z=1)$ rises from about $0.08$ near episode start to about $0.46$
+by $100+$ steps purely from position continuity, independent of the hidden state, so a
+majority-class-only classifier scored about $0.93$ at $0$--$10$ steps using zero real information;
+comparing every reported number against this baseline is now standard in the pipeline.
+The corrected result, $n=10$ seeds each of \textit{learned}, \textit{axis} and \textit{const} in
+the $C_2$ arena, is nominally above chance (Wilcoxon signed-rank against $0.5$, exact two-sided,
+uncorrected) at every dwell bin tested for all three encodings, decaying from
+$0.66$--$0.74$ near episode start toward the across-episode baseline ($0.52$--$0.53$) by
+$100+$ steps. The effect at the longest bin is markedly weaker for \textit{learned}
+($p=0.049$, at the edge of detection) than for \textit{axis}/\textit{const} ($p \le 0.0098$),
+though none actually falls to non-significance. The fold is therefore decodable-but-drifting: the
+network keeps a locally coherent orbit-frame for a window after an episode starts, which
+attenuates toward the steady-state floor rather than vanishing at the first step (an instantaneous
+fold) or never appearing at all (a code with no phase information to lose).
 
 \paragraph{Isotypic spectrum.} Each unit's rate map is decomposed into the four characters of
 $C_4$; $P_k$ is the normalised power in character $k$, $\sum_k P_k = 1$, and $P_1 = P_3$ for real
