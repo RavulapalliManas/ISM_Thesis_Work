@@ -56,6 +56,51 @@ def paired_di(fd):
     return np.array(xs), np.array(ys)
 
 
+def global_directionality_controls(fd, rng):
+    """Controls that hold cell-level directionality fixed (does the same-orientation DI
+    correlation require the field repetition the fold predicts, or is it just a conjunctive
+    place-by-direction bias?). Returns (r_nonrep, n_nonrep, r_scramble, between_frac, r_rot)."""
+    # non-repeating cells' same-orientation pairs
+    xn, yn = paired_di_any(fd[~fd.rep])
+    r_non = pearsonr(xn, yn)[0] if len(xn) > 2 else float('nan')
+    # directionality-matched scramble: keep per-cell:orient mean, resample residuals globally
+    rep = fd[fd.rep].copy()
+    gm = rep.groupby(['cell', 'orient']).di.transform('mean')
+    pool = (rep.di - gm).values
+    scr = []
+    for _ in range(500):
+        s = rep.copy(); s['di'] = gm.values + rng.permutation(pool)
+        xs, ys = paired_di(s)
+        scr.append(pearsonr(xs, ys)[0] if len(xs) > 2 else 0.0)
+    # between-cell fraction of DI variance
+    m = fd[fd.rep]
+    between = m.groupby('cell').di.mean().var()
+    within = m.groupby('cell').di.transform(lambda v: v - v.mean()).var()
+    bfrac = between / (between + within)
+    # rotation arm: within-cell H vs V (orthogonal / rotation-related)
+    xr, yr = [], []
+    for _, g in fd[fd.rep].groupby('cell'):
+        H, V = g[g.orient == 'H'].di.values, g[g.orient == 'V'].di.values
+        for h in H:
+            for v in V:
+                xr.append(h); yr.append(v)
+    r_rot = pearsonr(xr, yr)[0] if len(xr) > 2 else float('nan')
+    return r_non, len(xn) // 2, float(np.mean(scr)), float(bfrac), r_rot
+
+
+def paired_di_any(fd):
+    """Same as paired_di but on whatever subset is passed (no rep filter)."""
+    xs, ys = [], []
+    for _, g in fd.groupby('cell'):
+        for _, go in g.groupby('orient'):
+            di = go.di.values
+            for i in range(len(di)):
+                for j in range(len(di)):
+                    if i != j:
+                        xs.append(di[i]); ys.append(di[j])
+    return np.array(xs), np.array(ys)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True, help='dir with AlleySuperpopDirVisitFiltered.csv')
@@ -85,6 +130,14 @@ def main():
     p_shuf = (np.sum(null >= r) + 1) / (len(null) + 1)
     print(f'  shuffle null r = {null.mean():+.3f} +/- {null.std():.3f};  p = {p_shuf:.4f}')
 
+    r_non, n_non, r_scr, bfrac, r_rot = global_directionality_controls(fd, rng)
+    print(f'\nglobal-directionality controls (does it require repetition / beat directionality?):')
+    print(f'  non-repeating same-orient r = {r_non:+.3f} ({n_non} pairs)')
+    print(f'  directionality-matched scramble r = {r_scr:+.3f}  (vs observed {r:+.3f})')
+    print(f'  between-cell DI variance fraction = {bfrac:.3f}')
+    print(f'  rotation arm (H vs V) r = {r_rot:+.3f}')
+    print('  => consistent with the quotient but NOT separable from conjunctive place-by-direction')
+
     import statsmodels.formula.api as smf
     m = fd[fd.rep].copy()
     m['co'] = m.cell + '_' + m.orient
@@ -110,7 +163,9 @@ def main():
     pd.DataFrame([{'n_fields': len(fd), 'n_repeating': int(fd.rep.sum()),
                    'n_same_orient_pairs': len(x) // 2, 'pair_r': r, 'pair_p': p,
                    'shuffle_p': p_shuf, 'mixed_icc': icc,
-                   'cells_span_both_orient': int((span >= 2).sum())}]).to_csv(summ, index=False)
+                   'cells_span_both_orient': int((span >= 2).sum()),
+                   'nonrep_r': r_non, 'nonrep_pairs': n_non, 'dirmatched_scramble_r': r_scr,
+                   'between_cell_var_frac': bfrac, 'rotation_arm_r': r_rot}]).to_csv(summ, index=False)
     print(f'\nwrote {a.out} and {summ.name}')
 
 

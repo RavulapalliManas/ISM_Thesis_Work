@@ -24,6 +24,7 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -47,6 +48,29 @@ from project5_symmetry.training.inits import VARIANTS, apply_init, spectral_radi
 CHECKPOINT_STEPS = (0, 250, 500, 1000, 2000, 4000, 8000, 16000, 32000, 80000)
 INIT_VARIANTS = ('tau1', 'baseline', 'tau4', 'tau8', 'gain_lo', 'gain_hi', 'orth', 'zero_rec')
 KAIMING_VARIANTS = ('kaiming', 'kaiming_noid')
+
+# Weak symmetry-breaking, graded-cue design (referee item 1): a room-B tint alone, added
+# through 8-bit rounding, is a step function in the Eq. 1 bound (0 below 1/510, 1 at or above
+# it) -- every one of the old amplitudes (0.05-0.4) sat at the ceiling. Fixed by making this a
+# signal-to-noise ramp instead of an amplitude ramp: fix per-pixel Gaussian noise sigma, and
+# sweep the room-B tint eps so the SINGLE-STEP discriminability d' = eps*sqrt(N)/sigma spans
+# the evenly-spaced targets below. Both are applied in float, downstream of quantisation (tint
+# in generate_trajectories.collect_trajectory, noise here at train time -- see sample_batches),
+# so the Bayes-optimal bound acc_max(d', T) = Phi(0.5 * d' * sqrt(T)) is a smooth sigmoid, not
+# a step, and can be plotted BEFORE training anything.
+WEAKBREAK_SIGMA = 0.05
+WEAKBREAK_N_PIXELS = F * F * 3                            # 147: matches OBS
+WEAKBREAK_D_PRIME_TARGETS = tuple(round(x, 4) for x in np.linspace(0.0, 3.0, 8))
+WEAKBREAK_TINTS = tuple(
+    round(d * WEAKBREAK_SIGMA / np.sqrt(WEAKBREAK_N_PIXELS), 6) for d in WEAKBREAK_D_PRIME_TARGETS
+)
+
+
+def _tname(d_prime: float) -> str:
+    return f'd{d_prime:.2f}'.replace('.', 'p')
+
+
+WEAKBREAK_TINT_BY_NAME = {_tname(d): t for d, t in zip(WEAKBREAK_D_PRIME_TARGETS, WEAKBREAK_TINTS)}
 
 
 def build_spec(n_seeds: int, groups: tuple[str, ...], seed0: int = 0) -> list[dict]:
@@ -76,6 +100,10 @@ def build_spec(n_seeds: int, groups: tuple[str, ...], seed0: int = 0) -> list[di
     if 'cityblock' in groups:
         spec += [{'group': 'cityblock', 'store': 'cityblock/lattice', 'name': 'lattice',
                   'init': None, 'seed': s} for s in seeds]
+    if 'weakbreak' in groups:
+        spec += [{'group': 'weakbreak', 'store': f'weakbreak/{_tname(d)}', 'name': _tname(d),
+                  'init': None, 'seed': s, 'tint': t, 'd_prime': d}
+                 for d, t in zip(WEAKBREAK_D_PRIME_TARGETS, WEAKBREAK_TINTS) for s in seeds]
     return spec
 
 
@@ -93,7 +121,8 @@ def torch_seed(e: dict) -> int:
 
 def hash_name(name: str) -> int:
     """Small deterministic index. NOT hash(): that is salted per process."""
-    table = list(LAYOUTS) + list(COMP_MODES) + ['parallel', 'lattice']
+    table = (list(LAYOUTS) + list(COMP_MODES) + ['parallel', 'lattice']
+             + [_tname(d) for d in WEAKBREAK_D_PRIME_TARGETS])
     return table.index(name) + 1 if name in table else 0
 
 
@@ -115,6 +144,12 @@ def ensure_store(store: str, data_root: str, n_traj: int, workers: int) -> Path:
                          out_dir=str(d), n_workers=workers, desc=name,
                          env_factory=make_cityblock_env,
                          factory_kwargs={'F': F, 'seed': 0})
+    elif kind == 'weakbreak':
+        tint = WEAKBREAK_TINT_BY_NAME[name]
+        generate_dataset(make_compartment_env('translation', F=F, seed=0, tint=tint),
+                         n_traj=n_traj, T=T, out_dir=str(d), n_workers=workers, desc=name,
+                         env_factory=make_compartment_env,
+                         factory_kwargs={'mode': 'translation', 'F': F, 'seed': 0, 'tint': tint})
     else:
         generate_dataset(make_compartment_env(name, F=F, seed=0), n_traj=n_traj, T=T,
                          out_dir=str(d), n_workers=workers, desc=name,
@@ -132,7 +167,17 @@ def sample_batches(stores, spec, B):
         o, a = stores[st].sample_parallel_batches(n, B)
         obs_parts.append(o)
         act_parts.append(a)
-    return torch.cat(obs_parts, 0), torch.cat(act_parts, 0)
+    obs, act = torch.cat(obs_parts, 0), torch.cat(act_parts, 0)
+    # Weakbreak's SNR sweep: fresh i.i.d. Gaussian pixel noise every step, not baked into the
+    # cached trajectories -- otherwise every training exposure would see the SAME noise
+    # realisation per (trajectory, step), which is not the iid-noise model the Bayes bound
+    # (acc_max = Phi(0.5 * d' * sqrt(T))) assumes and risks the network memorising noise
+    # patterns rather than the tint. tint itself is baked in (deterministic, not noise).
+    rows = [i for i, e in enumerate(spec) if e['group'] == 'weakbreak']
+    if rows:
+        idx = torch.tensor(rows, device=obs.device)
+        obs[idx] = obs[idx] + WEAKBREAK_SIGMA * torch.randn_like(obs[idx])
+    return obs, act
 
 
 def save_checkpoints(params, spec, out_root, step, meta):
@@ -147,6 +192,9 @@ def save_checkpoints(params, spec, out_root, step, meta):
             tau, gain, struct = VARIANTS[e['name']]
             extra |= {'variant': e['name'], 'layout': 'annulus', 'b1': EXPECTED_B1['annulus'],
                       'tau': tau, 'gain': gain, 'struct': struct}
+        elif e['group'] == 'weakbreak':
+            extra |= {'mode': 'translation', 'tint': e.get('tint', 0.0),
+                      'd_prime': e.get('d_prime', 0.0), 'sigma': WEAKBREAK_SIGMA}
         else:
             extra |= {'mode': e['name']}
         torch.save({'step': step, 'model': ens.unstack_state_dict(params, i),
@@ -168,11 +216,14 @@ def main():
     ap.add_argument('--dataset-workers', type=int, default=16)
     ap.add_argument('--compile', default='default', choices=['default', 'none'])
     ap.add_argument('--log-every', type=int, default=200)
+    ap.add_argument('--k', type=int, default=K,
+                    help='rollout horizon; a distinct k is a distinct graph (separate compile), '
+                         'so sweep it across separate invocations, not within one run')
     a = ap.parse_args()
 
     device = torch.device('cuda')
     _enable_tf32(device)
-    k, B, T_k = K, a.batch_size, T - K
+    k, B, T_k = a.k, a.batch_size, T - a.k
     spec = sorted(build_spec(a.n_seeds, tuple(a.groups), a.seed_offset), key=lambda e: e['store'])
     S = len(spec)
     out_root = Path(a.out); out_root.mkdir(parents=True, exist_ok=True)

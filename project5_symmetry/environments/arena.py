@@ -464,6 +464,11 @@ class PixelObsWrapper(ObservationWrapper):
     def observation(self, obs):
         # self.env is SymmetryArena — get_frame lives there, not on the wrapper
         rgb = self.env.get_frame(tile_size=self.tile_size, agent_pov=True)
+        # The optional symmetry-breaking cue (env.tint_b) is applied in FLOAT space by
+        # generate_trajectories.collect_trajectory, downstream of the /255 normalisation, not
+        # here: adding it to this uint8 render and rounding back to uint8 makes it a step
+        # function (no pixel changes below 1/510, every pixel changes at or above it), which
+        # cannot produce the graded Bayes-optimal detectability Eq. 1 predicts.
         return {**obs, "image": rgb}
 
 

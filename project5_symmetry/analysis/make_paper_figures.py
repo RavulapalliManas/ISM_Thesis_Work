@@ -22,12 +22,25 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec  # noqa: E402
+from matplotlib.patches import Circle, FancyArrowPatch, Polygon, Rectangle  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # noqa: E402
+from project5_symmetry.environments.arena import PixelObsWrapper, SymmetryArena  # noqa: E402
+from project5_symmetry.environments.compartment4 import Compartment4Arena  # noqa: E402
+from project5_symmetry.environments.compartment_arenas import CompartmentArena  # noqa: E402
 
 # Muted, formal palette (still colourblind-distinguishable), fixed per HD encoding everywhere.
 HD_COLOR = {'full': '#1F3B5C', 'parity': '#3A6B6B', 'axis': '#9C4A2F', 'const': '#8A8A8A'}
 HD_ORDER = ['full', 'parity', 'axis', 'const']
 TWO = {'translation': '#1F3B5C', 'rotation': '#9C4A2F'}
 COND_CN = {'s1': '$C_1$', 's2': '$C_2$', 's4': '$C_4$'}       # arena naming, everywhere
+# fig1_overview only: card-style rendering (soft shadow, floor texture) for the schematic
+# panels. Foreground colours reuse TWO/HD_COLOR above; these are the supporting greys.
+OV_GREY_FLOOR = '#EDEDED'
+OV_GRID_LINE = '#DBDBDB'
+OV_WALL = '#6A6A6A'
+OV_LABEL_GREY = '#8A8A8A'
+OV_ARROW_GREY = '#767676'
 COND_SHADE = {'s1': '#BBBBBB', 's2': '#6E6E6E', 's4': '#222222'}
 INK = '#222222'
 RATE_CMAP = plt.get_cmap('magma').copy(); RATE_CMAP.set_bad('#ffffff')
@@ -188,6 +201,423 @@ def _draw_compartments(ax, rows, modes):
               handletextpad=0.4, columnspacing=0.8)
 
 
+# ======================================================= fig1_overview panel drawers
+def _ov_mute(hexcolor, amt=0.42):
+    """Blend a saturated colour 42% toward white -- softer than the raw landmark RGB."""
+    hexcolor = hexcolor.lstrip('#')
+    a = tuple(int(hexcolor[i:i + 2], 16) for i in (0, 2, 4))
+    m = tuple(round(x * (1 - amt) + 255 * amt) for x in a)
+    return f'#{m[0]:02x}{m[1]:02x}{m[2]:02x}'
+
+
+_OV_DISPLAY = {
+    (0.0, 0.0, 0.45): _ov_mute('2255AA'), (0.45, 0.0, 0.0): _ov_mute('B23A2E'),
+    (0.45, 0.45, 0.0): _ov_mute('C79A1E'), (0.0, 0.35, 0.0): _ov_mute('3A7D3A'),
+}
+
+
+def _ov_card_shadow(ax, x0, y0, w, h, n_layers=14, dx=0.30, dy=-0.34, a=0.022, zorder=-1):
+    for k in range(n_layers, 0, -1):
+        f = k / n_layers
+        ax.add_patch(Rectangle((x0 + dx * f, y0 + dy * f), w, h, facecolor='#000000',
+                                edgecolor='none', alpha=a, zorder=zorder))
+
+
+def _ov_circle_shadow(ax, cx, cy, r, n_layers=14, dx=0.10, dy=-0.12, a=0.024, zorder=-1):
+    """Same soft-shadow treatment as _ov_card_shadow but circular -- a square shadow behind
+    a round object shows its corners past the object's edge in every renderer, not a bug
+    specific to one (confirmed: poppler just renders it sharply enough to be obvious)."""
+    for k in range(n_layers, 0, -1):
+        f = k / n_layers
+        ax.add_patch(Circle((cx + dx * f, cy + dy * f), r, facecolor='#000000',
+                             edgecolor='none', alpha=a, zorder=zorder))
+
+
+def _ov_rotation_icon(ax, cx, cy, size, label, color=TWO['translation'], label_dy=1.1):
+    """Standard clockwise-rotation glyph -- reused for panels b and d."""
+    ax.text(cx, cy, '⟳', fontsize=size, color=color, ha='center', va='center',
+            family='DejaVu Sans', zorder=6)
+    ax.text(cx, cy - label_dy, label, fontsize=6.6, color=color, ha='center', va='top')
+
+
+# ---- panel a: pipeline (agent -> egocentric patch -> pRNN -> prediction) ----------
+def _ov_pipeline_data():
+    N = 18
+    env = SymmetryArena(shape='square', size=N, U=4, symmetry_condition='s4',
+                         use_landmarks=True, F=7)
+    penv = PixelObsWrapper(env)
+    obs, _ = penv.reset()
+    patch_t0 = obs['image'].copy()
+    path = [tuple(env.agent_pos)]
+    for a in (2, 2, 2):
+        obs, *_ = penv.step(a)
+        path.append(tuple(env.agent_pos))
+    patch_t3 = obs['image'].copy()
+    return N, env._get_landmark_tiles(), path, patch_t0, patch_t3
+
+
+def _ov_draw_arena_agent(ax, N, tiles, path):
+    _ov_card_shadow(ax, 0, 0, N, N, dx=0.35, dy=-0.42)
+    ax.add_patch(Rectangle((0, 0), N, N, facecolor=OV_GREY_FLOOR, edgecolor='none', zorder=0))
+    for (r, c), rgb in tiles.items():
+        color = _OV_DISPLAY.get(tuple(rgb), '#999999')
+        ax.add_patch(Rectangle((c - 1, N - r), 1, 1, facecolor=color, edgecolor='none', zorder=1))
+    for i in range(N + 1):
+        ax.plot([i, i], [0, N], color=OV_GRID_LINE, lw=0.35, zorder=0.5)
+        ax.plot([0, N], [i, i], color=OV_GRID_LINE, lw=0.35, zorder=0.5)
+    ax.add_patch(Rectangle((0, 0), N, N, facecolor='none', edgecolor=OV_WALL, lw=1.1, zorder=4))
+
+    xs = [p[0] + 0.5 for p in path]
+    ys = [N - p[1] - 0.5 for p in path]
+    ax.plot(xs, ys, color=TWO['translation'], lw=1.1, zorder=5, solid_capstyle='round', alpha=0.85)
+    for x, y in zip(xs[:-1], ys[:-1]):
+        ax.add_patch(Circle((x, y), 0.11, facecolor=TWO['translation'], edgecolor='none',
+                             zorder=5, alpha=0.85))
+
+    vx0, vy0 = xs[-1] - 3.5, ys[-1]
+    ax.add_patch(Rectangle((vx0, vy0), 7, 3.6, facecolor='#F2D98A', edgecolor='none',
+                            alpha=0.38, zorder=3))
+    ax.add_patch(Polygon([(xs[-1], ys[-1] + 0.42), (xs[-1] - 0.30, ys[-1] - 0.24),
+                           (xs[-1] + 0.30, ys[-1] - 0.24)], closed=True,
+                          facecolor=TWO['translation'], edgecolor='white', lw=0.6, zorder=6))
+
+    ax.set_xlim(-0.7, N + 0.7); ax.set_ylim(-0.7, N + 0.7)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+
+
+def _ov_draw_patch(ax, patch, accent, label):
+    w, h = patch.shape[1], patch.shape[0]
+    _ov_card_shadow(ax, 0, 0, w, h, dx=0.22, dy=-0.30, a=0.030)
+    ax.imshow(patch, interpolation='nearest', extent=(0, w, 0, h), zorder=1)
+    ax.add_patch(Rectangle((0, 0), w, h, facecolor='none', edgecolor='#FFFFFF', lw=0.8, zorder=2))
+    ax.add_patch(Rectangle((0, h + 0.35), 0.9, 0.16, facecolor=accent, edgecolor='none'))
+    ax.set_xlim(-0.3, w + 0.3); ax.set_ylim(-0.4, h + 0.9)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.text(w / 2, -0.9, label, fontsize=6.6, color=OV_LABEL_GREY, ha='center', va='top')
+
+
+def _ov_draw_rnn(ax, cx, cy, r):
+    _ov_circle_shadow(ax, cx, cy, r, dx=0.10 * r, dy=-0.12 * r, a=0.024, zorder=0)
+    # radial gradient via many thin concentric vector circles, not a raster image with an
+    # alpha soft-mask -- image clip-paths/soft-masks render inconsistently across PDF
+    # interpreters (confirmed: poppler shows a hard square halo where gs/matplotlib don't).
+    # Solid-fill circles at flat per-layer alpha are a standard PDF construct every viewer
+    # handles the same way.
+    n_rings = 44
+    for k in range(n_rings, 0, -1):
+        f = k / n_rings
+        ax.add_patch(Circle((cx, cy), r * f, facecolor=(0.75, 0.80, 0.87), edgecolor='none',
+                             alpha=0.028, zorder=1))
+    ax.add_patch(Circle((cx, cy), r, facecolor='none', edgecolor='#9FB0C2', lw=0.8, zorder=2))
+
+    rng = np.random.default_rng(3)
+    rel = [(-0.235, 0.559), (0.088, 0.618), (0.529, 0.324), (0.588, -0.118),
+           (0.324, -0.529), (-0.147, -0.588), (-0.559, -0.265), (-0.529, 0.176),
+           (0.059, 0.088), (0.0, 0.0), (-0.36, 0.10), (0.30, 0.62), (-0.62, -0.55),
+           (0.62, -0.42)]
+    sizes = [0.040, 0.030, 0.045, 0.028, 0.038, 0.026, 0.042, 0.030, 0.055, 0.048,
+             0.024, 0.020, 0.022, 0.026]
+    nodes = [(cx + dx * r, cy + dy * r) for dx, dy in rel]
+    edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 0),
+             (8, 0), (8, 3), (8, 5), (9, 1), (9, 6), (10, 6), (10, 0),
+             (11, 1), (12, 5), (13, 3)]
+    for i, j in edges:
+        p0, p1 = nodes[i], nodes[j]
+        rad = rng.uniform(-0.28, 0.28)
+        ax.add_patch(FancyArrowPatch(p0, p1, connectionstyle=f'arc3,rad={rad}',
+                                      arrowstyle='-', lw=0.9, color='#4C5F73',
+                                      alpha=0.8, zorder=3))
+    for (x, y), s in zip(nodes, sizes):
+        rad = s * r
+        ax.add_patch(Circle((x + rad * 0.28, y - rad * 0.32), rad * 1.05,
+                             facecolor='#000000', alpha=0.13, edgecolor='none', zorder=4))
+        ax.add_patch(Circle((x, y), rad, facecolor='#5E7089', edgecolor='none', zorder=5))
+        ax.add_patch(Circle((x - rad * 0.32, y + rad * 0.32), rad * 0.42,
+                             facecolor='#9FB0C2', edgecolor='none', alpha=0.80, zorder=6))
+
+
+def _ov_draw_actions(ax, heading='N'):
+    """The quantity actually fed to the network: the 5-D SpeedHD vector [speed, onehot(h)]
+    (Methods), not the raw turn/forward/stop environment actions -- drawn in the same
+    greyscale-matrix convention as the encoding matrices in fig1_setup panel a."""
+    cols = ['speed', 'E', 'S', 'W', 'N']
+    vals = [1.0, 0.0, 0.0, 0.0, 0.0]
+    vals[cols.index(heading)] = 1.0
+    CELL = 0.62
+    x0 = -2.5 * CELL
+    _ov_card_shadow(ax, x0, 0, 5 * CELL, CELL * 0.88, n_layers=10, dx=0.05, dy=-0.06, a=0.022)
+    for i, (name, v) in enumerate(zip(cols, vals)):
+        x = x0 + i * CELL
+        shade = 1 - v
+        ax.add_patch(Rectangle((x, 0), CELL * 0.88, CELL * 0.88,
+                                facecolor=(shade, shade, shade), edgecolor='#9A9A9A', lw=0.5))
+        ax.text(x + CELL * 0.44, -0.10, name, fontsize=5.5, color=OV_LABEL_GREY,
+                ha='center', va='top', style=('normal' if name == 'speed' else 'italic'))
+    ax.set_xlim(x0 - 0.15, x0 + 5 * CELL + 0.15); ax.set_ylim(-0.42, 0.98)
+    ax.set_aspect('equal'); ax.axis('off')
+    ax.text(0, 0.86, r'$a_t = [\,\mathrm{speed},\ \mathrm{onehot}(h)\,]$', fontsize=6.6,
+            color=OV_LABEL_GREY, ha='center', va='bottom')
+
+
+# ---- panel b: the three arenas, C1/C2/C4, real landmark geometry ------------------
+_OV_CONDS = [
+    ('s1', '$C_1$ -- no symmetry', None, '4 distinct landmarks'),
+    ('s2', '$C_2$ -- 180° rotation', 'top_half', '2 landmarks, ×2 copies each'),
+    ('s4', '$C_4$ -- 90° rotation', 'q1', '1 landmark, ×4 copies'),
+]
+
+
+def _ov_domain_path(kind, N):
+    if kind is None:
+        return []
+    if kind == 'top_half':
+        return [(1, 1, N // 2, N)]
+    if kind == 'q1':
+        return [(1, 1, N // 2, N // 2)]
+    raise ValueError(kind)
+
+
+def _ov_draw_symarena(ax, cond, domain_kind, title, N=18):
+    arena = SymmetryArena(shape='square', size=N, U=4, symmetry_condition=cond,
+                           use_landmarks=True)
+    tiles = arena._get_landmark_tiles()
+
+    _ov_card_shadow(ax, 0, 0, N, N)
+    ax.add_patch(Rectangle((0, 0), N, N, facecolor=OV_GREY_FLOOR, edgecolor='none', zorder=0))
+    for (r, c), rgb in tiles.items():
+        color = _OV_DISPLAY.get(tuple(rgb), '#999999')
+        ax.add_patch(Rectangle((c - 1, N - r), 1, 1, facecolor=color, edgecolor='none', zorder=1))
+    ax.add_patch(Rectangle((0, 0), N, N, facecolor='none', edgecolor=OV_WALL, lw=1.4, zorder=4))
+
+    for (r0, c0, r1, c1) in _ov_domain_path(domain_kind, N):
+        x0, y0 = c0 - 1, N - r1
+        w, h = (c1 - c0 + 1), (r1 - r0 + 1)
+        ax.add_patch(Rectangle((x0, y0), w, h, facecolor='none', edgecolor=TWO['translation'],
+                                lw=1.3, ls=(0, (3, 2)), zorder=5))
+
+    if cond == 's2':
+        _ov_rotation_icon(ax, N + 2.3, N - 1.9, 19, '180°')
+    elif cond == 's4':
+        _ov_rotation_icon(ax, N + 2.3, N - 1.9, 19, '90°')
+
+    ax.set_xlim(-0.6, N + 4.6); ax.set_ylim(-0.6, N + 0.6)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.set_title(title, fontsize=7, color=INK, pad=5)
+
+
+# ---- panel c: the animal phenomenon, real compartment-arena geometry --------------
+def _ov_bbox(cells):
+    rs = [c[0] for c in cells]; cs = [c[1] for c in cells]
+    return min(rs), max(rs), min(cs), max(cs)
+
+
+def _ov_draw_footprint(ax, passable, tiles, pad=1):
+    r0, r1, c0, c1 = _ov_bbox(passable)
+    r0 -= pad; r1 += pad; c0 -= pad; c1 += pad
+    W, H = c1 - c0 + 1, r1 - r0 + 1
+    _ov_card_shadow(ax, 0, 0, W, H, dx=0.35, dy=-0.4)
+    for r, c in passable:
+        x, y = c - c0, r1 - r
+        ax.add_patch(Rectangle((x, y), 1, 1, facecolor=OV_GREY_FLOOR, edgecolor=OV_GRID_LINE,
+                                lw=0.3, zorder=0))
+    for (r, c), rgb in tiles.items():
+        color = _OV_DISPLAY.get(tuple(rgb), '#999999')
+        x, y = c - c0, r1 - r
+        ax.add_patch(Rectangle((x, y), 1, 1, facecolor=color, edgecolor='none', zorder=1))
+    ax.set_xlim(-0.3, W + 0.3); ax.set_ylim(-0.3, H + 0.3)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+
+
+def _ov_animal_data():
+    a4 = Compartment4Arena()
+    a_trans = CompartmentArena('translation')
+    a_rot = CompartmentArena('rotation')
+    return {
+        'spiers': (a4.passable, a4._get_landmark_tiles()),
+        'translation': (a_trans.passable, a_trans._get_landmark_tiles()),
+        'rotation': (a_rot.passable, a_rot._get_landmark_tiles()),
+    }
+
+
+# ---- panel d: the quotient map X -> X/G, purely geometric -------------------------
+_OV_S = 10.0
+_OV_REPS = [(1.8, 8.4), (3.6, 6.7), (2.6, 7.6)]
+_OV_ORBIT_COLORS = [TWO['translation'], TWO['rotation'], '#3A6B6B']
+
+
+def _ov_rot4(pt, k, cx, cy):
+    x, y = pt[0] - cx, pt[1] - cy
+    for _ in range(k):
+        x, y = -y, x
+    return x + cx, y + cy
+
+
+def _ov_draw_X(ax):
+    S = _OV_S; cx = cy = S / 2
+    _ov_card_shadow(ax, 0, 0, S, S, dx=0.10, dy=-0.12, a=0.024)
+    ax.add_patch(Rectangle((0, 0), S, S, facecolor=OV_GREY_FLOOR, edgecolor=OV_WALL, lw=1.2))
+    for i in range(int(S) + 1):
+        ax.plot([i, i], [0, S], color=OV_GRID_LINE, lw=0.3, zorder=0.5)
+        ax.plot([0, S], [i, i], color=OV_GRID_LINE, lw=0.3, zorder=0.5)
+    ax.plot([cx, cx], [0, S], color='#BBBBBB', lw=0.6, zorder=1)
+    ax.plot([0, S], [cy, cy], color='#BBBBBB', lw=0.6, zorder=1)
+
+    for i, rep in enumerate(_OV_REPS):
+        color = _OV_ORBIT_COLORS[i]
+        pts = [_ov_rot4(rep, k, cx, cy) for k in range(4)]
+        radius = np.hypot(rep[0] - cx, rep[1] - cy)
+        ax.add_patch(Circle((cx, cy), radius, facecolor='none', edgecolor=color,
+                             lw=0.7, ls=(0, (2, 2)), alpha=0.6, zorder=2))
+        a0 = np.arctan2(rep[1] - cy, rep[0] - cx)
+        a1 = a0 + np.radians(24)
+        p_from = (cx + radius * np.cos(a0 + np.radians(6)), cy + radius * np.sin(a0 + np.radians(6)))
+        p_to = (cx + radius * np.cos(a1), cy + radius * np.sin(a1))
+        ax.add_patch(FancyArrowPatch(p_from, p_to, connectionstyle='arc3,rad=0.15',
+                                      arrowstyle='-|>', mutation_scale=7, lw=1.0,
+                                      color=color, alpha=0.85, zorder=3))
+        for p in pts:
+            ax.add_patch(Circle(p, 0.22, facecolor=color, edgecolor='white', lw=0.4, zorder=4))
+
+    ax.annotate('orbit of $x$:\n$\\{x, gx, g^2x, g^3x\\}$', xy=_OV_REPS[0], xytext=(0.25, 9.9),
+                fontsize=6.2, color=_OV_ORBIT_COLORS[0], ha='left', va='top',
+                arrowprops=dict(arrowstyle='-', color=_OV_ORBIT_COLORS[0], lw=0.6, alpha=0.7,
+                                 shrinkA=0, shrinkB=4, connectionstyle='arc3,rad=-0.15'))
+    _ov_rotation_icon(ax, S + 1.6, S - 1.0, 17, '$G=C_4$', label_dy=1.15)
+
+    ax.set_xlim(-0.4, S + 3.2); ax.set_ylim(-0.4, S + 0.6)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.set_title('state space $X$', fontsize=7, pad=4)
+    ax.text(cx, -1.0, '(every point has 4 physically\ndistinct images under $G$)',
+            fontsize=5.6, color=OV_LABEL_GREY, ha='center', va='top')
+
+
+def _ov_draw_quotient(ax):
+    S = _OV_S; cy = S / 2; d = S / 2
+    _ov_card_shadow(ax, 0, 0, d, d, dx=0.10, dy=-0.12, a=0.024)
+    ax.add_patch(Rectangle((0, 0), d, d, facecolor=OV_GREY_FLOOR, edgecolor=TWO['translation'],
+                             lw=1.6, ls=(0, (3, 2))))
+    for i in range(int(d) + 1):
+        ax.plot([i, i], [0, d], color=OV_GRID_LINE, lw=0.3, zorder=0.5)
+        ax.plot([0, d], [i, i], color=OV_GRID_LINE, lw=0.3, zorder=0.5)
+    for i, rep in enumerate(_OV_REPS):
+        color = _OV_ORBIT_COLORS[i]
+        p = (rep[0], rep[1] - cy)
+        ax.add_patch(Circle(p, 0.22, facecolor=color, edgecolor='white', lw=0.4, zorder=3))
+    ax.annotate('$\\pi(x)$ -- the coset,\nnot the orbit element', xy=(_OV_REPS[0][0], _OV_REPS[0][1] - cy),
+                xytext=(0.4, 1.5), fontsize=6.2, color=_OV_ORBIT_COLORS[0], ha='left', va='center',
+                arrowprops=dict(arrowstyle='-', color=_OV_ORBIT_COLORS[0], lw=0.5, alpha=0.6))
+    ax.set_xlim(-0.4, d + 0.4); ax.set_ylim(-0.4, d + 0.6)
+    ax.set_aspect('equal'); ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_visible(False)
+    ax.set_title('quotient $X/G$', fontsize=7, pad=4)
+    ax.text(d / 2, -1.0, '(one point per orbit --\nthe fold)', fontsize=5.6, color=OV_LABEL_GREY,
+            ha='center', va='top')
+
+
+def fig1_overview(data: Path, figs: Path):
+    """Fig 1 (NEW, overview): the pipeline (agent -> egocentric patch -> pRNN -> prediction),
+    the three arenas with real landmark geometry, the Spiers/Grieves animal phenomenon this
+    explains, and the X -> X/G quotient-map cartoon. Purely illustrative/geometric -- every
+    arena, patch, and footprint is pulled live from the actual environment classes, nothing
+    hand-drawn. The quantitative manipulation + phenotype panels are fig1_setup (now Fig 2)."""
+    N, tiles, path, patch_t0, patch_t3 = _ov_pipeline_data()
+    animal = _ov_animal_data()
+
+    fig = plt.figure(figsize=(WIDE, 6.7))
+    gs = GridSpec(3, 1, height_ratios=[2.05, 1.95, 1.9], hspace=0.45, figure=fig)
+
+    # -- row 1: panel a (pipeline)
+    gsa = GridSpecFromSubplotSpec(1, 4, subplot_spec=gs[0],
+                                   width_ratios=[1.35, 0.65, 1.15, 0.65], wspace=0.55)
+    axArena = fig.add_subplot(gsa[0]); axObs = fig.add_subplot(gsa[1])
+    axRNN = fig.add_subplot(gsa[2]); axPred = fig.add_subplot(gsa[3])
+    _ov_draw_arena_agent(axArena, N, tiles, path)
+    _ov_draw_patch(axObs, patch_t0, TWO['translation'], 'observation $o_t$')
+    _ov_draw_rnn(axRNN, 0.5, 0.55, 0.40)
+    axRNN.set_xlim(0, 1); axRNN.set_ylim(0, 1.05); axRNN.axis('off')
+    _ov_draw_patch(axPred, patch_t3, TWO['rotation'], r'prediction $\hat{o}_{t+k}$')
+    _panel(axArena, 'a', dx=-0.10, dy=1.06)
+
+    for (ax0, ax1, rad) in [(axArena, axObs, -0.25), (axObs, axRNN, -0.2), (axRNN, axPred, -0.2)]:
+        p0 = ax0.get_position(); p1 = ax1.get_position()
+        y = (p0.y0 + p0.y1) / 2
+        fig.patches.append(FancyArrowPatch((p0.x1 + 0.005, y), (p1.x0 - 0.005, y),
+                                            transform=fig.transFigure,
+                                            connectionstyle=f'arc3,rad={rad}',
+                                            arrowstyle='-|>', mutation_scale=8, lw=1.0,
+                                            color=OV_ARROW_GREY, shrinkA=1, shrinkB=1))
+    p_rnn = axRNN.get_position()
+    axAct = fig.add_axes([p_rnn.x0 + 0.01, p_rnn.y0 - 0.115, p_rnn.width - 0.02, 0.09])
+    _ov_draw_actions(axAct, heading='N')
+
+    # -- row 2: panel b (arenas) + panel d (quotient map)
+    gsbd = GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[1], width_ratios=[1.55, 1.0], wspace=0.12)
+    gsb = GridSpecFromSubplotSpec(1, 3, subplot_spec=gsbd[0], wspace=0.30)
+    for j, (cond, title, domain_kind, caption) in enumerate(_OV_CONDS):
+        axb = fig.add_subplot(gsb[j])
+        _ov_draw_symarena(axb, cond, domain_kind, title, N=N)
+        axb.text(0.5, -0.09, caption, transform=axb.transAxes, fontsize=5.6,
+                 color=OV_LABEL_GREY, ha='center', va='top')
+        if j == 0:
+            _panel(axb, 'b', dx=-0.22, dy=1.10)
+
+    gsd = GridSpecFromSubplotSpec(1, 3, subplot_spec=gsbd[1], width_ratios=[1.0, 0.35, 0.62],
+                                   wspace=0.05)
+    axDX = fig.add_subplot(gsd[0]); axDArrow = fig.add_subplot(gsd[1]); axDQ = fig.add_subplot(gsd[2])
+    _ov_draw_X(axDX)
+    _ov_draw_quotient(axDQ)
+    axDArrow.set_xlim(0, 1); axDArrow.set_ylim(0, 1); axDArrow.axis('off')
+    axDArrow.annotate('', xy=(0.95, 0.5), xytext=(0.05, 0.5),
+                       arrowprops=dict(arrowstyle='-|>', color=INK, lw=1.3, mutation_scale=10))
+    axDArrow.text(0.5, 0.62, r'$\pi$', fontsize=9, color=INK, ha='center', va='bottom', style='italic')
+    _panel(axDX, 'd', dx=-0.16, dy=1.10)
+
+    # -- row 3: panel c (Spiers / Grieves)
+    gsc = GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[2], width_ratios=[1.05, 1.4, 0.85],
+                                   wspace=0.25)
+    axSpiers = fig.add_subplot(gsc[0])
+    _ov_draw_footprint(axSpiers, *animal['spiers'])
+    axSpiers.set_title('Spiers et al. 2015', fontsize=7, pad=4, color=INK)
+    _panel(axSpiers, 'c', dx=-0.14, dy=1.06)
+
+    gsg = GridSpecFromSubplotSpec(2, 1, subplot_spec=gsc[1], hspace=0.55)
+    axTrans = fig.add_subplot(gsg[0]); axRot = fig.add_subplot(gsg[1])
+    _ov_draw_footprint(axTrans, *animal['translation'])
+    axTrans.set_title('parallel (translation)', fontsize=6.5, pad=3, color=TWO['translation'])
+    _ov_draw_footprint(axRot, *animal['rotation'])
+    axRot.set_title('radial (rotation)', fontsize=6.5, pad=3, color=TWO['rotation'])
+    p_trans = axTrans.get_position()
+    fig.text(p_trans.x0, p_trans.y1 + 0.035, 'Grieves et al. 2016', fontsize=7, color=INK, ha='left')
+
+    axCap = fig.add_subplot(gsc[2]); axCap.axis('off')
+    axCap.set_xlim(0, 1); axCap.set_ylim(0, 1)
+    axCap.text(0.0, 0.92, 'same compass reading', fontsize=6.0, color=TWO['translation'], ha='left')
+    axCap.text(0.0, 0.82, r'$\Rightarrow$ code folds $\Rightarrow$ repeats', fontsize=6.0,
+               color=TWO['translation'], ha='left', fontweight='bold')
+    axCap.text(0.0, 0.62, 'different compass reading', fontsize=6.0, color=TWO['rotation'], ha='left')
+    axCap.text(0.0, 0.52, r'$\Rightarrow$ code lifts $\Rightarrow$ remaps', fontsize=6.0,
+               color=TWO['rotation'], ha='left', fontweight='bold')
+
+    for ax in fig.axes:
+        ax.patch.set_visible(False)
+
+    out = figs / 'fig1_overview.pdf'
+    fig.savefig(out, pad_inches=0.10)
+    plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 # ================================================================= composite figures
 def fig1_setup(data: Path, figs: Path):
     """Fig 1: the manipulation (encoding matrices) and the phenotype (place fields folding)."""
@@ -252,23 +682,71 @@ def fig1_setup(data: Path, figs: Path):
 
 
 def fig2_fold(data: Path, figs: Path):
-    """Fig 2 (2x2): four quantitative read-outs of the fold."""
+    """Fig 2: the fold-specific readout (symmetry index) leads; field count, spatial RSA and
+    cross-seed correlation are smaller supporting panels, matching their role in the text
+    (symidx is fold-specific; fieldcount is confounded; srsa/crossseed are sanity checks)."""
     fp = data / 'field_stats.csv'; mq = data / 'map_quality_groupB.csv'
     if not (fp.exists() and mq.exists()):
         print('  skip fig2: missing field_stats/map_quality'); return
     fr = _read(fp); mr = _read(mq)
     fconds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in fr)]
     mconds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in mr)]
-    fig, ax = plt.subplots(2, 2, figsize=(WIDE, 4.6))
-    _draw_fieldcount(ax[0, 0], fr, fconds); _panel(ax[0, 0], 'a')
-    _draw_symidx(ax[0, 1], fr, fconds); _panel(ax[0, 1], 'b')
-    _draw_srsa(ax[1, 0], mr, mconds); _panel(ax[1, 0], 'c')
-    _draw_crossseed(ax[1, 1], mr, mconds); _panel(ax[1, 1], 'd')
+    fig = plt.figure(figsize=(WIDE, 5.2))
+    gs = GridSpec(2, 3, height_ratios=[1.55, 1.0], hspace=0.55, wspace=0.42, figure=fig)
+    axB = fig.add_subplot(gs[0, :])
+    _draw_symidx(axB, fr, fconds); _panel(axB, 'a', dx=-0.06, dy=1.05)
+    axB.axhline(1.0, ls=':', lw=0.7, color='k', alpha=0.6)
+    axB.text(len(HD_ORDER) - 0.55, 1.0, 'perfect symmetry', fontsize=6, ha='right', va='bottom',
+             color='k', alpha=0.7)
+    axA = fig.add_subplot(gs[1, 0])
+    _draw_fieldcount(axA, fr, fconds); _panel(axA, 'b')
+    axC = fig.add_subplot(gs[1, 1])
+    _draw_srsa(axC, mr, mconds); _panel(axC, 'c')
+    axD = fig.add_subplot(gs[1, 2])
+    _draw_crossseed(axD, mr, mconds); _panel(axD, 'd')
     handles = [plt.Rectangle((0, 0), 1, 1, color=COND_SHADE[c]) for c in fconds]
     fig.legend(handles, [COND_CN[c] for c in fconds], loc='lower center', ncol=3,
                title='arena', title_fontsize=6.5, bbox_to_anchor=(0.5, -0.02))
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     out = figs / 'fig2_fold.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def fig_compartments_solo(data: Path, figs: Path):
+    """Standalone version of fig3_function panel c, for use outside the composite figure
+    (e.g. slides): the two-room translation-vs-rotation result on its own."""
+    comp = _read(data / 'compartments.csv') if (data / 'compartments.csv').exists() else None
+    if comp is None:
+        print('  skip fig_compartments_solo: missing compartments.csv'); return
+    modes = [m for m in ('translation', 'rotation') if any(r['mode'] == m for r in comp)]
+    fig, ax = plt.subplots(figsize=(3.6, 3.2))
+    _draw_compartments(ax, comp, modes)
+    fig.tight_layout()
+    out = figs / 'fig_compartments_solo.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def fig_horizon_solo(data: Path, figs: Path):
+    """Standalone version of fig3_function panels a,b, for use outside the composite figure
+    (e.g. slides): horizon sweep and replay coverage, without the compartments panel."""
+    ph = {0: 'phase_horizon_k0', 1: 'phase_horizon_k1', 3: 'phase_horizon_k3'}
+    phase = {}
+    for k, name in ph.items():
+        p = data / f'{name}.csv'
+        if not p.exists():
+            print('  skip fig_horizon_solo: missing horizon'); return
+        phase[k] = _read(p)
+    gb = data / 'phase_groupB.csv'
+    if gb.exists():
+        phase[5] = [r for r in _read(gb) if r['condition'] == 's2' and r['k'] == '5']
+    rep = {k: [r for r in _read(data / f'replay_k{k}.csv') if r['condition'] == 's2']
+           for k in (0, 1, 3, 5) if (data / f'replay_k{k}.csv').exists()}
+    fig, ax = plt.subplots(1, 2, figsize=(ONEHALF, 2.7))
+    _draw_phase_horizon(ax[0], phase, sorted(phase)); _panel(ax[0], 'a')
+    _draw_replay_horizon(ax[1], rep, sorted(rep)); _panel(ax[1], 'b')
+    fig.subplots_adjust(bottom=0.32, top=0.90, left=0.12, right=0.98, wspace=0.5)
+    _hd_legend(fig, ncol=4, y=0.02)
+    out = figs / 'fig_horizon_solo.pdf'; fig.savefig(out); plt.close(fig)
     print(f'  wrote {out.name}')
 
 
@@ -467,38 +945,209 @@ def _phase(data, name):
     return _read(p) if p.exists() else []
 
 
+def fig2_dissociation(data: Path, figs: Path):
+    """Headline: orbit-phase decoding per network -- invariance, not information, folds the code."""
+    base = _phase(data, 'phase_full_n10')
+    if not base:
+        print('  skip fig2_dissociation: missing phase_full_n10'); return
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(1, 2, figsize=(5.35, 2.6), gridspec_kw={'width_ratios': [1.7, 1]})
+    conds = ['s1', 's2', 's4']; x = np.arange(len(HD_ORDER)); w = 0.26
+    for i, c in enumerate(conds):
+        off = (i - 1) * w
+        for j, hd in enumerate(HD_ORDER):
+            v = [_f(r, 'phase_acc') for r in base if r['condition'] == c and r['hd_mode'] == hd]
+            if not v:
+                continue
+            xj = x[j] + off
+            ax[0].scatter(np.full(len(v), xj) + rng.uniform(-0.05, 0.05, len(v)), v, s=5,
+                          color=COND_SHADE[c], alpha=0.75, edgecolors='none', zorder=3)
+            ax[0].plot([xj - 0.11, xj + 0.11], [np.mean(v)] * 2, color=COND_SHADE[c], lw=1.6)
+    ax[0].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[0].set_xticks(x); ax[0].set_xticklabels(HD_ORDER)
+    ax[0].set_ylabel('orbit-phase accuracy'); ax[0].set_ylim(0.45, 1.02)
+    hleg = [plt.Line2D([0], [0], marker='o', ls='', ms=4, color=COND_SHADE[c], label=COND_CN[c])
+            for c in conds]
+    ax[0].legend(handles=hleg, fontsize=6, loc='center left', title='arena', title_fontsize=6)
+    _panel(ax[0], 'a')
+    # (b) matched-information contrast: axis vs parity, C1 vs C2
+    xb = np.arange(2)
+    for k, hd in enumerate(['parity', 'axis']):
+        for i, c in enumerate(['s1', 's2']):
+            v = [_f(r, 'phase_acc') for r in base if r['condition'] == c and r['hd_mode'] == hd]
+            xi = xb[i] + (k - 0.5) * 0.32
+            ax[1].scatter(np.full(len(v), xi) + rng.uniform(-0.04, 0.04, len(v)), v, s=6,
+                          color=HD_COLOR[hd], alpha=0.85, edgecolors='none', zorder=3)
+            ax[1].plot([xi - 0.12, xi + 0.12], [np.mean(v)] * 2, color=HD_COLOR[hd], lw=1.6)
+    ax[1].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[1].set_xticks(xb); ax[1].set_xticklabels(['$C_1$', '$C_2$']); ax[1].set_ylim(0.45, 1.02)
+    ax[1].set_title('matched: 1 bit each', fontsize=7)
+    h2 = [plt.Line2D([0], [0], marker='o', ls='', ms=4, color=HD_COLOR[hd], label=hd)
+          for hd in ['parity', 'axis']]
+    ax[1].legend(handles=h2, fontsize=6, loc='center left'); _panel(ax[1], 'b')
+    fig.tight_layout()
+    out = figs / 'fig2_dissociation.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def _dots_by_arena(ax, rows, key, conds=('s1', 's2', 's4'), w=0.26, seed=0):
+    """Grouped dot-and-mean plot: HD encoding on x, one shaded cluster per arena."""
+    rng = np.random.default_rng(seed); x = np.arange(len(HD_ORDER))
+    for i, c in enumerate(conds):
+        off = (i - (len(conds) - 1) / 2) * w
+        for j, hd in enumerate(HD_ORDER):
+            v = [_f(r, key) for r in rows if r['condition'] == c and r['hd_mode'] == hd]
+            v = [x for x in v if np.isfinite(x)]
+            if not v:
+                continue
+            xj = x[j] + off
+            ax.scatter(np.full(len(v), xj) + rng.uniform(-0.05, 0.05, len(v)), v, s=5,
+                       color=COND_SHADE[c], alpha=0.75, edgecolors='none', zorder=3)
+            ax.plot([xj - 0.11, xj + 0.11], [np.mean(v)] * 2, color=COND_SHADE[c], lw=1.6)
+    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER)
+    return [plt.Line2D([0], [0], marker='o', ls='', ms=4, color=COND_SHADE[c], label=COND_CN[c])
+            for c in conds]
+
+
+def fig_population(data: Path, figs: Path):
+    """The fold in the population code. Remapping (a) is the load-bearing population-level
+    readout and gets the large panel; the isotypic spectrum (b) and odd-power (c) are the
+    secondary, descriptive readouts the text demotes them to, and are sized to match."""
+    rm = _read(data / 'remapping.csv') if (data / 'remapping.csv').exists() else []
+    iso = _read(data / 'isotypic_hd.csv') if (data / 'isotypic_hd.csv').exists() else []
+    if not rm or not iso:
+        print('  skip fig_population: missing remapping/isotypic'); return
+    fig = plt.figure(figsize=(WIDE, 4.9))
+    gs = GridSpec(2, 2, height_ratios=[1.5, 1.0], hspace=0.5, wspace=0.38, figure=fig)
+    # (a) remapping: population-vector correlation between symmetry-related positions -- the
+    # load-bearing readout, spanning the full width
+    axA = fig.add_subplot(gs[0, :])
+    hleg = _dots_by_arena(axA, rm, 'pv_orbit')
+    axA.axhline(0.5, ls='--', color='#ccc', lw=0.7)
+    axA.axhline(1.0, ls=':', lw=0.7, color='k', alpha=0.6)
+    axA.text(len(HD_ORDER) - 0.55, 1.0, 'written as one place', fontsize=6, ha='right',
+             va='bottom', color='k', alpha=0.7)
+    axA.set_ylabel('remapping corr. (orbit PV)'); axA.set_ylim(0, 1.05)
+    axA.legend(handles=hleg, fontsize=6, loc='center left', title='arena', title_fontsize=6)
+    _panel(axA, 'a', dx=-0.06, dy=1.05)
+    # (b) isotypic spectrum in the C2 arena: where each encoding places its power (descriptive)
+    axB = fig.add_subplot(gs[1, 0])
+    comps = ['P0', 'P1', 'P2', 'P3']; cshade = ['#C7CCD6', '#8FA0B3', '#5A7192', '#2E4763']
+    x = np.arange(len(HD_ORDER)); w = 0.19
+    for ci, comp in enumerate(comps):
+        off = (ci - 1.5) * w
+        m = [np.mean([_f(r, comp) for r in iso if r['condition'] == 's2' and r['hd_mode'] == hd] or [np.nan])
+             for hd in HD_ORDER]
+        axB.bar(x + off, m, w * 0.92, color=cshade[ci], label=comp, edgecolor='none')
+    axB.set_xticks(x); axB.set_xticklabels(HD_ORDER)
+    axB.set_ylabel('isotypic power ($C_2$ arena)'); axB.set_ylim(0, 0.45)
+    axB.legend(fontsize=5.5, ncol=4, loc='upper center', columnspacing=0.8, handlelength=0.9)
+    _panel(axB, 'b')
+    # (c) odd-power (C2-odd content) collapses under the invariant encodings (descriptive)
+    axC = fig.add_subplot(gs[1, 1])
+    hleg = _dots_by_arena(axC, iso, 'odd')
+    axC.set_ylabel('$C_2$-odd power ($P_1{+}P_3$)'); axC.set_ylim(0.25, 0.55)
+    axC.legend(handles=hleg, fontsize=6, loc='lower left', title='arena', title_fontsize=6)
+    _panel(axC, 'c')
+    fig.tight_layout()
+    out = figs / 'fig_population.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def figS_robustness(data: Path, figs: Path):
+    """The fold is not an artifact: survives nonlinear embeddings and nonlinear decoders."""
+    mr = _read(data / 'manifold_robustness.csv') if (data / 'manifold_robustness.csv').exists() else []
+    nl = _read(data / 'phase_nonlinear.csv') if (data / 'phase_nonlinear.csv').exists() else []
+    if not mr or not nl:
+        print('  skip figS_robustness: missing inputs'); return
+    fig, ax = plt.subplots(1, 2, figsize=(ONEHALF, 2.6))
+    # (a) fold ratio (<1 = folded) across embeddings, C2 arena
+    embs = [('fold_ratio_full', 'raw'), ('fold_ratio_pca3', 'PCA-3'),
+            ('fold_ratio_isomap3', 'Isomap-3'), ('fold_ratio_tsne2', 't-SNE-2')]
+    modes = ['full', 'parity', 'axis']; x = np.arange(len(embs)); w = 0.25
+    for mi, hd in enumerate(modes):
+        row = next((r for r in mr if r['condition'] == 's2' and r['hd_mode'] == hd), None)
+        if not row:
+            continue
+        vals = [_f(row, k) for k, _ in embs]
+        ax[0].bar(x + (mi - 1) * w, vals, w * 0.9, color=HD_COLOR[hd], label=hd, edgecolor='none')
+    ax[0].axhline(1.0, ls='--', color='#999', lw=0.8)
+    ax[0].set_yscale('log'); ax[0].set_xticks(x); ax[0].set_xticklabels([e[1] for e in embs], rotation=20)
+    ax[0].set_ylabel('fold ratio  (<1 = folded)')
+    ax[0].legend(fontsize=6, loc='upper left'); _panel(ax[0], 'a')
+    # (b) nonlinear decoders agree with the linear readout
+    decs = ['linear', 'knn', 'mlp']; dshade = ['#2E4763', '#6E6E6E', '#9C4A2F']
+    xb = np.arange(len(HD_ORDER)); wb = 0.26
+    for di, dec in enumerate(decs):
+        m = [np.mean([_f(r, dec) for r in nl if r['hd_mode'] == hd] or [np.nan]) for hd in HD_ORDER]
+        ax[1].bar(xb + (di - 1) * wb, m, wb * 0.9, color=dshade[di], label=dec, edgecolor='none')
+    ax[1].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[1].set_xticks(xb); ax[1].set_xticklabels(HD_ORDER)
+    ax[1].set_ylabel('orbit-phase accuracy ($C_2$)'); ax[1].set_ylim(0.45, 1.02)
+    ax[1].legend(fontsize=6, loc='center left'); _panel(ax[1], 'b')
+    fig.tight_layout()
+    out = figs / 'figS_robustness.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def figS_prospective(data: Path, figs: Path):
+    """Prospective-firing null: place fields track current position, not a future one."""
+    pr = _read(data / 'prospective.csv') if (data / 'prospective.csv').exists() else []
+    if not pr:
+        print('  skip figS_prospective: missing prospective'); return
+    offs = list(range(-3, 4)); keys = [f'si_{o:+d}' for o in offs]
+    ks = sorted({int(r['k']) for r in pr})
+    kcol = {k: plt.get_cmap('viridis')(i / max(1, len(ks) - 1)) for i, k in enumerate(ks)}
+    fig, ax = plt.subplots(figsize=(COL, 2.5))
+    for k in ks:
+        rows = [r for r in pr if int(r['k']) == k]
+        m = [np.mean([_f(r, key) for r in rows]) for key in keys]
+        s = [(_mean_sem([_f(r, key) for r in rows])[1]) for key in keys]
+        ax.errorbar(offs, m, yerr=s, color=kcol[k], lw=1.2, marker='o', ms=3,
+                    capsize=1.5, label=f'k={k}')
+    ax.axvline(0, ls=':', color='#999', lw=0.8)
+    ax.set_xlabel('position offset (steps)'); ax.set_ylabel('spatial information (bits)')
+    ax.set_xticks(offs); ax.legend(fontsize=6, title='horizon', title_fontsize=6, ncol=2)
+    fig.tight_layout()
+    out = figs / 'figS_prospective.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def fig_ceiling(data: Path, figs: Path):
+    """The C4 four-way ceiling: invariant encodings fall to the group-theoretic 1/|G|."""
+    r4 = _phase(data, 'phase_s4_c4')
+    if not r4:
+        print('  skip fig_ceiling: missing phase_s4_c4'); return
+    rng = np.random.default_rng(0)
+    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    x = np.arange(len(HD_ORDER))
+    for j, hd in enumerate(HD_ORDER):
+        v = [_f(r, 'phase_acc') for r in r4 if r['hd_mode'] == hd]
+        if not v:
+            continue
+        ax.scatter(np.full(len(v), j) + rng.uniform(-0.09, 0.09, len(v)), v, s=8,
+                   color=HD_COLOR[hd], alpha=0.85, edgecolors='none', zorder=3)
+        ax.plot([j - 0.16, j + 0.16], [np.mean(v)] * 2, color=HD_COLOR[hd], lw=1.6)
+    ax.axhline(0.25, ls=':', color='#9C4A2F', lw=1.1, label='$1/4$  ($C_4$-invariant)')
+    ax.axhline(0.50, ls=':', color='#3A6B6B', lw=1.1, label='$1/2$  ($C_2$-invariant)')
+    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER)
+    ax.set_ylabel('$C_4$ four-way phase accuracy'); ax.set_ylim(0.15, 1.02)
+    ax.legend(fontsize=6, loc='center right')
+    fig.tight_layout()
+    out = figs / 'fig_ceiling.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
 def _acc(rows, cond, hd):
     return _mean_sem([_f(r, 'phase_acc') for r in rows
                       if r['condition'] == cond and r['hd_mode'] == hd])
 
 
 def fig5_generality(data: Path, figs: Path):
-    """Generality of the fold: arena size, hidden size, HD-lesion dose, learned compass."""
+    """Generality of the fold: HD-lesion dose-response and a learned compass."""
     base = _phase(data, 'phase_full_n10')          # baseline: hidden 500, arena 18, noise 0
-    fig, ax = plt.subplots(2, 2, figsize=(WIDE, 4.7))
-
-    def _sweep(a_, points, xlabel, marker, hds=('axis', 'parity')):
-        for hd in hds:
-            xs, ms, es = [], [], []
-            for x, nm in points:
-                rows = base if nm is None else _phase(data, nm)
-                if not rows:
-                    continue
-                m, e = _acc(rows, 's2', hd)
-                if np.isfinite(m):
-                    xs.append(x); ms.append(m); es.append(e)
-            if xs:
-                a_.errorbar(xs, ms, yerr=es, marker=marker, ms=4, color=HD_COLOR[hd],
-                            label=hd, capsize=2, lw=1.3, elinewidth=0.7)
-        a_.axhline(0.5, ls='--', color='#999', lw=0.8)
-        a_.set_xlabel(xlabel); a_.set_ylabel('orbit-phase accuracy'); a_.set_ylim(0.45, 1.02)
-
-    _sweep(ax[0, 0], [(12, 'phase_a12'), (18, None), (24, 'phase_a24'), (30, 'phase_a30')],
-           'arena size', 'o')
-    _panel(ax[0, 0], 'a'); ax[0, 0].legend(fontsize=6, loc='center right')
-    _sweep(ax[0, 1], [(250, 'phase_h250'), (500, None), (1000, 'phase_h1000')], 'hidden units', 's')
-    _panel(ax[0, 1], 'b')
-    # (c) HD-lesion dose-response, all encodings
+    fig, ax = plt.subplots(1, 2, figsize=(ONEHALF, 2.6))
+    # (a) HD-lesion dose-response, all encodings
     levels = [(0.0, None), (0.15, 'phase_noise015'), (0.30, 'phase_noisy'),
               (0.50, 'phase_noise050'), (0.70, 'phase_noise070')]
     for hd in HD_ORDER:
@@ -511,30 +1160,60 @@ def fig5_generality(data: Path, figs: Path):
             if np.isfinite(m):
                 xs.append(nz); ms.append(m); es.append(e)
         if xs:
-            ax[1, 0].errorbar(xs, ms, yerr=es, marker='o', ms=4, color=HD_COLOR[hd],
-                              label=hd, capsize=2, lw=1.3, elinewidth=0.7)
-    ax[1, 0].axhline(0.5, ls='--', color='#999', lw=0.8)
-    ax[1, 0].set_xlabel('head-direction corruption'); ax[1, 0].set_ylabel('orbit-phase accuracy')
-    ax[1, 0].set_ylim(0.45, 1.02); _panel(ax[1, 0], 'c'); ax[1, 0].legend(fontsize=6, ncol=2)
-    # (d) learned (angular-velocity) compass, by arena
+            ax[0].errorbar(xs, ms, yerr=es, marker='o', ms=4, color=HD_COLOR[hd],
+                           label=hd, capsize=2, lw=1.3, elinewidth=0.7)
+    ax[0].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[0].set_xlabel('head-direction corruption'); ax[0].set_ylabel('orbit-phase accuracy ($C_2$)')
+    ax[0].set_ylim(0.45, 1.02); _panel(ax[0], 'a'); ax[0].legend(fontsize=6, ncol=2)
+    # (b) learned (angular-velocity) compass, by arena
     lrn = _phase(data, 'phase_learned_c2')
     conds = [c for c in ('s1', 's2', 's4') if any(r['condition'] == c for r in lrn)]
     ms, es = zip(*[_mean_sem([_f(r, 'phase_acc') for r in lrn if r['condition'] == c])
                    for c in conds]) if conds else ([], [])
-    ax[1, 1].bar(range(len(conds)), ms, 0.62, yerr=es, capsize=2,
-                 color=[COND_SHADE[c] for c in conds], edgecolor='k', lw=0.4, error_kw={'lw': 0.7})
-    ax[1, 1].axhline(0.5, ls='--', color='#999', lw=0.8)
-    ax[1, 1].set_xticks(range(len(conds))); ax[1, 1].set_xticklabels([COND_CN[c] for c in conds])
-    ax[1, 1].set_ylabel('orbit-phase accuracy'); ax[1, 1].set_ylim(0.45, 1.02)
-    ax[1, 1].set_title('learned compass', fontsize=7); _panel(ax[1, 1], 'd')
+    ax[1].bar(range(len(conds)), ms, 0.62, yerr=es, capsize=2,
+              color=[COND_SHADE[c] for c in conds], edgecolor='k', lw=0.4, error_kw={'lw': 0.7})
+    ax[1].axhline(0.5, ls='--', color='#999', lw=0.8)
+    ax[1].set_xticks(range(len(conds))); ax[1].set_xticklabels([COND_CN[c] for c in conds])
+    ax[1].set_xlabel('arena'); ax[1].set_ylabel('orbit-phase accuracy'); ax[1].set_ylim(0.45, 1.02)
+    ax[1].set_title('learned compass', fontsize=7); _panel(ax[1], 'b')
     fig.tight_layout()
     out = figs / 'fig5_generality.pdf'; fig.savefig(out); plt.close(fig)
     print(f'  wrote {out.name}')
 
 
+def _di_pairs(rows, key_fields, di='di', rep_only=False):
+    """Within-group same-orientation ordered DI pairs; returns (xs, ys)."""
+    by = {}
+    for r in rows:
+        if rep_only and r.get('rep') not in ('True', 'TRUE', True):
+            continue
+        by.setdefault(tuple(r[k] for k in key_fields), []).append(_f(r, di))
+    xs, ys = [], []
+    for v in by.values():
+        for i in range(len(v)):
+            for j in range(len(v)):
+                if i != j:
+                    xs.append(v[i]); ys.append(v[j])
+    return np.asarray(xs), np.asarray(ys)
+
+
+def _di_scatter(ax, xs, ys, color, subsample=None, seed=0):
+    if len(xs) < 3:
+        return
+    r = np.corrcoef(xs, ys)[0, 1]; b = np.polyfit(xs, ys, 1)
+    px, py = xs, ys
+    if subsample and len(xs) > subsample:
+        idx = np.random.default_rng(seed).choice(len(xs), subsample, replace=False)
+        px, py = xs[idx], ys[idx]
+    ax.scatter(px, py, s=5, color=color, alpha=0.28, edgecolors='none')
+    xr = np.array([-1, 1]); ax.plot(xr, b[0] * xr + b[1], color='#9C4A2F', lw=1.5)
+    ax.text(0.05, 0.92, f'$r={r:.2f}$', transform=ax.transAxes, fontsize=7)
+    ax.set_xlim(-1, 1); ax.set_ylim(-1, 1)
+
+
 def fig6_brain(data: Path, figs: Path):
-    """To the brain: 4-room repetition, real CA1 directional correlation, city-block model."""
-    fig, ax = plt.subplots(1, 3, figsize=(WIDE, 2.7))
+    """To the brain (model): four-room complete fold, city-block directional repetition."""
+    fig, ax = plt.subplots(1, 2, figsize=(ONEHALF, 2.7))
     # (a) four-room Spiers
     c4 = _read(data / 'compartments4.csv') if (data / 'compartments4.csv').exists() else []
     mets = [('room_gen', 'room\ndecode'), ('room_seen', 'room\nkNN'),
@@ -547,55 +1226,75 @@ def fig6_brain(data: Path, figs: Path):
         ax[0].axhline(0.25, ls='--', color='#999', lw=0.8)
         ax[0].set_xticks(range(4)); ax[0].set_xticklabels([m[1] for m in mets], fontsize=6)
         ax[0].set_ylabel('value'); ax[0].set_ylim(-0.1, 1.05)
-    ax[0].set_title('four-room maze (model)', fontsize=7); _panel(ax[0], 'a')
-    # (b) real CA1 directional-index correlation, same-orientation field pairs
-    fd = _read(data / 'hockeimer_field_di.csv') if (data / 'hockeimer_field_di.csv').exists() else []
-    xs, ys = [], []
-    if fd:
-        by = {}
-        for r in fd:
-            if r['rep'] in ('True', 'TRUE', True):
-                by.setdefault((r['cell'], r['orient']), []).append(_f(r, 'di'))
-        for v in by.values():
-            for i in range(len(v)):
-                for j in range(len(v)):
-                    if i != j:
-                        xs.append(v[i]); ys.append(v[j])
-    if xs:
-        ax[1].scatter(xs, ys, s=7, color='#1F3B5C', alpha=0.4, edgecolors='none')
-        xr = np.array([-1, 1]); b = np.polyfit(xs, ys, 1)
-        ax[1].plot(xr, b[0] * xr + b[1], color='#9C4A2F', lw=1.5)
-        r = np.corrcoef(xs, ys)[0, 1]
-        ax[1].text(0.05, 0.92, f'$r={r:.2f}$', transform=ax[1].transAxes, fontsize=7)
-        ax[1].set_xlim(-1, 1); ax[1].set_ylim(-1, 1)
-        ax[1].set_xlabel('field $i$ directional index'); ax[1].set_ylabel('field $j$ directional index')
-    ax[1].set_title('real CA1 (Hockeimer)', fontsize=7); _panel(ax[1], 'b')
-    # (c) city-block model directional correlation (if available)
+    ax[0].set_title('four-room maze', fontsize=7); _panel(ax[0], 'a')
+    # (b) city-block model directional-repetition correlation
     cb = _read(data / 'cityblock.csv') if (data / 'cityblock.csv').exists() else []
-    cx, cy = [], []
-    if cb:
-        by = {}
-        for r in cb:
-            by.setdefault((r['seed'], r['unit'], r['orient']), []).append(_f(r, 'di'))
-        for v in by.values():
-            for i in range(len(v)):
-                for j in range(len(v)):
-                    if i != j:
-                        cx.append(v[i]); cy.append(v[j])
-    if cx:
-        ax[2].scatter(cx, cy, s=6, color='#3A6B6B', alpha=0.35, edgecolors='none')
-        xr = np.array([-1, 1]); b = np.polyfit(cx, cy, 1)
-        ax[2].plot(xr, b[0] * xr + b[1], color='#9C4A2F', lw=1.5)
-        rc = np.corrcoef(cx, cy)[0, 1]
-        ax[2].text(0.05, 0.92, f'$r={rc:.2f}$', transform=ax[2].transAxes, fontsize=7)
-        ax[2].set_xlim(-1, 1); ax[2].set_ylim(-1, 1); ax[2].set_xlabel('field $i$ DI'); ax[2].set_ylabel('field $j$ DI')
-    else:
-        ax[2].text(0.5, 0.5, 'city-block\n(training)', ha='center', va='center',
-                   transform=ax[2].transAxes, fontsize=7, color='#999')
-        ax[2].set_xticks([]); ax[2].set_yticks([])
-    ax[2].set_title('city-block model', fontsize=7); _panel(ax[2], 'c')
+    cx, cy = _di_pairs(cb, ('seed', 'unit', 'orient'))
+    _di_scatter(ax[1], cx, cy, '#3A6B6B', subsample=2500)
+    ax[1].set_xlabel('field $i$ DI'); ax[1].set_ylabel('field $j$ DI')
+    ax[1].set_title('city-block model', fontsize=7); _panel(ax[1], 'b')
     fig.tight_layout()
     out = figs / 'fig6_brain.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def figS_coset_phase(data: Path, figs: Path):
+    """Supplementary: folded, not broken. Folded codes (axis/const in symmetric arenas) keep
+    within-domain position (domain_r2, high) while losing orbit phase (phase_acc, at the null);
+    non-folded codes have both. The two readouts move independently, which is the signature that
+    distinguishes a fold from a dead code."""
+    base = _phase(data, 'phase_full_n10')
+    if not base:
+        print('  skip figS_coset_phase: missing phase_full_n10'); return
+    fig, ax = plt.subplots(1, 1, figsize=(COL, 2.9))
+    conds = ['s1', 's2', 's4']
+    markers = {'s1': 'o', 's2': 's', 's4': '^'}
+    for c in conds:
+        for hd in HD_ORDER:
+            xs = [_f(r, 'domain_r2') for r in base if r['condition'] == c and r['hd_mode'] == hd]
+            ys = [_f(r, 'phase_acc') for r in base if r['condition'] == c and r['hd_mode'] == hd]
+            if not xs:
+                continue
+            ax.scatter(xs, ys, s=14, marker=markers[c], color=HD_COLOR[hd], alpha=0.8,
+                      edgecolors='none')
+    ax.axhline(0.5, ls='--', lw=0.7, color='#999')
+    ax.text(0.02, 0.51, 'phase at chance', fontsize=6, color='#666')
+    ax.set_xlabel('within-domain position ($R^2_{\\mathrm{domain}}$)')
+    ax.set_ylabel('orbit-phase accuracy')
+    ax.set_ylim(0.45, 1.02)
+    hleg = [plt.Line2D([0], [0], marker='o', ls='', ms=4, color=HD_COLOR[hd], label=hd)
+            for hd in HD_ORDER]
+    aleg = [plt.Line2D([0], [0], marker=markers[c], ls='', ms=4, color='#555', label=COND_CN[c])
+            for c in conds]
+    leg1 = ax.legend(handles=hleg, fontsize=6, loc='center left', title='encoding',
+                     title_fontsize=6, bbox_to_anchor=(1.01, 0.7))
+    ax.add_artist(leg1)
+    ax.legend(handles=aleg, fontsize=6, loc='center left', title='arena', title_fontsize=6,
+              bbox_to_anchor=(1.01, 0.3))
+    fig.tight_layout()
+    out = figs / 'figS_coset_phase.pdf'; fig.savefig(out); plt.close(fig)
+    print(f'  wrote {out.name}')
+
+
+def figS_ca1(data: Path, figs: Path):
+    """Supplementary: exploratory CA1 reanalysis (consistent with the fold, not diagnostic)."""
+    fd = _read(data / 'hockeimer_field_di.csv') if (data / 'hockeimer_field_di.csv').exists() else []
+    if not fd:
+        print('  skip figS_ca1: missing hockeimer_field_di'); return
+    fig, ax = plt.subplots(1, 2, figsize=(ONEHALF, 2.7))
+    xr, yr = _di_pairs(fd, ('cell', 'orient'), rep_only=True)          # repeating (claim)
+    _di_scatter(ax[0], xr, yr, '#1F3B5C')
+    ax[0].set_xlabel('field $i$ DI'); ax[0].set_ylabel('field $j$ DI')
+    ax[0].set_title('CA1 repeating cells', fontsize=7); _panel(ax[0], 'a')
+    xn, yn = _di_pairs(fd, ('cell', 'orient'), rep_only=False)         # all (control)
+    # non-repeating subset for the control comparison
+    xnr, ynr = _di_pairs([r for r in fd if r.get('rep') not in ('True', 'TRUE', True)],
+                         ('cell', 'orient'))
+    _di_scatter(ax[1], xnr, ynr, '#8A8A8A')
+    ax[1].set_xlabel('field $i$ DI'); ax[1].set_ylabel('field $j$ DI')
+    ax[1].set_title('CA1 non-repeating (control)', fontsize=7); _panel(ax[1], 'b')
+    fig.tight_layout()
+    out = figs / 'figS_ca1.pdf'; fig.savefig(out); plt.close(fig)
     print(f'  wrote {out.name}')
 
 
@@ -607,9 +1306,14 @@ def main():
     a = ap.parse_args()
     data, figs = Path(a.data), Path(a.figs)
     figs.mkdir(parents=True, exist_ok=True)
-    allfigs = {'fig1': fig1_setup, 'fig2': fig2_fold, 'fig3': fig3_function,
+    allfigs = {'overview': fig1_overview, 'fig1': fig1_setup, 'dissociation': fig2_dissociation,
+               'ceiling': fig_ceiling,
+               'population': fig_population, 'fig2': fig2_fold, 'fig3': fig3_function,
                'fig4': fig4_geometry, 'fig5': fig5_generality, 'fig6': fig6_brain,
-               'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes}
+               'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes,
+               'robustness': figS_robustness, 'prospective': figS_prospective, 'ca1': figS_ca1,
+               'coset_phase': figS_coset_phase, 'compartments_solo': fig_compartments_solo,
+               'horizon_solo': fig_horizon_solo}
     for name, fn in allfigs.items():
         if a.only and name not in a.only:
             continue

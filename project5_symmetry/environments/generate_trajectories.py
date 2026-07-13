@@ -50,10 +50,14 @@ def collect_trajectory(wrapped_env, T: int, rng: np.random.Generator = None) -> 
     avoiding the gymnasium Wrapper __getattr__ limitation.
 
     Returns dict:
-        obs     : float32 (T+1, obs_size)  — pixel observations, [0,1]
+        obs     : float32 (T+1, obs_size)  — pixel observations, [0,1] (+ tint_b in room B)
         act_enc : float32 (T,   5)         — SpeedHD encoded actions
         pos     : int32   (T+1, 2)         — agent (col, row) in MiniGrid coords
         heading : int32   (T+1,)           — agent head directions {0,1,2,3}
+
+    If `inner.tint_b` is set (compartment arenas), a constant is added to every pixel of
+    room B's view, in float, downstream of 8-bit quantisation, so it stays a graded cue at
+    arbitrarily small amplitude instead of the step function a uint8 round/clip would give.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -62,6 +66,16 @@ def collect_trajectory(wrapped_env, T: int, rng: np.random.Generator = None) -> 
     F = inner.agent_view_size
     obs_size = F * F * 3
     n_actions = wrapped_env.action_space.n
+    tint = float(getattr(inner, 'tint_b', 0.0))
+    room_b = getattr(inner, 'room_b', None)
+
+    def _add_tint(flat_obs: np.ndarray) -> np.ndarray:
+        if not tint or room_b is None:
+            return flat_obs
+        ap = inner.agent_pos                              # MiniGrid (col, row)
+        if (int(ap[1]), int(ap[0])) in room_b:
+            return flat_obs + tint
+        return flat_obs
 
     # Sample action sequence with paper probabilities
     probs = np.array(PAPER_ACTION_PROBS[:n_actions], dtype=np.float64)
@@ -83,13 +97,13 @@ def collect_trajectory(wrapped_env, T: int, rng: np.random.Generator = None) -> 
 
     raw_obs = inner.gen_obs()
     obs_dict = wrapped_env.observation(raw_obs)
-    obs_arr[0]  = obs_dict['image'].reshape(-1).astype(np.float32) / 255.0
+    obs_arr[0]  = _add_tint(obs_dict['image'].reshape(-1).astype(np.float32) / 255.0)
     pos_arr[0]  = inner.agent_pos
     dir_arr[0]  = inner.agent_dir
 
     for t, a in enumerate(actions):
         raw_obs, _, terminated, truncated, _ = wrapped_env.step(int(a))
-        obs_arr[t + 1]  = raw_obs['image'].reshape(-1).astype(np.float32) / 255.0
+        obs_arr[t + 1]  = _add_tint(raw_obs['image'].reshape(-1).astype(np.float32) / 255.0)
         pos_arr[t + 1]  = inner.agent_pos
         dir_arr[t + 1]  = inner.agent_dir
 

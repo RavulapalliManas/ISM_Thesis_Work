@@ -117,10 +117,11 @@ def _cells(mode: str):
 class CompartmentArena(SymmetryArena):
     """Two closed compartments joined by a corridor; B is the group image of A."""
 
-    def __init__(self, mode: str, F: int = 7, seed: int = 0, **kw):
+    def __init__(self, mode: str, F: int = 7, seed: int = 0, tint: float = 0.0, **kw):
         if mode not in MODES:
             raise ValueError(f'mode must be one of {MODES}, got {mode!r}')
         self.mode = mode
+        self.tint_b = float(tint)          # faint symmetry-breaking cue on room B (0 = none)
         self.passable, self.room_a, self.room_b, self.door_a, self.door_b = _cells(mode)
         super().__init__(shape='square', size=ARENA, U=0, F=F, seed=seed,
                          use_landmarks=True, symmetry_condition=None, **kw)
@@ -152,9 +153,9 @@ class CompartmentArena(SymmetryArena):
         raise ValueError(f'{pos_rc} is not inside a compartment')
 
 
-def make_compartment_env(mode: str, F: int = 7, seed: int = 0):
+def make_compartment_env(mode: str, F: int = 7, seed: int = 0, tint: float = 0.0):
     """Top-level factory: picklable, so `generate_dataset` can rebuild it in each worker."""
-    return PixelObsWrapper(CompartmentArena(mode, F=F, seed=seed), tile_size=1)
+    return PixelObsWrapper(CompartmentArena(mode, F=F, seed=seed, tint=tint), tile_size=1)
 
 
 def observation_mismatch(mode: str) -> np.ndarray:

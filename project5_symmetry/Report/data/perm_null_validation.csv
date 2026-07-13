@@ -1,0 +1,3 @@
+cond,hd,group,observed,null_mean,null_sd,chance,p_above_null
+s2,axis,c2,0.5305,0.4989,0.0053,0.5,0.0244
+s2,parity,c2,0.9636,0.4979,0.0055,0.5,0.0244
