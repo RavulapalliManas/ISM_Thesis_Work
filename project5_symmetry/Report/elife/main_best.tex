@@ -1,25 +1,23 @@
-% catoptions (2014) and xwatermark (2012), both pulled in by the class, patch \begin{document}
-% in a way that conflicts with LaTeX's 2020 hook system ("Extra \endgroup" on modern TeX Live)
-% -- pin the format to pre-hook behaviour.
-\RequirePackage[2020-01-01]{latexrelease}
-\documentclass[times, twoside]{zHenriquesLab-StyleBioRxiv}
-\usepackage{booktabs}
-\usepackage{amsmath}
+% eLife house format. Build with XeLaTeX (the class uses unicode-math):
+%   xelatex main; bibtex main; xelatex main; xelatex main
+% Every number traces to a CSV in ../data/ (see ../data/README.md).
+
+\documentclass[9pt,lineno]{elife}
 
 \graphicspath{{figures/}}
-\leadauthor{Ravulapalli}
+
+\title{Place-field repetition is what a predictive map must do when self-motion cannot resolve it:
+a cognitive map represents space only up to the symmetries self-motion cannot break}
+
+\author[1]{Manas Venkata Sai Ravulapalli}
+\affil[1]{Ashoka University, Sonipat, India}
+\corr{manasvenkatasai.ravulapalli\_ug2023@ashoka.edu.in}{MR}
 
 \begin{document}
-
-\title{Place-field repetition is what a predictive map must do when self-motion cannot resolve it: a cognitive map represents space only up to the symmetries self-motion cannot break}
-\shorttitle{Cognitive maps are symmetry quotients}
-
-\author[1,\Letter]{Manas Venkata Sai Ravulapalli}
-\affil[1]{Ashoka University, Sonipat, Haryana, India}
-
 \maketitle
 
 \begin{abstract}
+\noindent
 Place cells fire at the same relative location in every identical compartment of a maze, a
 repetition usually read as the hippocampus failing to tell the rooms apart. We show it is instead
 what a predictive code must do when its self-motion signal cannot resolve the symmetry, and that
@@ -45,15 +43,7 @@ compartments without lifting the fold, the partial repetition reported in rodent
 motion cannot break.
 \end{abstract}
 
-\begin{keywords}
-predictive learning | cognitive map | hippocampus | symmetry | place cells | head direction
-\end{keywords}
-
-\begin{corrauthor}
-manasvenkatasai.ravulapalli\_ug2023\at ashoka.edu.in
-\end{corrauthor}
-
-\section*{Introduction}
+\section{Introduction}
 
 In a maze of visually identical compartments, a place cell fires at the same location in each
 room: one cell reports several rooms as a single place. \citet{spiers2015} recorded CA1 place
@@ -127,13 +117,13 @@ animal data (Results). Throughout we distinguish a folded code from a broken one
 The folded networks build a reproducible map of the fundamental domain and merely forget which copy
 of it they are in.
 
-\section*{Results}
+\section{Results}
 
 Figure~\ref{fig:overview} previews the elements this section formalises: the predictive-learning
 pipeline, the three landmark arenas, the animal phenomenon under explanation, and the quotient map
 at the centre of the argument.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig1_overview.pdf}
 \caption{\textbf{Overview.} (\textbf{a}) The pipeline: an agent moves through a symmetric arena
@@ -151,9 +141,9 @@ Theorem: a group $G$ (here $C_4$) partitions the state space $X$ into orbits; th
 $\pi$ sends each orbit to a single point of $X/G$, discarding which physically distinct member of
 the orbit the agent occupies.}
 \label{fig:overview}
-\end{figure*}
+\end{figure}
 
-\subsection*{A design that isolates equivariance from information}
+\subsection{A design that isolates equivariance from information}
 
 Networks receive a $7\times7\times3$ egocentric view and a five-dimensional SpeedHD action
 vector, $[\,\text{speed},\ \mathrm{onehot}(h)\,]$ with $h \in \{\text{E},\text{S},\text{W},
@@ -163,7 +153,7 @@ encodings partition the headings into two classes of two, exactly one bit each, 
 entropy, identical activation statistics, and differ only in \emph{which} partition, and
 hence in whether they are invariant under the $180^\circ$ rotation $R^2$.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \caption{The four head-direction encodings. \textit{axis} and \textit{parity} are matched at
 one bit and differ only in invariance.}
@@ -178,9 +168,9 @@ encoding & bits & $C_2$-invariant & $C_4$-invariant \\
 \textit{const}                     & 0.0 & yes & \textbf{yes} \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig1_setup.pdf}
 \caption{\textbf{Design and phenotype.} (\textbf{a}) The four head-direction encodings, as
@@ -195,13 +185,13 @@ the code does not fold, and repeat at the symmetry-related locations, once under
 (\textit{axis} encoding) and four times under $C_4$ (\textit{const}). Units are representative;
 the complete unselected set for each condition is given in the Supplementary Information.}
 \label{fig:setup}
-\end{figure*}
+\end{figure}
 
 The two hypotheses make opposite predictions. If folding tracks how much information the
 compass carries, \textit{axis} and \textit{parity} behave alike (Fig.~\ref{fig:setup}a). If
 it tracks invariance, \textit{axis} folds and \textit{parity} does not.
 
-\subsection*{Predictive learning grows place cells, and symmetry makes them repeat}
+\subsection{Predictive learning grows place cells, and symmetry makes them repeat}
 
 Trained on prediction alone, the networks develop units with localised spatial firing fields,
 the place cells reported for this objective by \citet{levenstein2024}
@@ -215,7 +205,7 @@ symmetry orbit as the same place. The sections that follow quantify this and iso
 controls it.
 
 
-\subsection*{The map collapses onto the symmetry quotient $X/G$}
+\subsection{The map collapses onto the symmetry quotient $X/G$}
 
 The fold is a theorem about the inputs before it is a fact about any network.
 
@@ -279,7 +269,7 @@ recover which element of the orbit $\{x, R^2x\}$ produced it. We therefore train
 decoder for \emph{orbit phase}, holding out whole orbits across cross-validation folds so the
 decoder must generalise a phase direction to positions it has never seen. Chance is $0.500$.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \caption{Orbit-phase decoding accuracy (chance $=0.500$). $n=10$ per cell for s1 and s2,
 $n=8$ for s4.}
@@ -293,9 +283,9 @@ s2 ($C_2$)              & 0.978 & 0.955 & \textbf{0.552} & \textbf{0.552} \\
 s4 ($C_4$)              & 0.984 & 0.933 & \textbf{0.544} & \textbf{0.521} \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig2_dissociation.pdf}
 \caption{\textbf{Invariance, not information, folds the code.} (\textbf{a}) Orbit-phase decoding
@@ -308,7 +298,7 @@ $\approx0.97$) but separate completely in $C_2$ (\textit{parity} $0.955$, \texti
 every \textit{parity} network scores above every \textit{axis} network, Mann--Whitney
 $p = 1.1\times10^{-5}$). Data of Table~\ref{tab:phase}.}
 \label{fig:dissoc}
-\end{figure*}
+\end{figure}
 
 In the $C_2$ arena, \textit{axis} and \textit{parity} carry the same entropy (one bit) and the
 same information about the current heading, yet they differ by $0.403$ in phase accuracy
@@ -342,7 +332,7 @@ Domain position and orbit phase move independently across every network and enco
 phase accuracy depending on whether the encoding is invariant, which is the coset-vs-phase
 signature of a fold rather than a dead code.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/manifold_s2.png}
 \caption{\textbf{The fold, seen geometrically.} (\textbf{a}) The fold ratio, distance between a
@@ -360,9 +350,9 @@ claim. Phases superimpose under \textit{axis}/$C_2$ and occupy separate regions 
 \textit{full}/$C_2$. We reduce with PCA because the claim is metric, two positions coincide ---
 and unlike neighbour-graph embeddings PCA preserves distances rather than reshaping them.}
 \label{fig:manifold}
-\end{figure*}
+\end{figure}
 
-\subsection*{The quotient is near-exact: the $C_4$ map hits the $1/|G|$ ceiling}
+\subsection{The quotient is near-exact: the $C_4$ map hits the $1/|G|$ ceiling}
 
 A code folded onto $X/G$ cannot name the element of an orbit, only the coset, so a $|G|$-way
 phase decoder is bounded above by $1/|G|$. Reading the $C_4$ arena through its own quotient
@@ -384,7 +374,7 @@ chance floor. What looked like a dead code under a $C_2$ readout is a code folde
 quotient than the readout was built to see. We flag this because a $G$-folded code and a code
 that has stopped representing space are easy to confuse, and only the second is a failure.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \caption{$C_4$ four-way phase decoding in the s4 arena (chance $= 0.250$).}
 \label{tab:c4}
@@ -398,9 +388,9 @@ encoding & invariance & measured & predicted ceiling \\
 \textit{const}  & $C_2$ and $C_4$ & \textbf{0.275} & 0.250 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=0.62\textwidth]{figures/fig_ceiling.pdf}
 \caption{\textbf{The $C_4$ arena reproduces the group-theoretic ceiling.} Four-way orbit-phase
@@ -410,9 +400,9 @@ $X/G$ can name the coset but not the orbit element, so a $|G|$-way decoder is bo
 $C_2$-invariant \textit{axis} falls to the $1/2$ ceiling; \textit{full} and \textit{parity}, not
 invariant, stay high. Ceilings are the group-theoretic predictions, not fits.}
 \label{fig:ceiling}
-\end{figure*}
+\end{figure}
 
-\subsection*{The inputs set the quotient; the objective decides whether it is built}
+\subsection{The inputs set the quotient; the objective decides whether it is built}
 
 None of this requires a trained network to predict. Call two states $(x,h)$ and $(x',h')$
 \emph{input-equivalent} if they produce the same $7\times7$ observation and the same HD encoding.
@@ -428,7 +418,7 @@ the fraction of orbit pairs the input distinguishes. Evaluating the right-hand s
 themselves, enumerating all $324\times4$ states and hashing their observations, takes no
 training at all.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \caption{The bound of Eq.~\ref{eq:bound}, computed from the arenas with no free parameters,
 against the trained networks. Every encoding falls to the accuracy its input-distinguishability
@@ -449,7 +439,7 @@ s4 & \textit{full} / \textit{parity} & 1.000 & 1.000 & 0.984 / 0.933 \\
 s4 & \textit{axis} / \textit{const}  & 0.000 & 0.500 & 0.544 / 0.521 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 Table~\ref{tab:bound} also settles a number that would otherwise look like a failure. In the
 $C_1$ arena \textit{axis} reaches $0.971$ rather than $1.000$, because $6.6\%$ of states there
@@ -477,7 +467,7 @@ the compass ablations, is therefore not a property of a network that happens to 
 is what a fixed architecture does \emph{because} the objective is prediction, and reconstruction on
 the identical network is the demonstration of that, not a control incidental to it.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \caption{Orbit-phase decoding in the $C_2$ arena as a function of prediction horizon $k$
 (chance $= 0.500$, $n = 6$ per cell).}
@@ -492,7 +482,7 @@ $k$ & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} & \textit
 5 & 0.978 & 0.953 & 0.553 & 0.551 & $p = 0.00216$ \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 Under reconstruction the full two-bit compass buys nothing: every encoding folds, and all four
 sit near chance (Table~\ref{tab:horizon}). These are folded codes, not broken ones, the
@@ -519,7 +509,7 @@ resolves the symmetry. The control therefore isolates a property of the objectiv
 reconstruction as such: an objective that does not require self-motion integration does not
 recruit the compass, whatever else it reconstructs.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig3_function.pdf}
 \caption{\textbf{Functional consequences of the fold.} (\textbf{a}) Orbit-phase decoding
@@ -533,9 +523,9 @@ compartments ($n = 8$ each): under translation the fields repeat and the room is
 (chance $0.5$), under rotation the fields do not repeat and the room decodes; within-room
 position ($R^2$) stays high in both. Dots are individual networks.}
 \label{fig:function}
-\end{figure*}
+\end{figure}
 
-\subsection*{The same mechanism sets the map and the capacity to replay}
+\subsection{The same mechanism sets the map and the capacity to replay}
 
 A predictive network can be run offline, driven by its own predicted observation, to generate
 trajectories without moving through the arena \citep{levenstein2024}, and its offline behaviour
@@ -592,7 +582,7 @@ no reward signal, so the account predicts its offline sweeps should not show the
 reward-linked form; testing that prediction needs a directional statistic referenced to the
 immediately preceding trajectory, which we have not built.
 
-\subsection*{The dissociation survives a noisy compass}
+\subsection{The dissociation survives a noisy compass}
 
 The head-direction signal used so far is a noiseless oracle, whereas the biological compass
 drifts and is re-anchored by vision. To test whether the fold depends on a perfect signal, we
@@ -607,7 +597,7 @@ networks the separation narrows only slightly (from $0.403$), driven by a small 
 it does when clean (Fig.~\ref{fig:generality}a). (These networks were trained for $30{,}000$ steps rather than
 $80{,}000$; the effect is already complete by then.)
 
-\subsection*{A learned, unanchored compass builds the quotient unaided}
+\subsection{A learned, unanchored compass builds the quotient unaided}
 
 The strongest form of the test removes the oracle entirely. Rather than degrade a supplied
 compass, we withheld absolute heading and gave the network only \emph{angular velocity}, the
@@ -637,7 +627,7 @@ observations are also aliased. The hand-designed encodings are a controlled way 
 invariance; the learned compass shows the invariance is where a real self-motion signal already
 lives.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=0.86\textwidth]{figures/fig5_generality.pdf}
 \caption{\textbf{The quotient survives a degraded and a learned compass.} (\textbf{a}) HD-lesion
@@ -647,9 +637,9 @@ steps randomised (chance $0.5$, dashed). The non-invariant encodings (\textit{fu
 pinned at chance. (\textbf{b}) A learned, angular-velocity compass, by arena: it resolves $C_1$
 ($0.97$) but folds $C_2$ and $C_4$ to chance, building the quotient with no imposed encoding.}
 \label{fig:generality}
-\end{figure*}
+\end{figure}
 
-\subsection*{Two natural readouts fail, in two different ways}
+\subsection{Two natural readouts fail, in two different ways}
 
 This is a completeness check on our own earlier analysis of these networks, not a critique of
 prior published work: an earlier pass through this project used rotational autocorrelation as its
@@ -674,7 +664,7 @@ secondary, descriptive one, kept in the paper because the same superseded readou
 supported the same qualitative conclusion by an argument that does not hold, and a reader
 reconstructing this analysis from scratch should not rediscover that dead end.
 
-\subsection*{The quotient map is reproducible, not degenerate}
+\subsection{The quotient map is reproducible, not degenerate}
 
 Because the folded encodings decode orbit phase near chance (about $0.55$, reliably just above
 the $0.5$ floor but far below the $\sim\!0.95$ of the non-invariant encodings), we asked whether they had learned a
@@ -707,7 +697,7 @@ copies are written as one place, whereas with a full compass they are separated 
 unrelated positions. The same invariant encoding gives a weaker correlation in the $C_1$ arena
 ($0.71$ for \textit{axis}), where there is no arena symmetry to complete the fold.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig2_fold.pdf}
 \caption{\textbf{Quantifying the fold.} (\textbf{a}) Rate-map $C_2$ symmetry index (correlation
@@ -722,9 +712,9 @@ Cross-seed correlation between independently trained networks stays above $0.96$
 $C_1/C_2/C_4$; bars are mean $\pm$ s.e.m.\ over networks ($n = 10$ per encoding for $C_1$ and
 $C_2$, $n = 8$ for $C_4$).}
 \label{fig:fold}
-\end{figure*}
+\end{figure}
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_population.pdf}
 \caption{\textbf{The quotient in the population code.} (\textbf{a}) Remapping, read as the
@@ -739,9 +729,9 @@ encodings concentrate power in the even characters ($P_0$, $P_2$) and suppress t
 and falling into the symmetric arenas, the descriptive correlate of the fold. Arenas
 $C_1$/$C_2$/$C_4$.}
 \label{fig:population}
-\end{figure*}
+\end{figure}
 
-\subsection*{Folding multiplies place fields and imprints the arena's symmetry on each map}
+\subsection{Folding multiplies place fields and imprints the arena's symmetry on each map}
 
 The fold is visible cell by cell, not only in the population decoder. We characterised every
 unit's firing-rate map and counted its place fields (Fig.~\ref{fig:fold}a). Fields per unit
@@ -776,7 +766,7 @@ cell-type makeup of the map. The multi-field, spatially repeating cells it produ
 in-silico counterpart of the repeated place fields recorded in symmetric and multicompartment
 environments \citep{grieves2016, derdikman2009}.
 
-\subsection*{Place-field repetition is the signature of the quotient}
+\subsection{Place-field repetition is the signature of the quotient}
 
 Head direction should resolve rotational but not translational symmetry, and this can be tested
 in the geometry used to study repeated place fields in rodents. We built two closed $6\times6$
@@ -832,7 +822,7 @@ make the ambiguity explicit (Supplementary Information, Fig.~S9). We therefore r
 correlation as \emph{consistent with} the quotient but not diagnostic of it, and treat the model
 prediction, not the animal reanalysis, as the load-bearing result of this section.
 
-\begin{figure*}
+\begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig6_brain.pdf}
 \caption{\textbf{The predictive model reproduces place-field repetition.} (\textbf{a}) The
@@ -846,9 +836,9 @@ same-orientation partner ($j$) is positively correlated ($r=0.62$; scatter subsa
 statistic from all pairs). Line, least-squares fit. An exploratory, non-diagnostic reanalysis of
 real CA1 data testing the same prediction is in the Supplementary Information (Fig.~S9).}
 \label{fig:brain}
-\end{figure*}
+\end{figure}
 
-\section*{Discussion}
+\section{Discussion}
 
 The learned cognitive map is a quotient. When the environment has a symmetry the agent's
 self-motion cannot break, the predictive code writes each orbit of symmetry-related positions as a
@@ -927,7 +917,7 @@ symmetric one cannot.
 
 \subsection*{What the model reproduces, and what it does not}
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -983,7 +973,7 @@ Head-direction cells lie on a ring manifold that matures before place and grid c
 & absent \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 The two rows marked \emph{absent} are architectural, not empirical: head direction enters this
 network as an oracle input rather than being learned, and no non-negativity constraint is imposed,
@@ -1094,7 +1084,7 @@ prediction grows place cells \citep{levenstein2024}, but that it specifies \emph
 spatial code collapses under symmetry and when it does not, a question the other model classes
 leave open.
 
-\begin{table*}
+\begin{table}[t]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -1124,7 +1114,7 @@ Predictive RNN \citep{levenstein2024}, this work
 & yes (emergent) & yes & \textbf{yes}, set by HD invariance \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 \paragraph{Limitations.} A first group of limitations are architectural absences rather than
 failures of the account, on the same footing as the missing grid torus. The arenas are discrete
@@ -1213,7 +1203,7 @@ and for the developmental order in which they appear. The aim of such a program 
 catalogue of spatial cell types into a set of consequences that follow from an objective, an
 architecture, and an experience, of which the symmetry-driven fold reported here is one.
 
-\section*{Methods}
+\section{Methods}
 
 \paragraph{Architecture and training.} We use \texttt{pRNN\_th} \citep{levenstein2024} unchanged:
 a layer-normalised recurrent cell, hidden size 500, truncation $T = 200$, rollout horizon $k=5$
