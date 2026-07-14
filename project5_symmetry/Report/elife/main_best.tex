@@ -1070,6 +1070,46 @@ being a property of the input pipeline rather than of the learning. It is an obj
 requires predicting a future observation, not reconstructing the present one, that recruits the
 compass.
 
+\subsection*{Boundary-vector cells are downstream of the compass, not upstream of the fold}
+
+The sharpest objection to this account is that we have rediscovered the boundary-vector-cell model
+of repetition \citep{grieves2018bvc} with extra steps. It has force. A recurrent network trained on
+a purely predictive objective from egocentric vision grows head-direction cells, boundary-vector
+cells and place cells on its own \citep{uria2020}, so if our units are boundary cells, then the
+fold might be a fact about boundaries rather than about symmetry.
+
+We looked, expecting to find them, and we did. Fitting every unit's rate map to the best single
+idealised boundary-vector tuning curve (a Gaussian over the distance to the wall at a given
+allocentric bearing) and, for comparison, to the best single Gaussian place field, $41.6\%$ of
+units in the $C_1$ arena under \textit{full} are better explained by a boundary-vector cell than by
+any place field, rising to $61.2\%$ in the $C_4$ arena. The network learns boundary cells.
+
+That does not make the boundary-vector account prior to this one. It makes it \emph{downstream} of
+it. A boundary-vector cell is tuned to a boundary at an \emph{allocentric} bearing, and an
+allocentric bearing is undefined without a compass; as \citet{julian2018} put it, such models
+``assume the existence of a reliable head-direction signal'' and so ``describe how boundaries can
+be used to calculate one's location when heading is known, but do not describe how boundaries are
+used to recover the orientation''. Our networks show exactly that dependence. Ablating the compass
+destroys boundary tuning: the fraction of boundary-vector-like units falls from $41.6\%$ to
+$14.0\%$ in the $C_1$ arena and from $61.2\%$ to $0.8\%$ in the $C_4$ arena
+(\texttt{bvc\_tuning.csv}). The boundary code is built on the compass, not underneath it.
+
+The decisive observation is the matched contrast. \textit{axis} and \textit{parity} carry the same
+one bit and support comparable boundary populations: in the $C_2$ arena $29.2\%$ of \textit{axis}
+units and $22.1\%$ of \textit{parity} units are boundary-vector-like, and \textit{parity} units are
+if anything the better fit to a boundary tuning curve (mean $r = 0.482$ against $0.449$). Yet
+\textit{axis} folds and \textit{parity} does not (orbit phase $0.552$ against $0.955$). Two
+networks with the same boundary code, and opposite maps. No boundary-vector model can produce that,
+because it has no representation of \emph{which} bit the compass carries, only of whether a bearing
+is available. The authors of the boundary-vector model of repetition concede the same gap from the
+other side, writing of the head-direction lesion result that ``it is unknown what effect disruption
+of the HD system has on boundary cells'' \citep{grieves2018bvc}.
+
+Boundary-vector cells are therefore the mechanism a predictive objective discovers; the quotient
+law is the principle that says what any such mechanism can and cannot tell apart. The fold is what
+happens when the compass cannot resolve a symmetry, and the boundary code, being anchored to that
+same compass, cannot resolve it either.
+
 \subsection*{Relation to other models of the spatial code}
 
 The parallel-versus-radial dissociation is a discriminating test among models of place-cell

@@ -189,3 +189,19 @@ figure-derived (manifold fold ratios, gridness); all are reproducible from the a
   from the ACTION stream does not remove heading from the code: heading then enters only through
   the egocentric view, which binds it to position. This bears directly on the CA1 limitation, where
   a conjunctive place-by-direction code is the alternative we cannot separate from folding.
+
+- `bvc_tuning.csv` -- DOES THE NETWORK LEARN BOUNDARY-VECTOR CELLS? Referee-proofing: Uria et al.
+  (2020) showed a purely predictive RNN grows BVCs, so the charge is "your derivation is the BVC
+  model of repetition (Grieves, Duvelle & Dudchenko 2018) with extra steps." Every unit's rate map
+  is fitted to the best single idealised BVC (Gaussian over distance to the wall at a given
+  ALLOCENTRIC bearing; 4 directions x 13 distances x 5 widths) and, for comparison, to the best
+  single Gaussian place field (same functional family, same number of free parameters).
+  ANSWER: yes, and it helps us. The network grows BVC-like units -- 41.6% of units in C1 under
+  `full` are better fitted by a BVC than by any place field, 61.2% in C4. But BVC tuning REQUIRES
+  the compass: ablating it drops that to 14.0% (C1) and 0.8% (C4). A BVC's bearing is allocentric
+  and undefined without a heading signal.
+  DECISIVE: `axis` and `parity` carry the same one bit and support comparable boundary populations
+  (C2: 29.2% vs 22.1% BVC-like; parity is if anything the better boundary fit, mean r 0.482 vs
+  0.449), yet only `axis` folds (orbit phase 0.552 vs 0.955). Same boundary code, opposite maps.
+  No BVC model can produce that, because it has no representation of WHICH bit the compass carries.
+  Boundary cells are downstream of the compass, not upstream of the fold.
