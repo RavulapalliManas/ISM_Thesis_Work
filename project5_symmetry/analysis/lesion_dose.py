@@ -44,7 +44,7 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from project5_symmetry.analysis.run_spectrum import model_from_checkpoint  # noqa: E402
 from project5_symmetry.analysis.run_phase_decoding import orbit_and_phase, _balance, ARENA  # noqa: E402
-from project5_symmetry.analysis.cell_properties import properties  # noqa: E402
+from project5_symmetry.analysis.cell_properties import properties, _ev  # noqa: E402
 from project5_symmetry.environments.hd_encodings import apply_hd  # noqa: E402
 from project5_symmetry.experiments.run_ensemble_sweep import ensure_data  # noqa: E402
 from project5_symmetry.training.dataset import TrajectoryDataset  # noqa: E402
@@ -131,6 +131,40 @@ def phase_acc(H, pos, group, seed=0):
     return float(np.mean(acc))
 
 
+def orbit_ev(H, pos, group):
+    """Variance in the code explained by the ORBIT -- position in the FUNDAMENTAL DOMAIN.
+
+    THIS IS THE MEASUREMENT THAT SEPARATES THE TWO THINGS THE LESION DOES, and `ev_pos` cannot do it.
+
+    Taking the compass away does two things at once, and they must not be confused:
+
+        DEGRADATION  the map gets worse everywhere, because the compass carried information the
+                     network was using. This happens in EVERY arena, symmetry or no symmetry.
+        FOLDING      the code stops distinguishing x from g.x. This can only happen where a symmetry
+                     EXISTS.
+
+    `ev_pos` -- variance explained by FULL position -- cannot tell them apart, because a clean fold
+    destroys full-position information BY DEFINITION: once the map is folded you know where you are
+    only up to the orbit. Measuring the fold with `ev_pos` is measuring the effect with a ruler the
+    effect bends, and in a C2 arena it will report a fold as though it were degradation.
+
+    So we measure the quotient map directly: how much of the code is explained by WHICH ORBIT you are
+    in, ignoring which orbit-mate. Together with `phase_acc` this gives an orthogonal pair:
+
+        clean fold      ev_orbit PRESERVED,  phase_acc -> 1/|G|
+        degradation     ev_orbit FALLS
+        both            ev_orbit falls AND phase_acc -> 1/|G|
+
+    PREDICTION, stated before the run. In a symmetric arena the egocentric view is IDENTICAL at x and
+    g.x -- that is what the symmetry means -- so the view is a function ON THE QUOTIENT: it determines
+    the orbit perfectly and is simply silent about the phase. A network silenced of its compass should
+    therefore keep the QUOTIENT map at close to full quality and lose ONLY the phase. If `ev_orbit`
+    collapses too, the fold story is wrong and we are watching a map fall apart.
+    """
+    orbit, _ = orbit_and_phase(pos, group, ARENA)
+    return float(np.mean(_ev(H, orbit)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--ckpt-root', required=True)
@@ -170,11 +204,16 @@ def main():
                     r = {'condition': cond, 'seed': s, 'lesion_mode': lmode, 'dose': dose}
                     r.update({k: (round(v, 4) if isinstance(v, float) else v)
                               for k, v in properties(H, pos, hd).items()})
+                    # The SAME pretend C2 group is applied in every arena, so the label granularity
+                    # (162 orbits, 2 phases) is identical across s1/s2/s4 and the numbers are
+                    # comparable. In s1 that group is not a symmetry of anything, which is exactly
+                    # what makes s1 the reachable null: the code there SHOULD keep decoding phase.
                     r['phase_acc'] = round(phase_acc(H, pos, 'c2', seed=s), 4)
+                    r['ev_orbit'] = round(orbit_ev(H, pos, 'c2'), 4)
                     rows.append(r)
                     print(f"  {cond}/s{s:02d} {lmode:<9s} dose={dose:.2f}  "
-                          f"phase={r['phase_acc']:.3f} SI={r['spatial_info']:.3f} "
-                          f"dirF={r['dir_info_field']:.3f} fields={r['n_fields']:.2f}",
+                          f"phase={r['phase_acc']:.3f} ev_orbit={r['ev_orbit']:.3f} "
+                          f"SI={r['spatial_info']:.3f} fields={r['n_fields']:.2f}",
                           flush=True)
 
     with open(a.out, 'w', newline='') as f:
