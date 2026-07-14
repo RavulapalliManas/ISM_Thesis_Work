@@ -109,3 +109,7 @@ prnn_backup/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+*.xwm
+# Beamer navigation artifacts
+*.nav
+*.snm
