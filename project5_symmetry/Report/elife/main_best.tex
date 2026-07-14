@@ -986,13 +986,64 @@ a curtained enclosure with no directionally polarising cues, so no landmark was 
 the symmetry in the animal's place. The prediction, the null half of it included, is what the data
 show, with no parameter fitted to them.
 
-We report the discrepancy this leaves open rather than resolve it. Lesioned place cells in that
-study carried less spatial information ($1.29$ to $1.05$ bits) and were less sparse ($0.32$ to
-$0.37$) and less stable across sessions, though their firing rates were unchanged and field size
-was not compared. Yet anterodorsal and postsubicular lesions leave place-cell field number, field
-size, rate and sparsity statistically unchanged \citep{calton2003}. Whether the difference lies in
-the lesion site, its completeness, or the symmetry of the environment the animal was recorded in,
-these two studies do not say, and neither do we.
+\subsection*{The dissociation without a lesion}
+
+The lesion removes the compass. The same dissociation can be produced without touching the animal,
+by changing which group element relates the compartments, and that experiment exists too.
+\citet{fuhs2005} ran rats between two visually identical boxes in a curtained, cue-free enclosure,
+in two configurations, counterbalanced within the same animals on the same days. In the
+\emph{same-orientation} configuration the boxes stood side by side, related by a translation. In
+the \emph{opposite-orientation} configuration they were abutted after rotating each by $90^\circ$
+in opposite senses, so that their orientations differed by $180^\circ$. The rats \emph{walked}
+between the boxes in both configurations, so self-motion was available throughout and the only
+thing that changed was the group element.
+
+The outcome is the dissociation. Under translation there was no remapping at all: the median
+between-box correlation was $0.71$, identical to the within-box value of $0.71$ ($p > 0.5$), and it
+was already present in the first two days of exposure, so it is not an artefact of training. Under
+rotation the maps separated completely: the median between-box correlation fell to $0.06$, which
+the authors report as statistically indistinguishable from a complete remapping. A compass is
+invariant under the first group element and equivariant under the second, and the code follows.
+
+Fuhs et al.\ draw the conclusion the present account needs, from their own data and in their own
+terms: ``linear and angular path integration function differently in the rat. Linear path
+integration appears easily overridden by visual landmarks, whereas angular path integration is more
+sensitive to cue discordance.'' Self-motion, in other words, does not break all symmetries equally.
+Heading is a strong breaker of rotations; displacement is a weak breaker of translations. That
+asymmetry is not an auxiliary assumption we impose on the theory --- it is the empirical finding
+this experiment was designed to make, and it is why the quotient the animal is left with is the one
+that translation, not rotation, survives.
+
+Two honest qualifications. The remapping was \emph{delayed} in two of three rats, appearing only on
+the second or third visit, and the authors are explicit that it ``cannot be explained as a direct
+consequence of a sensory manipulation''. Our networks are trained to convergence and have no
+plasticity at test time, so they model the asymptotic state, not the transition to it; Fuhs et
+al.'s asymptote is what we reproduce, and their transient is what we do not. Before remapping, the
+rotated box carried a $180^\circ$-rotated \emph{copy} of the first box's map --- an anchoring
+phenomenon, and an interesting one, which our account can name but our model does not produce.
+Finally, \citet{skaggs1998} report partial remapping in the same-orientation geometry, which Fuhs
+et al.\ failed to replicate and could not explain. We note that a weak breaker is precisely what
+should give a graded and unreliable effect.
+
+\subsection*{Two lesion studies that disagree, and the world each was run in}
+
+The account also resolves a discrepancy the two lesion literatures leave standing. Harland's
+lesioned place cells carried less spatial information ($1.29$ to $1.05$ bits per spike) and were
+less sparse ($0.32$ to $0.37$), and their fields repeated. Yet anterodorsal and postsubicular
+lesions leave place-cell field number ($1.29$ to $1.53$), field size, rate and sparsity
+statistically unchanged, and produce no repetition at all \citep{calton2003}. Read as claims about
+what a head-direction lesion does, these disagree.
+
+They do not disagree once one asks what world each lesion was performed in. Calton et al.\ recorded
+in a cylinder whose inside was, in their words, ``featureless, except for a white card occupying
+$\sim$$100^\circ$ of arc attached to the wall'' --- a polarising landmark, at a definite bearing,
+which breaks the rotational symmetry. Harland's compartments were identical, behind a black
+curtain, with no directionally polarising cue: the symmetry stands. A compass lesion cannot create
+a symmetry; it can only stop breaking one that is already there. In an environment whose symmetry
+some other channel has already broken, destroying the compass degrades the map and folds nothing.
+In an environment where the compass was the only thing breaking the symmetry, destroying it folds
+the map. The two studies are the same lesion in two different worlds, and the account predicts the
+null and the positive from one principle.
 
 The account also predicts an experience-dependent \emph{unfolding}. \citet{carpenter2015} found
 that the grid code across two connected compartments begins repeated and becomes a single global
@@ -1032,9 +1083,25 @@ running-direction dependent
 the direction dependence is the compass entering the fold, but we have not built and run a
 hairpin-maze arena to test this directly
 & consistent \\[4pt]
-Head-direction input is required for a stable map; ADN lesions destabilise place fields
-& \citet{calton2003} & the \textit{const} encoding folds the $C_2$ arena to near chance
-& consistent \\[4pt]
+Anterodorsal and postsubicular lesions leave place-field number, size, rate and sparsity
+unchanged, and lower coherence, in a cylinder polarised by a cue card
+& \citet{calton2003} & his cue card breaks the rotational symmetry, so his is our $C_1$ arena and
+there is nothing for the lesion to fold onto: silencing the compass there leaves field count
+unchanged and the mean rate unchanged, and lowers coherence
+& reproduced \\[4pt]
+The same lesion \emph{raises} in-field directional information ($0.25 \to 0.48$ bits per spike)
+& \citet{calton2003} & \textbf{not reproduced.} Ours falls to near zero. In our network the compass
+is an additive input coordinate, so a unit's directional tuning is inherited from it and must vanish
+with it. Calton et al.\ propose the opposite role --- that head direction \emph{cancels} the
+directionality of egocentric views and binds them into an allocentric code, so that removing it
+causes ``directional fragmentation''. Ours is a model of what the compass makes representable, not
+of how it binds views, and this readout is outside what it can speak to
+& mismatch \\[4pt]
+Two visually identical boxes, walked between, are not distinguished when related by a translation
+and remap completely when related by a $180^\circ$ rotation
+& \citet{fuhs2005} & the compass is invariant under the first group element and equivariant under
+the second; the compartment networks repeat under translation and lift under rotation
+& reproduced \\[4pt]
 Head direction plus recurrence plus prediction are needed for offline replay
 & \citet{levenstein2024} & offline trajectories exceed the coverage of a wake path of equal
 length only with the full compass and $k \ge 1$; coverage falls monotonically as the compass
