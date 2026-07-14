@@ -1536,8 +1536,9 @@ def fig_lesion(data: Path, figs: Path):
     (p = 0.021), interaction F(1,10) = 13.60. A flat translation line is the prediction; a rising one
     would falsify us.
     """
-    dose = _read(data / 'lesion_dose.csv')
-    comp_p = data / 'lesion_compartments.csv'
+    dose = [r for r in _read(data / 'lesion_dose.csv')
+            if r.get('lesion_mode', 'silence') == 'silence']   # a lying compass is not a lesion
+    comp_p = data / 'lesion_compartments_silence.csv'
     comp = _read(comp_p) if comp_p.exists() else []
 
     fig, axes = plt.subplots(2, 2, figsize=(ONEHALF, 4.3))
@@ -1568,28 +1569,32 @@ def fig_lesion(data: Path, figs: Path):
     a.text(0.99, 1.012, 'ceiling', fontsize=5.5, color='#7A7A7A', ha='right')
     a.set_ylim(0.44, 1.08); a.set_ylabel('orbit-phase decoding')
     a.set_xlabel('lesion dose (fraction of steps)')
+    a.text(0.5, 1.035, 'equivariance loss', fontsize=6, color='#333333', ha='center',
+           style='italic')
     a.legend(loc='lower left', fontsize=5.8, handlelength=1.0, bbox_to_anchor=(0.0, 0.06))
     _panel(a, 'a')
 
-    # (b) fields multiply only where there is a symmetry to fold onto.
-    # NOTE the non-monotonicity, which is real and which we do not hide: at moderate dose the field
-    # count FALLS in every arena (the map degrades, fields merge, field area rises), and only above
-    # dose ~0.8 does the fold overtake the degradation and multiply fields -- and then only where a
-    # symmetry exists. The two processes run in opposite directions and the fold wins late.
+    # (b) THE OTHER HALF OF THE SAME LESION. The quotient map -- position in the fundamental domain --
+    # degrades by about a third in EVERY arena, and the degradation is NOT ordered by symmetry: C1 and
+    # C4, at opposite ends of the symmetry range, lose indistinguishable amounts. This is the
+    # information loss, and panel (a) is the equivariance loss. Whatever else the compass does, what
+    # it does to the QUOTIENT does not depend on whether a symmetry exists -- which is exactly why the
+    # fold in (a) cannot be degradation. Plotting them side by side IS the argument.
     for cond in ['s1', 's2', 's4']:
-        curve(b, dose, 'condition', cond, 'n_fields', COND_SHADE[cond], COND_CN.get(cond, cond),
+        curve(b, dose, 'condition', cond, 'ev_orbit', COND_SHADE[cond], COND_CN.get(cond, cond),
               norm=True)
     b.axhline(0, lw=0.6, color='k')
-    b.set_ylim(-16, 44)
-    b.set_ylabel('fields per cell (% vs sham)')
+    b.set_ylim(-46, 8)
+    b.set_ylabel('quotient map, orbit variance\n(% vs sham)')
     b.set_xlabel('lesion dose (fraction of steps)')
-    b.annotate('a symmetry\nto fold onto', xy=(0.97, 34), xytext=(0.60, 26), fontsize=5.5,
-               color='#333333', ha='center',
-               arrowprops=dict(arrowstyle='-', lw=0.5, color='#888888'))
-    b.annotate('none', xy=(0.99, 4), xytext=(0.86, 13), fontsize=5.5, color='#8A8A8A',
-               ha='center', arrowprops=dict(arrowstyle='-', lw=0.5, color='#B5B5B5'))
-    b.text(0.03, -13.5, 'fields first MERGE as the map degrades,\nthen split as it folds',
-           fontsize=5.0, color='#777777')
+    # Honest wording: the drops are NOT statistically identical (ANOVA F = 10.78, p = 0.002). What
+    # they are is NOT ORDERED BY SYMMETRY -- C1 (-37.6%) and C4 (-38.1%), at opposite ends of the
+    # symmetry range, are indistinguishable, and C2 (-30.9%) degrades least. That is what rules
+    # degradation out as the cause of the fold, and it is a weaker claim than "matched".
+    b.text(0.03, -41.5, 'C$_1$ and C$_4$ lose the same third.\nThe damage does not track symmetry.',
+           fontsize=5.2, color='#555555')
+    b.text(0.5, 3.0, 'information loss', fontsize=6, color='#333333', ha='center',
+           style='italic')
     _panel(b, 'b')
 
     # (c) Harland's 2x2 in silico. The translation arm is the reachable null.
@@ -1601,10 +1606,10 @@ def fig_lesion(data: Path, figs: Path):
                    'rotation': 'radial (rotation)'}[mode])
         # the control: a folded code still knows where in the room it is
         xs, r2 = curve(c, comp, 'mode', 'rotation', 'within_r2', '#5B84B1', 'within-room $R^2$')
-        c.set_ylim(-0.15, 1.05); c.set_ylabel('field repetition, A vs B')
+        c.set_ylim(-0.32, 1.08); c.set_ylabel('field repetition, A vs B')
         c.set_xlabel('lesion dose (fraction of steps)')
         c.legend(loc='center left', fontsize=5.5, handlelength=1.0)
-        c.text(0.5, -0.10, 'Harland: parallel 65%$\\to$63% n.s.; radial folds, p = 0.021',
+        c.text(0.3, -0.27, 'Harland: parallel 65%$\\to$63% n.s.; radial folds, p = 0.021',
                fontsize=5.0, color='#777777', ha='center')
     else:
         c.text(0.5, 0.5, 'lesion_compartments.csv\nnot yet generated', ha='center', va='center',
@@ -1647,7 +1652,7 @@ def fig_lesion(data: Path, figs: Path):
     d.set_xticklabels(['C$_1$\nnone', 'C$_2$\n180$\\degree$', 'C$_4$\n90$\\degree$'], fontsize=6)
     d.set_xlabel('symmetry available to fold onto')
     d.set_ylabel('fields per cell after\nfull lesion (% vs sham)')
-    d.set_ylim(-8, 46)
+    d.set_ylim(-22, 40)
     d.set_xlim(-0.55, 2.55)
     d.text(0.02, 0.94, "Calton's world", fontsize=5.4, color='#8A8A8A', transform=d.transAxes)
     d.text(0.02, 0.87, '(cue card breaks it)', fontsize=5.0, color='#A5A5A5',

@@ -1044,14 +1044,51 @@ contradicts the view rather than falling silent, drives the network off the mani
 on, and destroys the map outright. We report that condition as a control, and note that it produces a
 spectacular and entirely spurious fold, because two destroyed maps correlate with each other.
 
-The two consequences dissociate exactly as the account requires. Orbit variance falls by roughly a
-third --- and by the \emph{same} amount in all three arenas, whether or not there is a symmetry to
-fold onto. That is the information loss, and it is pure degradation. Phase accuracy,
-by contrast, collapses to chance in $C_2$ and $C_4$ and does not collapse in $C_1$: the code that has
-lost its compass can no longer say which of two symmetry-related places it occupies, but only where
-such a pair exists. That is the equivariance loss. The degradation is matched, so the fold is not
-degradation; the null arm holds, so the fold is not an artefact of the measure. Field count follows
-the same split, falling where nothing can fold and rising where something can.
+The two consequences dissociate ($n=6$ networks per arena). Silencing the compass entirely costs the
+quotient map about a third of its orbit variance in every arena: $-37.6\%$ in $C_1$, $-30.9\%$ in
+$C_2$, $-38.1\%$ in $C_4$. These are not statistically identical (one-way ANOVA on the per-network
+drop, $F = 10.78$, $p = 0.002$), and we do not claim they are. What matters is that they are not
+\emph{ordered by symmetry}: the two arenas at opposite ends of the symmetry range degrade by
+indistinguishable amounts ($-37.6\%$ and $-38.1\%$), and the intermediate one degrades \emph{least}.
+Whatever drives the residual variation between arenas, it is not the presence of a symmetry.
+
+Phase accuracy behaves completely differently, and it is ordered by symmetry exactly. It falls from
+$0.986$ to $0.566$ in $C_2$ and from $0.985$ to $0.567$ in $C_4$ --- chance is $0.500$ --- while in
+$C_1$, where there is no symmetry to fold onto, it holds at $0.862$
+($t = 70.2$, $p = 3\times10^{-19}$ for $C_1$ against $C_2$ and $C_4$). A code stripped of its compass
+can no longer say which of two symmetry-related places it occupies, and it loses that ability only
+where such a pair exists. Field count follows the same split, falling by $11\%$ where nothing can fold
+and rising by $16\%$ and $20\%$ where something can.
+
+The information loss therefore cannot be what folds the map: it is comparable in an arena with no
+symmetry and in one with a fourfold symmetry, and the fold happens in only one of them. That is the
+division the account has assumed and, until now, never measured.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{figures/fig_lesion.pdf}
+\caption{\textbf{An in-silico head-direction lesion separates what the compass \emph{tells} the map
+from what it \emph{does} to it.} Networks trained with an intact compass, which is then silenced at
+test time on a fraction of steps (zeroed, not randomised: an ablated head-direction system carries no
+signal, it does not carry a false one). $n = 6$ networks per arena; shading, $95\%$ bootstrap CI over
+networks. (\textbf{a}) \emph{Equivariance loss.} Orbit-phase decoding --- which of two
+symmetry-related places is the animal in? --- collapses to chance in $C_2$ and $C_4$ and holds at
+$0.862$ in $C_1$, where no such pair exists ($t = 70.2$, $p = 3\times10^{-19}$). (\textbf{b})
+\emph{Information loss.} Orbit variance --- is the quotient map still there at all? --- falls by about
+a third in every arena. The drops are not statistically identical ($F = 10.78$, $p = 0.002$) but they
+are not ordered by symmetry: $C_1$ ($-37.6\%$) and $C_4$ ($-38.1\%$) sit at opposite ends of the
+symmetry range and lose indistinguishable amounts, while $C_2$ ($-30.9\%$) loses least. Panels (a) and
+(b) together are the argument: the same lesion degrades the quotient map without regard to symmetry
+and folds it only where a symmetry exists. (\textbf{c}) Harland's $2\times2$, in silico. The
+\emph{parallel} arm is the reachable null --- a compass is translation-invariant by construction, so it
+was never holding those rooms apart --- and it does not move ($0.996 \to 0.996$). The \emph{radial}
+arm rises. Within-room $R^2$ (blue) is the positive control: it must stay positive, or the repetition
+number is two destroyed maps correlating with each other. It does, up to dose $0.6$, and we make no
+claim beyond that. (\textbf{d}) Field count after a full lesion, one dot per network: fields
+\emph{fall} by $11\%$ where nothing can fold and \emph{rise} by $16\%$ and $20\%$ where something can
+--- the same dissociation Harland and \citet{calton2003} report in two different worlds.}
+\label{fig:lesion}
+\end{figure}
 
 This is the mechanism, measured rather than assumed, and it is the one the animal literature has been
 unable to separate --- because a lesion in a rat removes information and equivariance in the same
