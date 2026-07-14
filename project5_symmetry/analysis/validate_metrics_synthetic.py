@@ -137,7 +137,8 @@ def sci(h, pos, order):
 def c2_contrast_distance(h, pos):
     """mean(D[C2 pairs]) - mean(D[C4 pairs]); NEGATIVE => 180-deg partners closer.
 
-    This is full_analysis_part1.py's convention, and the one r.tex's prose defines.
+    This is legacy/full_analysis_part1.py's convention, and the one Report/archive/r.tex's
+    prose defines.
     """
     D = squareform(pdist(h - h.mean(0), 'euclidean'))
     p2 = sym_pairs(pos, 2)
