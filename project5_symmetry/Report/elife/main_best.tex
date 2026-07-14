@@ -954,6 +954,68 @@ direction cannot disambiguate compartments unless the objective forces the netwo
 it. Whether a purely reconstructive circuit would show repetition even in the radial arrangement
 is, to our knowledge, untested in animals.
 
+\subsection*{The invariant compass is not a modelling device}
+
+The central manipulation of this paper is a compass that carries a full bit of heading and is
+nevertheless \emph{invariant} under the symmetry ($\textit{axis}$), set against one carrying the same
+bit and \emph{breaking} it ($\textit{parity}$). The obvious objection is that no such thing exists:
+that a $G$-invariant compass is a device we built to make a theorem land, and that real head-direction
+cells simply point.
+
+They do not simply point. \citet{zhang2022} recorded directionally tuned retrosplenial neurons in rats
+exploring multicompartment environments of different global rotational symmetry, and found tuning
+curves whose \emph{own} symmetry mirrored the environment's: unidirectional in a circular arena,
+bidirectional --- two peaks $180^\circ$ apart --- in a twofold-symmetric two-box, and
+\emph{tetradirectional} --- four peaks at $90^\circ$ --- in a fourfold-symmetric four-box. The pattern
+is learned rather than sensory: it is absent in naive animals in single compartments, it appears only
+after experience of the global layout, it survives darkness, and of their entire directional
+population only four cells met an egocentric-boundary criterion. A directional signal that is
+invariant under the environment's symmetry group exists in mammalian cortex, and the group it is
+invariant under is the environment's own.
+
+\citet{lachance2024} produce the same object by a different route. Duplicating a single cue card so
+that two identical cards face each other across a square --- a configuration whose symmetry the visual
+scene cannot break --- makes postrhinal head-direction cells fire in two opposite directions
+($p = 2\times 10^{-10}$), and retrosplenial ones likewise, while entorhinal head-direction cells do
+not become bidirectional at all and grid cells do not change. A bidirectional head-direction cell is a
+$C_2$-invariant compass. It is $\textit{axis}$, in a rat, and it is produced by exactly the operation
+our theory says should produce it: giving the animal a symmetry its compass channel cannot break.
+
+\subsection*{Two compasses, and which one the map reads}
+
+This literature also supplies the strongest objection to our account, and it should be stated in its
+own words. The invariant compass does not replace the ordinary one --- it \emph{coexists} with it.
+Classic head-direction cells, globally unidirectional, are recorded in the same retrosplenial tissue
+at the same time, and they never fold; they are electrophysiologically distinct (peak-to-trough
+$163\,\mu$s against $402\,\mu$s) and anatomically segregated. \citet{zhang2022} draw the consequence
+themselves: ``the preservation of a global HD signal also allows for the possibility of
+disambiguation. Preliminary work in rats indeed suggests that these compartments can be
+disambiguated.'' If an unfolded compass survives, then $X$ is available downstream and not $X/G$, and
+the fold should never happen.
+
+The objection is answered by taking the theory literally. The claim is not that \emph{the} compass
+folds. It is that a predictive code represents $X/G$ where $G$ is the subgroup that \emph{the
+self-motion signal it reads} cannot break. Two directional populations, one invariant under the
+symmetry and one breaking it, are not an embarrassment for that statement --- they are its two
+conditions, realised side by side in one cortex, and they turn the question into an empirical one:
+which of them does the hippocampal map read?
+
+That question has already been answered, by the lesion. Destroying the head-direction system removes
+the \emph{breaking} population; the retrosplenial multidirectional code, which is driven by
+environmental layout rather than by the classical circuit, has no such dependence. If the map had been
+reading the invariant channel all along, the lesion would change nothing. It folds the map
+\citep{harland2017}. The map was reading the compass that breaks the symmetry, and when that compass
+is gone it falls back on the one that does not --- which is precisely what our silenced networks do,
+and precisely what a quotient is.
+
+There is a second, unexploited datum in \citet{zhang2022} that makes the same point without a lesion.
+They broke the visual symmetry of their compartments with odour --- lemon in one pair, vanilla in the
+other --- and that odour was sufficient to orient the classic head-direction cells. The
+multidirectional cells ignored it: no cell was directionally consistent across both lemon compartments
+while rotating between lemon and vanilla. A symmetry-breaking channel was available, and the invariant
+code folded anyway, along exactly the symmetry that \emph{its own} channel could not break. That is
+the quotient law, in their data, and they do not claim it.
+
 \subsection*{Information and equivariance come apart under the knife}
 
 The account says the compass does two separable things, and that a lesion must therefore have two
@@ -1269,6 +1331,27 @@ law is the principle that says what any such mechanism can and cannot tell apart
 happens when the compass cannot resolve a symmetry, and the boundary code, being anchored to that
 same compass, cannot resolve it either.
 
+The same objection has recently been given a sharper, sensory form, and it deserves an answer in its
+own terms. \citet{lachance2024} report that half of retrosplenial egocentric-bearing cells
+($109/210$) fire in four fields at $90^\circ$ offsets about the centre of a square, and read this as
+tuning to local geometry: a square has four walls and four corners, so a wall detector fires four
+times. On that account repetition is not a quotient at all but an edge detector seen four times, and
+no compass, symmetry group or predictive objective is required to explain it.
+
+Three things answer it, and two of them are theirs. First, the symmetric cortical code
+\emph{does not reach the structures that would have to inherit it}. In the same animals, entorhinal
+head-direction cells did not become bidirectional when a second identical cue was added
+($p = 0.62$), and grid cells did not change at all; the authors conclude that entorhinal cells
+``exhibit consistently allocentric spatial firing properties''. A repetition that appeared downstream
+therefore cannot be waved through as inheritance, because the downstream code is demonstrably
+insulated from the upstream symmetry. Second, the local-feature and the quotient accounts make
+\emph{identical} predictions in a square, and a square is the only shape they ran; the discriminating
+experiment --- a shape whose local features and global symmetry disagree --- was requested in review
+and declined. Third, our own dissociation is untouched by the objection: \textit{axis} and
+\textit{parity} see the same walls, the same corners and the same boundaries, and fold oppositely. A
+local-feature account has nothing to say about which bit a compass carries, and that is the only thing
+that differs between them.
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.86\textwidth]{figures/fig_bvc.pdf}
@@ -1480,6 +1563,29 @@ invariance of the self-motion signal, as here; the locomotor policy and the traj
 it induces; and the task the agent is trained under. Charting how the code changes along these
 axes is a way to ask which features of an environment and an agent are responsible for which
 features of the representation.
+
+Two experiments follow immediately, and both are within reach of a laboratory that is already
+equipped for them.
+
+The first is a prediction we would stake the account on. \citet{lachance2024} showed that placing two
+identical cue cards on opposite walls of a square makes postrhinal and retrosplenial head-direction
+cells fire in two opposite directions --- a compass that has become invariant under a $180^\circ$
+rotation. Our law says a map read from such a compass must fold onto the corresponding quotient. So:
+record hippocampal place cells in a square with two identical opposing cue cards. The prediction is
+$C_2$ place-field repetition, and a decoder of which half of the arena the animal occupies bounded at
+$\tfrac{1}{2}$. Neither paper recorded a single place cell; the cue-duplication apparatus already
+exists; the experiment is one recording away. A null would be a serious problem for us, and we say so.
+
+The second is a control the field has not run and which the model can. In \citet{zhang2022} the local
+shape of each compartment is confounded with the global symmetry of the layout: the fourfold
+environment is built of \emph{square} compartments and the twofold one of \emph{rectangles}, so a code
+tracking local walls and corners and a code tracking global symmetry predict the same thing, and the
+authors say as much. The confound is severable in simulation, and only in simulation without years of
+rat training: build a fourfold layout out of compartments whose own shape has no fourfold symmetry,
+and ask whether the compass and the map follow the global group or the local geometry. The same
+severance answers \citet{lachance2024}, whose reviewers asked for a shape whose local features and
+global symmetry disagree and did not get one. We have not run it here, and it is the first thing we
+will run next.
 
 Architecture is a variable of the same kind. The present network receives head direction as an
 oracle input and places no non-negativity constraint on its units, and it accordingly grows
