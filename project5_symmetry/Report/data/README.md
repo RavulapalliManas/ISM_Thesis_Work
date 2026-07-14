@@ -174,9 +174,15 @@ figure-derived (manifold fold ratios, gridness); all are reproducible from the a
       mixed               +0.089           +0.097          +0.008      1.2e-4
       n_fields            +0.584           +0.940          +0.356      9.1e-5   <-- the fold
 
-  FIELD COUNT is the only property with a substantial symmetry-specific component. Spatial
-  information, sparsity, selectivity, field size and coherence all move by the SAME amount in the
-  C1 arena, where there is no symmetry to collapse onto. They are information loss, not folding.
+  FIELD COUNT carries BY FAR the largest symmetry-specific component (0.61 of the degradation
+  effect, i.e. the fold adds 61% on top of what the ablation does where nothing can fold). With
+  bootstrap CIs over networks, coherence carries a smaller real one (-0.26: a folded map is less
+  locally coherent, since a cell now fires in two places), and spatial information (+0.07),
+  sparsity (-0.06) and mixed selectivity (+0.09) have small but detectable components. Field area
+  and selectivity are not distinguishable from zero. So the bulk of what ablating the compass does
+  to a place cell -- less spatial information, higher sparsity, bigger fields, worse coherence --
+  happens just as much in the C1 arena, where there is no symmetry to collapse onto. That part is
+  information loss, not folding.
   Consequence for reading the animal data: an HD lesion that lowers spatial information and raises
   sparsity (Harland et al. 2017 report exactly this) is showing degradation; only REPETITION
   diagnoses the quotient. This is also why Calton et al. (2003), recording in a cue-controlled

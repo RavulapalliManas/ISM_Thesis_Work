@@ -1315,6 +1315,207 @@ def figS_ca1(data: Path, figs: Path):
     print(f'  wrote {out.name}')
 
 
+# ============================================================ the three new results
+# Figure grammar follows Levenstein et al.: one dot is one network, never a summary bar; a
+# reachable FLOOR and a reachable CEILING are drawn in the same axes as the data, so the reader can
+# see how much of the phenomenon is explained rather than only that it is non-zero; and every
+# geometric claim carries its scalar on the panel.
+
+def _dots_by_hd(ax, rows, key, conds=('s1', 's2', 's4'), seed=0):
+    """One dot per network, grouped by HD encoding, split by arena. Mean and 95% bootstrap CI."""
+    rng = np.random.default_rng(seed)
+    x = np.arange(len(HD_ORDER))
+    w = 0.8 / len(conds)
+    for i, c in enumerate(conds):
+        off = (i - (len(conds) - 1) / 2) * w
+        for j, hd in enumerate(HD_ORDER):
+            v = [_f(r, key) for r in rows if r['condition'] == c and r['hd_mode'] == hd]
+            v = [t for t in v if np.isfinite(t)]
+            if not v:
+                continue
+            xx = x[j] + off
+            ax.scatter(xx + (rng.random(len(v)) - 0.5) * w * 0.5, v, s=3.0,
+                       color=COND_SHADE.get(c, '#888'), edgecolor='k', linewidths=0.2,
+                       zorder=3, label=COND_CN.get(c, c) if j == 0 else None)
+            m, lo, hi = _boot_ci(v)
+            ax.plot([xx - w * 0.32, xx + w * 0.32], [m, m], color='k', lw=1.0, zorder=4)
+            ax.plot([xx, xx], [lo, hi], color='k', lw=0.7, zorder=4)
+    ax.set_xticks(x)
+    ax.set_xticklabels(HD_ORDER)
+
+
+def fig_isometry(data: Path, figs: Path):
+    """The map IS the quotient. The central result was a negative (a decoder at chance); this is
+    the positive form of it: what space is the manifold a metric map of?"""
+    rows = _read(data / 'isometry_quotient.csv')
+    fig, axes = plt.subplots(1, 3, figsize=(WIDE, 2.35))
+    aA, aB, aC = axes
+
+    # (a) the money plane: fit to the arena vs fit to the quotient. Below the diagonal = the
+    # network is better described as a map of X/G than of X.
+    for hd in HD_ORDER:
+        rs = [r for r in rows if r['hd_mode'] == hd]
+        aA.scatter([_f(r, 'stress_X') for r in rs], [_f(r, 'stress_XG_c2') for r in rs],
+                   s=7, color=HD_COLOR[hd], edgecolor='k', linewidths=0.2, label=hd, zorder=3)
+    lim = (0.05, 0.62)
+    aA.plot(lim, lim, ls='--', lw=0.7, color=INK, zorder=2)
+    # Above the diagonal, stress_X < stress_{X/G}: the network is a better map of the ARENA.
+    # Below it, the quotient wins. Both labels sit in their own region.
+    aA.text(0.215, 0.545, 'maps $X$ better', fontsize=5.2, color=INK, ha='center')
+    aA.text(0.175, 0.105, 'maps $X/G$ better', fontsize=5.2, color=INK, ha='center')
+    # reachable ceiling: what the metric returns when the code carries no spatial information
+    shuf = np.mean([_f(r, 'stress_shuffled') for r in rows])
+    aA.axhline(shuf, color='#AAAAAA', lw=0.7, ls=':', zorder=1)
+    aA.text(lim[1] - 0.01, shuf + 0.008, 'shuffled', fontsize=5, color='#777777', ha='right')
+    aA.set_xlim(*lim); aA.set_ylim(*lim)
+    aA.set_xlabel('stress vs the arena $d_X$')
+    aA.set_ylabel('stress vs the quotient $d_{X/C_2}$')
+    aA.legend(fontsize=5, frameon=False, loc='lower right', handletextpad=0.2, borderpad=0.2)
+    _panel(aA, 'a')
+
+    # (b) the sham control. d_{X/G} <= d_X pointwise, so ANY group compresses long distances and a
+    # merely compressed code would prefer a quotient metric for trivial reasons. A sham order-2
+    # group (half-arena translation, not a symmetry of any arena) has the same compression and is
+    # the null this measure needs.
+    x = np.arange(len(HD_ORDER))
+    for i, (key, col, lab) in enumerate([('stress_XG_c2', '#9C4A2F', 'true $C_2$'),
+                                         ('stress_sham', '#8A8A8A', 'sham order-2')]):
+        m = [np.mean([_f(r, key) for r in rows
+                      if r['condition'] == 's2' and r['hd_mode'] == hd]) for hd in HD_ORDER]
+        aB.plot(x, m, 'o-', ms=3.5, lw=1.0, color=col, label=lab, zorder=3)
+    aB.set_xticks(x); aB.set_xticklabels(HD_ORDER)
+    aB.set_ylabel('stress ($C_2$ arena)')
+    aB.set_ylim(0.1, 0.65)
+    aB.legend(fontsize=5, frameon=False, loc='upper left', handletextpad=0.3)
+    aB.annotate('', xy=(2, 0.19), xytext=(2, 0.534),
+                arrowprops=dict(arrowstyle='<->', lw=0.6, color=INK))
+    aB.text(2.08, 0.35, 'the fold is\nsymmetry-specific', fontsize=5, color=INK, va='center')
+    _panel(aB, 'b')
+
+    # (c) the matched test, metric-free: is H(x) = H(g.x)?  axis and parity carry the same one bit.
+    _dots_by_hd(aC, rows, 'fold_cos_c2')
+    aC.axhline(1.0, color='#AAAAAA', lw=0.7, ls=':', zorder=1)
+    aC.text(3.35, 1.005, 'orbit is\none point', fontsize=5, color='#777777', ha='right')
+    aC.set_ylabel(r'fold coincidence  $\cos(H(x), H(R^2x))$')
+    aC.set_ylim(0.2, 1.06)
+    aC.legend(fontsize=5, frameon=False, loc='center left', handletextpad=0.2, borderpad=0.2)
+    _panel(aC, 'c')
+
+    fig.tight_layout()
+    out = figs / 'fig_isometry.pdf'
+    fig.savefig(out); plt.close(fig)
+    print(f'  {out}')
+
+
+def fig_bvc(data: Path, figs: Path):
+    """Boundary-vector cells are downstream of the compass, not upstream of the fold."""
+    rows = _read(data / 'bvc_tuning.csv')
+    ph = _read(data / 'phase_full_n10.csv')
+    fig, axes = plt.subplots(1, 2, figsize=(ONEHALF, 2.35))
+    aA, aB = axes
+
+    # (a) the network DOES grow boundary cells -- and they need the compass.
+    _dots_by_hd(aA, rows, 'frac_bvc_like')
+    aA.set_ylabel('units better fit by a BVC\nthan by any place field')
+    aA.set_ylim(-0.02, 0.78)
+    aA.legend(fontsize=5, frameon=False, loc='upper right', handletextpad=0.2, borderpad=0.2)
+    _panel(aA, 'a')
+
+    # (b) the decisive plane. axis and parity carry the same one bit and support comparable
+    # boundary populations, yet only axis folds. Same boundary code, opposite maps.
+    pmap = {}
+    for r in ph:
+        pmap.setdefault((r['condition'], r['hd_mode']), []).append(_f(r, 'phase_acc'))
+    for hd in HD_ORDER:
+        for c in ('s1', 's2', 's4'):
+            rs = [r for r in rows if r['hd_mode'] == hd and r['condition'] == c]
+            if not rs:
+                continue
+            xv = np.mean([_f(r, 'frac_bvc_like') for r in rs])
+            yv = np.nanmean(pmap.get((c, hd), [np.nan]))
+            mk = {'s1': 'o', 's2': 's', 's4': '^'}[c]
+            aB.scatter(xv, yv, s=26, marker=mk, color=HD_COLOR[hd], edgecolor='k',
+                       linewidths=0.35, zorder=3)
+    # the two reachable references: the group-theoretic floor and the non-invariant ceiling
+    aB.axhline(0.5, color=INK, lw=0.8, zorder=1)
+    aB.text(0.66, 0.515, r'$1/|G|$ floor', fontsize=5, color=INK)
+    aB.axhspan(0.93, 0.99, color='#DDDDDD', alpha=0.6, zorder=0)
+    aB.text(0.66, 0.945, 'non-invariant\nceiling', fontsize=5, color='#666666')
+    aB.annotate('axis', xy=(0.292, 0.552), xytext=(0.33, 0.68), fontsize=5.5,
+                color=HD_COLOR['axis'],
+                arrowprops=dict(arrowstyle='-', lw=0.5, color=HD_COLOR['axis']))
+    aB.annotate('parity', xy=(0.221, 0.955), xytext=(0.06, 0.86), fontsize=5.5,
+                color=HD_COLOR['parity'],
+                arrowprops=dict(arrowstyle='-', lw=0.5, color=HD_COLOR['parity']))
+    aB.set_xlabel('fraction of units that are BVC-like')
+    aB.set_ylabel('orbit-phase accuracy')
+    aB.set_xlim(-0.02, 0.78); aB.set_ylim(0.44, 1.02)
+    hs = [plt.Line2D([0], [0], marker=m, ls='', color='#555555', ms=3.5)
+          for m in ('o', 's', '^')]
+    aB.legend(hs, [COND_CN[c] for c in ('s1', 's2', 's4')], fontsize=5, frameon=False,
+              loc='center right', handletextpad=0.2, borderpad=0.2)
+    _panel(aB, 'b')
+
+    fig.tight_layout()
+    out = figs / 'fig_bvc.pdf'
+    fig.savefig(out); plt.close(fig)
+    print(f'  {out}')
+
+
+def fig_cellprops(data: Path, figs: Path):
+    """Ablating the compass degrades the map everywhere; only field COUNT also folds.
+
+    For each cell property, the effect of removing the compass is measured twice: in the C1 arena,
+    where there is no symmetry and so nothing can fold (that part is pure degradation), and in the
+    C2 arena. The difference is the symmetry-specific component. Each is normalised by the C1
+    effect, so the units are "fraction of the degradation effect", and each carries a 95% bootstrap
+    CI over networks, so a reader can see which components are real rather than being told.
+    """
+    rows = _read(data / 'cell_properties.csv')
+    METRICS = [('spatial_info', 'spatial info'), ('sparsity', 'sparsity'),
+               ('selectivity', 'selectivity'), ('field_area', 'field area'),
+               ('coherence', 'coherence'), ('mixed', 'mixed selectivity'),
+               ('n_fields', 'fields per cell')]
+    fig, ax = plt.subplots(figsize=(COL, 2.7))
+
+    def vals(cond, hd, key):
+        return np.array([_f(r, key) for r in rows
+                         if r['condition'] == cond and r['hd_mode'] == hd], float)
+
+    rng = np.random.default_rng(0)
+    for i, (key, lab) in enumerate(METRICS):
+        f1, k1 = vals('s1', 'full', key), vals('s1', 'const', key)
+        f2, k2 = vals('s2', 'full', key), vals('s2', 'const', key)
+        deg = k1.mean() - f1.mean()                      # the C1 (degradation) effect
+        if abs(deg) < 1e-9:
+            continue
+        # bootstrap the interaction over networks
+        B = np.empty(4000)
+        for b in range(B.size):
+            e1 = rng.choice(k1, k1.size).mean() - rng.choice(f1, f1.size).mean()
+            e2 = rng.choice(k2, k2.size).mean() - rng.choice(f2, f2.size).mean()
+            B[b] = (e2 - e1) / abs(deg)
+        m, lo, hi = B.mean(), np.percentile(B, 2.5), np.percentile(B, 97.5)
+        real = (lo > 0) or (hi < 0)
+        col = '#9C4A2F' if real else '#9A9A9A'
+        ax.plot([lo, hi], [i, i], color=col, lw=1.1, zorder=3, solid_capstyle='round')
+        ax.plot(m, i, 'o', ms=4.2, color=col, mec='k', mew=0.35, zorder=4)
+    ax.axvline(0, color=INK, lw=0.8, zorder=2)
+    ax.set_yticks(range(len(METRICS)))
+    ax.set_yticklabels([m[1] for m in METRICS])
+    ax.set_xlabel('symmetry-specific component\n(fraction of the degradation effect)')
+    ax.text(0.60, 6.42, 'the fold', fontsize=6, color='#9C4A2F', fontweight='bold',
+            ha='center')
+    ax.text(-0.42, 3.9, 'zero = the compass\nablation does the same\nthing where nothing\ncan fold',
+            fontsize=5.0, color='#777777', va='center', ha='left')
+    ax.set_xlim(-0.45, 0.95)
+    ax.set_ylim(-0.7, len(METRICS) - 0.15)
+    fig.tight_layout()
+    out = figs / 'fig_cellprops.pdf'
+    fig.savefig(out); plt.close(fig)
+    print(f'  {out}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True)
@@ -1326,6 +1527,7 @@ def main():
     allfigs = {'overview': fig1_overview, 'fig1': fig1_setup, 'dissociation': fig2_dissociation,
                'ceiling': fig_ceiling,
                'population': fig_population, 'fig2': fig2_fold, 'fig3': fig3_function,
+               'isometry': fig_isometry, 'bvc': fig_bvc, 'cellprops': fig_cellprops,
                'fig4': fig4_geometry, 'fig5': fig5_generality, 'fig6': fig6_brain,
                'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes,
                'robustness': figS_robustness, 'prospective': figS_prospective, 'ca1': figS_ca1,
