@@ -153,3 +153,39 @@ figure-derived (manifold fold ratios, gridness); all are reproducible from the a
   (the orbit is one point) vs s2/parity = 0.741 (same one bit, opposite invariance; U=100, p=9.1e-5).
   NOTE the s4/`axis` row is marginal (X/C2 0.364 vs X/C4 0.347) -- C4 compresses more than C2 and has
   no sham control, so that row should not be over-read.
+
+- `cell_properties.csv` -- single-cell properties across arena symmetry (C1/C2/C4) x HD encoding,
+  112 networks. Skaggs spatial information, sparsity, selectivity, field count, field area,
+  coherence, place-cell fraction, and a variance decomposition into EV_pos / EV_hd / EV_add (best
+  additive model f(x)+g(h)) / EV_conj (full conjunctive f(x,h)), with `mixed` = EV_conj - EV_add,
+  i.e. NONLINEAR MIXED SELECTIVITY: the variance position and heading explain jointly but neither
+  explains additively.
+
+  HEADLINE. Ablating the compass does two SEPARABLE things, and only one of them is the fold.
+  Decomposing the full->const effect into a part present in C1 (no symmetry, so nothing can fold =
+  degradation) and the extra part in C2 (the interaction = folding):
+
+      metric          C1 full->const   C2 full->const   FOLD (C2-C1)   p
+      spatial_info        -0.329           -0.305          +0.024      0.011
+      sparsity            +0.093           +0.088          -0.006      0.98
+      selectivity         -0.362           -0.255          +0.107      0.21
+      field_area          +7.17            +8.09           +0.92       0.26
+      coherence           -0.330           -0.416          -0.086      1.0
+      mixed               +0.089           +0.097          +0.008      1.2e-4
+      n_fields            +0.584           +0.940          +0.356      9.1e-5   <-- the fold
+
+  FIELD COUNT is the only property with a substantial symmetry-specific component. Spatial
+  information, sparsity, selectivity, field size and coherence all move by the SAME amount in the
+  C1 arena, where there is no symmetry to collapse onto. They are information loss, not folding.
+  Consequence for reading the animal data: an HD lesion that lowers spatial information and raises
+  sparsity (Harland et al. 2017 report exactly this) is showing degradation; only REPETITION
+  diagnoses the quotient. This is also why Calton et al. (2003), recording in a cue-controlled
+  cylinder where the symmetry is broken, find no change in field number (1.29 -> 1.53, n.s.) --
+  there is nothing to fold onto.
+
+  MIXED SELECTIVITY. The units are strongly conjunctive for position-by-direction (90-97% of units
+  have mixed > 0.05), and ablating the compass makes them MORE so (0.225 -> 0.332 from full to
+  const), while pure directional tuning collapses (EV_hd 0.109 -> 0.003). Removing head direction
+  from the ACTION stream does not remove heading from the code: heading then enters only through
+  the egocentric view, which binds it to position. This bears directly on the CA1 limitation, where
+  a conjunctive place-by-direction code is the alternative we cannot separate from folding.
