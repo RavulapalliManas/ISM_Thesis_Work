@@ -143,6 +143,78 @@ the orbit the agent occupies.}
 \label{fig:overview}
 \end{figure}
 
+\subsection{Place-field repetition is the signature of the quotient}
+
+Head direction should resolve rotational but not translational symmetry, and this can be tested
+in the geometry used to study repeated place fields in rodents. We built two closed $6\times6$
+compartments joined by a corridor and gave them identical interior landmarks, so that the two
+rooms produced the same set of egocentric views; across all $144$ combinations of location and
+heading the observations coincided exactly. In one arrangement the rooms were related by a
+translation, under which the compass reads the same in both; in the other by a rotation, under
+which it does not. We trained networks on each arrangement and, for every network, decoded which
+room the animal occupied and measured whether individual units repeated their firing fields
+between the rooms (Fig.~\ref{fig:function}c).
+
+The two arrangements gave opposite results ($n=8$ networks each). Under translation the fields
+repeated almost exactly across the rooms (repetition $0.997$) and the room could not be decoded
+even by a nearest-neighbour classifier tested on cells it had already seen ($0.515$, chance
+$0.5$), so the network folded the two identical rooms onto one map. Under rotation the
+repetition vanished (repetition $-0.080$) and the room decoded perfectly ($0.998$). Position
+within a room decoded well in both arrangements ($R^2 = 0.95$ and $0.79$), so neither network
+had stopped representing space. Every translation network separated from every rotation network
+on all four measures (Mann--Whitney $p = 1.6\times10^{-4}$, the exact two-sided floor at $n=8$
+vs.\ $8$). \citet{grieves2016} reported this same contrast in CA1, and here it follows from how
+the compass transforms under the room's relation to its partner, translation-invariant or
+rotation-equivariant (Methods; Limitations). The same dissociation is visible directly in the
+population geometry, with no decoder involved: an Isomap embedding of the wake population state
+lands room B almost exactly on top of room A under translation and pulls them an order of
+magnitude further apart under rotation (Supplementary Information, Fig.~S12).
+
+The fold scales to the full four-compartment maze that \citet{spiers2015} recorded. We built four
+identical closed rooms in a row, each the translation of the last, off a shared corridor, with
+every view identical across the four rooms at matched local position and heading (verified exactly:
+zero pixel mismatch over every room-interior cell and heading, Methods). A predictive
+network ($n=8$) folded all four onto a single map: the room could not be decoded above the $0.25$
+chance of four alternatives, neither by a generalising decoder ($0.262$) nor by a
+nearest-neighbour classifier tested on cells it had already visited ($0.268$), while fields
+repeated across the four rooms almost perfectly (repetition $0.994$) and within-room position
+stayed fully intact ($R^2 = 0.96$). Room identity is decoded only from these room-interior states
+(Methods); the connecting corridor is excluded from the readout for the reason given in
+Limitations. The two-room dissociation is thus not a small-$n$ artefact: at
+the rodent room count, translation-related identical rooms collapse completely, the
+``high degree of spatial repetition'' \citet{spiers2015} observed.
+
+The account makes a further prediction, which we test in the model before asking whether it is
+visible in real neurons. A city-block maze whose alleys run in two orthogonal orientations relates
+same-orientation alleys by translation (the compass reads the same) and orthogonal alleys by a
+$90^\circ$ rotation, so a repeating cell's fields should share a directional preference across
+same-orientation alleys and not across orthogonal ones. A predictive network trained on this maze
+confirms it: the directional index of same-orientation field pairs is positively correlated
+($r = 0.62$; Fig.~\ref{fig:brain}b), and this is the model's own prediction, not a fit to animal
+data. We then asked whether the signature is visible in real neurons, reanalysing the CA1
+recordings of \citet{hockeimer2023}. It is present, at a smaller magnitude ($r = 0.23$; $127$
+pairs, $40$ cells, $5$ rats), but the dataset cannot separate it from a conjunctive
+place-by-direction code that would produce the same correlation without any folding; two controls
+make the ambiguity explicit (Supplementary Information, Fig.~S9). We therefore report the CA1
+correlation as \emph{consistent with} the quotient but not diagnostic of it, and treat the model
+prediction, not the animal reanalysis, as the load-bearing result of this section.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig6_brain.pdf}
+\caption{\textbf{The predictive model reproduces place-field repetition.} (\textbf{a}) The
+four-room maze of \citet{spiers2015}, model ($n=8$): four translation-related identical rooms fold
+onto one map. The room decodes at chance ($0.25$, dashed), by a generalising decoder and by a
+nearest-neighbour classifier at cells it has already seen, while fields repeat across the rooms
+(repetition $0.99$) and within-room position stays intact ($R^2=0.96$). (\textbf{b}) A predictive
+network trained on a city-block maze shows the directional-repetition signature, predicted before
+any comparison to animal data: the directional index of a field ($i$) against that of its
+same-orientation partner ($j$) is positively correlated ($r=0.62$; scatter subsampled for display,
+statistic from all pairs). Line, least-squares fit. An exploratory, non-diagnostic reanalysis of
+real CA1 data testing the same prediction is in the Supplementary Information (Fig.~S9).}
+\label{fig:brain}
+\end{figure}
+
 \subsection{A design that isolates equivariance from information}
 
 Networks receive a $7\times7\times3$ egocentric view and a five-dimensional SpeedHD action
@@ -335,21 +407,87 @@ signature of a fold rather than a dead code.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_manifold.pdf}
-\caption{\textbf{The fold, seen geometrically.} (\textbf{a}) The fold ratio, distance between a
-cell and its $180^\circ$ image in units of the distance to a spatial neighbour, for one
-representative network per condition: below one only for \textit{axis} in the $C_2$ arena
-($0.66$), the sole folded case shown, and above one for \textit{axis} in the $C_1$ arena
-($1.64$, same encoding, no symmetry to fold onto), \textit{parity}/$C_2$ ($1.80$) and
-\textit{full}/$C_2$ ($2.37$). The ratio is a property of the full hidden space, not of the
-linear projection used to plot it below: the folded case reads below one and every non-folded
-case above one under distance-preserving nonlinear embeddings (Isomap, t-SNE) as well as PCA.
-(\textbf{b}, \textbf{c}) Position-conditioned population manifold of the most- and
-least-folded networks shown in (a) (one point per arena cell, PCA to three dimensions,
-coloured by $C_2$ orbit phase), illustrative only: the fold ratio in (a) is the quantitative
-claim. Phases superimpose under \textit{axis}/$C_2$ and occupy separate regions under
-\textit{full}/$C_2$. We reduce with PCA because the claim is metric, two positions coincide ---
+\caption{\textbf{The fold, seen geometrically.} (\textbf{a}) The fold ratio: the distance between
+a cell's population state and that of its $180^\circ$ image, in units of the distance to an
+adjacent cell. One dot per network, $n=10$ per condition; bar, mean; whiskers, $95\%$ bootstrap
+interval. Below one, orbit partners sit closer together than spatial neighbours do, which is what
+folding means. Only \textit{axis} in the $C_2$ arena is below one ($0.457 \pm 0.004$); the same
+encoding with no symmetry to fold onto is not (\textit{axis}/$C_1$, $1.872$), nor is
+\textit{parity}/$C_2$ ($2.083$), nor \textit{full}/$C_2$ ($2.675$). The ratio is computed in the
+full hidden space, so it is not an artefact of the projection used to plot it: the folded case
+reads below one and every non-folded case above one under distance-preserving nonlinear embeddings
+(Isomap, t-SNE) as well as PCA. (\textbf{b}, \textbf{c}) Position-conditioned population manifold
+of the most- and the least-folded condition (one point per arena cell, PCA to three dimensions,
+coloured by $C_2$ orbit phase), illustrative; the fold ratio in (a) is the quantitative claim. The
+two phases superimpose under \textit{axis}/$C_2$ and occupy separate regions under
+\textit{full}/$C_2$. We reduce with PCA because the claim is metric, that two positions coincide,
 and unlike neighbour-graph embeddings PCA preserves distances rather than reshaping them.}
 \label{fig:manifold}
+\end{figure}
+
+\subsection{The folded manifold is a map of the quotient, not a damaged map of the arena}
+
+Everything so far is a negative: a decoder that cannot recover orbit phase. A negative is a weak
+thing to build on, because a code that has simply been degraded also fails a decoder. So we asked
+the positive question instead. If the quotient law is right, a folded code is not a poor map of the
+arena; it is a \emph{faithful map of a different space}. That is a claim about geometry, and it can
+be tested directly.
+
+For each network we took the population state averaged at every arena cell and measured the
+geodesic distances between those states on the neighbourhood graph they define. We then asked which
+of two candidate metrics those neural distances reproduce: the arena's own metric $d_X$, or the
+quotient metric $d_{X/G}(x,y) = \min_{g \in G} \lVert x - g\!\cdot\!y \rVert$, the distance on
+$X/G$. Fit is Kruskal stress with an optimal scale, since neural units are arbitrary and an
+isometry is only ever defined up to a scale factor (Methods).
+
+The head-direction encoding decides which space the manifold is a map of, and it does so almost
+without exception. Taking for each network whichever of $d_X$, $d_{X/C_2}$ and $d_{X/C_4}$ fits its
+neural geometry best, $110$ of $112$ networks are assigned by their encoding alone: \textit{full}
+and \textit{parity} map $X$; \textit{axis}, invariant under $C_2$, maps $X/C_2$; \textit{const},
+invariant under $C_4$, maps $X/C_4$. In the $C_2$ arena the folded \textit{axis} code fits the
+quotient at stress $0.190$ against $0.468$ for the arena itself, the mirror image of \textit{full},
+which fits the arena at $0.097$ against $0.485$ for the quotient (Fig.~\ref{fig:isometry}a). The
+compass does not degrade the map. It selects the space the map is of.
+
+One artefact had to be excluded before this could be believed. Because $d_{X/G} \le d_X$
+pointwise, \emph{any} group shrinks long distances, so a code whose neural distances merely
+saturate at long range would prefer a quotient metric for reasons that have nothing to do with
+symmetry. We therefore built a sham group of the same order: a translation by half the arena, which
+compresses distances exactly as $C_2$ does but is not a symmetry of any arena here, so no network
+can fold by it. The folded code prefers the true symmetry over the sham by $0.343$
+(Fig.~\ref{fig:isometry}b), while the unfolded codes prefer neither. The preference is for the
+group, not for the compression.
+
+The matched contrast survives in the geometry, and it needs no metric at all. Writing $H(x)$ for
+the mean population state at $x$, the cosine between $H(x)$ and $H(R^2x)$ is $0.990$ under
+\textit{axis} and $0.741$ under \textit{parity} in the $C_2$ arena (Mann--Whitney $U = 100$,
+$p = 9.1\times10^{-5}$, the exact floor at $n = 10$ vs.\ $10$): under the invariant encoding the
+orbit has collapsed to a single point, and under the encoding carrying the same one bit it has not
+(Fig.~\ref{fig:isometry}c).
+
+The result also separates the two hypotheses of the Theorem, which the decoding measures cannot.
+\textit{axis} folds the \emph{geometry} by $C_2$ even in the $C_1$ arena, where there is no
+symmetry at all (it prefers $d_{X/C_2}$ over the sham by $0.145$, and its orbit cosine is $0.811$),
+and yet orbit phase there remains decodable at $0.971$. An invariant compass pulls symmetry-related
+states together wherever it is used; it is the \emph{observations} being equivariant that destroys
+the information as well. Only where both hold does the code fold completely.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig_isometry.pdf}
+\caption{\textbf{The folded manifold is a map of the quotient.} One dot per network ($n=10$ per
+condition, $8$ for $C_4$); stress is Kruskal stress-1 at optimal scale, lower is a better fit.
+(\textbf{a}) Fit to the arena metric $d_X$ against fit to the quotient metric $d_{X/C_2}$, with the
+line of equal fit. \textit{full} and \textit{parity} lie above it, so they are better described as
+maps of $X$; \textit{axis} lies below it, so it is better described as a map of $X/C_2$. Dotted
+line, the stress returned when the code's spatial content is destroyed by shuffling, a reachable
+ceiling. (\textbf{b}) The control for the compression artefact: $d_{X/G} \le d_X$ pointwise, so any
+group shrinks long distances. A sham order-2 group (translation by half the arena) compresses
+identically but is not a symmetry, and the folded code prefers the true $C_2$ over it by $0.343$.
+(\textbf{c}) The same claim without any metric: the cosine between the population state at $x$ and
+at its $180^\circ$ image. Under \textit{axis} in the $C_2$ arena it is $0.990$, so the orbit is one
+point; under \textit{parity}, which carries the same one bit, it is $0.741$.}
+\label{fig:isometry}
 \end{figure}
 
 \subsection{The quotient is near-exact: the $C_4$ map hits the $1/|G|$ ceiling}
@@ -650,7 +788,7 @@ therefore \emph{blind to $C_2$ structure}: invariance under $R^2$ annihilates th
 $P_1$ and $P_3$ while leaving $P_0$ and $P_2$ untouched, so a perfectly $C_2$-folded code and pure
 noise both read $\mathrm{RA}\approx0$. Empirically, on a clean 17-network sweep, RA cannot separate
 s2 from s1 ($p = 0.056$), whereas odd power $P_1 + P_3$ separates them completely ($p = 0.0079$,
-the exact floor at $n=5$ vs.\ $5$; Fig.~\ref{fig:population}b,c).
+the exact floor at $n=5$ vs.\ $5$; Supplementary Information, Fig.~S13b,c).
 
 Odd power, however, is itself confounded. Under \textit{axis} it falls in the $C_1$ arena too,
 where there is no symmetry: the drop $\mathrm{odd}(\textit{parity}) - \mathrm{odd}(\textit{axis})$
@@ -698,7 +836,7 @@ population-vector correlation between a position and its symmetry image \citep{l
 near one when the two share a representation, near zero when the code separates them, is
 $0.98$ under the invariant encodings in the $C_2$ and $C_4$ arenas and about $0.28$ under
 \textit{full}, with the matched non-invariant encoding intermediate (\textit{parity}, $0.58$ in
-$C_2$; $n = 10$ per encoding; Fig.~\ref{fig:population}a). By this measure the network fails to remap between
+$C_2$; $n = 10$ per encoding; Supplementary Information, Fig.~S13a). By this measure the network fails to remap between
 symmetry-related locations exactly when the compass is invariant under the symmetry, the two
 copies are written as one place, whereas with a full compass they are separated as strongly as
 unrelated positions. The same invariant encoding gives a weaker correlation in the $C_1$ arena
@@ -721,23 +859,6 @@ Cross-seed correlation between independently trained networks stays above $0.96$
 $C_1/C_2/C_4$; bars are mean $\pm$ s.e.m.\ over networks ($n = 10$ per encoding for $C_1$ and
 $C_2$, $n = 8$ for $C_4$).}
 \label{fig:fold}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/fig_population.pdf}
-\caption{\textbf{The quotient in the population code.} (\textbf{a}) Remapping, read as the
-population-vector correlation between a position and its symmetry image \citep{leutgeb2005} (one dot
-per network; bar, mean). Under the invariant encodings (\textit{axis}, \textit{const}) the
-correlation reaches $\approx0.98$ in the $C_2$ and $C_4$ arenas, the two copies are written as one
-place, while \textit{full} separates them ($\approx0.28$) and the matched \textit{parity} is
-intermediate ($0.58$ in $C_2$). (\textbf{b}) Isotypic power spectrum ($C_2$ arena): the invariant
-encodings concentrate power in the even characters ($P_0$, $P_2$) and suppress the odd ones
-($P_1$, $P_3$), the representation-theoretic content the encoding's invariance dictates.
-(\textbf{c}) $C_2$-odd power $P_1{+}P_3$ by encoding and arena: lower for the invariant encodings
-and falling into the symmetric arenas, the descriptive correlate of the fold. Arenas
-$C_1$/$C_2$/$C_4$.}
-\label{fig:population}
 \end{figure}
 
 \subsection{Folding multiplies place fields and imprints the arena's symmetry on each map}
@@ -775,77 +896,6 @@ cell-type makeup of the map. The multi-field, spatially repeating cells it produ
 in-silico counterpart of the repeated place fields recorded in symmetric and multicompartment
 environments \citep{grieves2016, derdikman2009}.
 
-\subsection{Place-field repetition is the signature of the quotient}
-
-Head direction should resolve rotational but not translational symmetry, and this can be tested
-in the geometry used to study repeated place fields in rodents. We built two closed $6\times6$
-compartments joined by a corridor and gave them identical interior landmarks, so that the two
-rooms produced the same set of egocentric views; across all $144$ combinations of location and
-heading the observations coincided exactly. In one arrangement the rooms were related by a
-translation, under which the compass reads the same in both; in the other by a rotation, under
-which it does not. We trained networks on each arrangement and, for every network, decoded which
-room the animal occupied and measured whether individual units repeated their firing fields
-between the rooms (Fig.~\ref{fig:function}c).
-
-The two arrangements gave opposite results ($n=8$ networks each). Under translation the fields
-repeated almost exactly across the rooms (repetition $0.997$) and the room could not be decoded
-even by a nearest-neighbour classifier tested on cells it had already seen ($0.515$, chance
-$0.5$), so the network folded the two identical rooms onto one map. Under rotation the
-repetition vanished (repetition $-0.080$) and the room decoded perfectly ($0.998$). Position
-within a room decoded well in both arrangements ($R^2 = 0.95$ and $0.79$), so neither network
-had stopped representing space. Every translation network separated from every rotation network
-on all four measures (Mann--Whitney $p = 1.6\times10^{-4}$, the exact two-sided floor at $n=8$
-vs.\ $8$). \citet{grieves2016} reported this same contrast in CA1, and here it follows from how
-the compass transforms under the room's relation to its partner, translation-invariant or
-rotation-equivariant (Methods; Limitations). The same dissociation is visible directly in the
-population geometry, with no decoder involved: an Isomap embedding of the wake population state
-lands room B almost exactly on top of room A under translation and pulls them an order of
-magnitude further apart under rotation (Supplementary Information, Fig.~S12).
-
-The fold scales to the full four-compartment maze that \citet{spiers2015} recorded. We built four
-identical closed rooms in a row, each the translation of the last, off a shared corridor, with
-every view identical across the four rooms at matched local position and heading (verified exactly:
-zero pixel mismatch over every room-interior cell and heading, Methods). A predictive
-network ($n=8$) folded all four onto a single map: the room could not be decoded above the $0.25$
-chance of four alternatives, neither by a generalising decoder ($0.262$) nor by a
-nearest-neighbour classifier tested on cells it had already visited ($0.268$), while fields
-repeated across the four rooms almost perfectly (repetition $0.994$) and within-room position
-stayed fully intact ($R^2 = 0.96$). Room identity is decoded only from these room-interior states
-(Methods); the connecting corridor is excluded from the readout for the reason given in
-Limitations. The two-room dissociation is thus not a small-$n$ artefact: at
-the rodent room count, translation-related identical rooms collapse completely, the
-``high degree of spatial repetition'' \citet{spiers2015} observed.
-
-The account makes a further prediction, which we test in the model before asking whether it is
-visible in real neurons. A city-block maze whose alleys run in two orthogonal orientations relates
-same-orientation alleys by translation (the compass reads the same) and orthogonal alleys by a
-$90^\circ$ rotation, so a repeating cell's fields should share a directional preference across
-same-orientation alleys and not across orthogonal ones. A predictive network trained on this maze
-confirms it: the directional index of same-orientation field pairs is positively correlated
-($r = 0.62$; Fig.~\ref{fig:brain}b), and this is the model's own prediction, not a fit to animal
-data. We then asked whether the signature is visible in real neurons, reanalysing the CA1
-recordings of \citet{hockeimer2023}. It is present, at a smaller magnitude ($r = 0.23$; $127$
-pairs, $40$ cells, $5$ rats), but the dataset cannot separate it from a conjunctive
-place-by-direction code that would produce the same correlation without any folding; two controls
-make the ambiguity explicit (Supplementary Information, Fig.~S9). We therefore report the CA1
-correlation as \emph{consistent with} the quotient but not diagnostic of it, and treat the model
-prediction, not the animal reanalysis, as the load-bearing result of this section.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/fig6_brain.pdf}
-\caption{\textbf{The predictive model reproduces place-field repetition.} (\textbf{a}) The
-four-room maze of \citet{spiers2015}, model ($n=8$): four translation-related identical rooms fold
-onto one map. The room decodes at chance ($0.25$, dashed), by a generalising decoder and by a
-nearest-neighbour classifier at cells it has already seen, while fields repeat across the rooms
-(repetition $0.99$) and within-room position stays intact ($R^2=0.96$). (\textbf{b}) A predictive
-network trained on a city-block maze shows the directional-repetition signature, predicted before
-any comparison to animal data: the directional index of a field ($i$) against that of its
-same-orientation partner ($j$) is positively correlated ($r=0.62$; scatter subsampled for display,
-statistic from all pairs). Line, least-squares fit. An exploratory, non-diagnostic reanalysis of
-real CA1 data testing the same prediction is in the Supplementary Information (Fig.~S9).}
-\label{fig:brain}
-\end{figure}
 
 \section{Discussion}
 
@@ -1109,6 +1159,23 @@ Boundary-vector cells are therefore the mechanism a predictive objective discove
 law is the principle that says what any such mechanism can and cannot tell apart. The fold is what
 happens when the compass cannot resolve a symmetry, and the boundary code, being anchored to that
 same compass, cannot resolve it either.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\textwidth]{figures/fig_bvc.pdf}
+\caption{\textbf{Boundary-vector cells are downstream of the compass.} (\textbf{a}) Fraction of
+units better fitted by a single idealised boundary-vector tuning curve (a Gaussian over the
+distance to the wall at a given allocentric bearing) than by any single Gaussian place field; the
+two families have the same free parameters. One dot per network. The network grows boundary cells,
+and they require the compass: the fraction falls from $41.6\%$ to $14.0\%$ in the $C_1$ arena and
+from $61.2\%$ to $0.8\%$ in the $C_4$ arena as the compass is ablated. (\textbf{b}) The decisive
+contrast. Boundary-cell fraction against orbit-phase accuracy, with the group-theoretic floor and
+the non-invariant ceiling both drawn. \textit{axis} and \textit{parity} carry the same one bit and
+support comparable boundary populations, yet only \textit{axis} folds. Same boundary code, opposite
+maps: a boundary-vector model has no representation of \emph{which} bit the compass carries, and so
+cannot produce this dissociation.}
+\label{fig:bvc}
+\end{figure}
 
 \subsection*{Relation to other models of the spatial code}
 
