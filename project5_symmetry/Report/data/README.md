@@ -221,3 +221,30 @@ figure-derived (manifold fold ratios, gridness); all are reproducible from the a
   axis/C2 = 0.457 +/- 0.004 (FOLDED), axis/C1 = 1.872, parity/C2 = 2.083, full/C2 = 2.675.
   The ordering and the sub-1 result for axis/C2 reproduce; the exact values differ from the old
   n=1 figure, whose numbers cannot be checked because it had no generating script.
+
+- `anisotropic_decoding.csv` -- SPIERS' MEASURE: the fold, converted into a cost. Every other
+  measure in this paper describes the code; this one describes what the code COSTS an animal that
+  has to use it, which is the currency an experimentalist reads in.
+  Spiers et al. (2015) decoded position from CA1 in four identical compartments and found the error
+  was strongly ANISOTROPIC -- large along the axis on which the compartments repeat, small across
+  it -- and that collapsing the compartments onto one frame removed it. Our two-compartment maze has
+  the same geometry (room B is room A shifted 13 rows in the same columns), so the repetition axis
+  is the row axis. We decode the occupied cell with a classifier (Spiers used maximum-correlation
+  template matching; both COMMIT to a cell, which a regression would not -- a regression hedges
+  between the rooms and lands in the corridor, whereas a folded code puts the animal CONFIDENTLY in
+  the wrong room), and split the error into the two components. n = 8 networks per mode.
+
+      mode          along   across   collapsed   wrong room
+      translation    5.99     0.00       -0.00        46%     <- folded
+      rotation       0.04     0.00       -0.00         0%
+
+  The folded network's error is ENTIRELY "wrong room, right place within it": 46% of states decode
+  to the wrong room, and 0.46 x the 13-row room offset = 6.0, which is the 5.99 observed. Collapsing
+  the rooms removes the error completely. Translation vs rotation: U=64, p=4.7e-4 (n=8 v 8).
+
+  COMPARE TO SPIERS WITH CARE. Their reported errors are in "bins", but the bin size is NOT the
+  3.3 cm their Methods state for the correlation analysis -- at 3.3 cm their errors would be worse
+  than chance, which no working decoder produces; it is ~1 cm. So compare the ANISOTROPY and the
+  collapse, not the absolute numbers. Their strongest control is the bin-SWAP: scrambling compartment
+  identity cost their decoder nothing (19.84 vs 20.18), i.e. there was no compartment information
+  there to begin with. Our 46%-wrong-room (chance = 50%) is the same statement.

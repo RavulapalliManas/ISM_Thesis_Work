@@ -116,6 +116,16 @@ def _coherence(m, vis):
     return float(np.arctanh(r))
 
 
+def _skaggs(rate, p):
+    """Skaggs information in bits per unit of activity: sum_x p(x) (r/rbar) log2(r/rbar).
+    `rate` is (U, nbins), `p` the occupancy over those bins."""
+    rbar = (rate * p).sum(1)
+    ok = rbar > 1e-9
+    ratio = np.divide(rate, rbar[:, None], out=np.zeros_like(rate), where=ok[:, None])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.nansum(p * ratio * np.log2(np.where(ratio > 0, ratio, 1.0)), axis=1)
+
+
 def properties(H, pos, hd):
     r, occ, vis = _maps(H, pos)
     p = occ[vis] / occ[vis].sum()
@@ -146,6 +156,64 @@ def properties(H, pos, hd):
     rayl = np.divide(np.abs((hdm * np.exp(1j * ang)).sum(1)), tot,
                      out=np.zeros(U), where=tot > 1e-9)
 
+    # --- rates. Both lesion studies report firing rates UNCHANGED, so if ours move, that is a
+    # real mismatch and we need to know it.
+    mean_rate = H.mean(0)
+    peak_rate = rm.max(1)
+
+    # --- directional information, computed TWO ways, because it is not yet established which one
+    # Calton et al. used and the two make opposite predictions for us.
+    #   MARGINAL: Skaggs information over heading, ignoring position. Pure directional tuning.
+    #             We expect this to COLLAPSE when the compass is removed.
+    #   CONJUNCTIVE: the same, but computed within each position bin and averaged over positions,
+    #             i.e. how much a cell's rate depends on heading GIVEN where the animal is. We
+    #             expect this to RISE, because heading then enters only through the egocentric view,
+    #             which binds it to position.
+    p_hd = np.array([(hd == d).mean() for d in range(N_HD)])
+    dir_info_marginal = _skaggs(hdm, p_hd)
+
+    # IN-FIELD directional information -- Calton et al.'s (2003) measure, verified from their
+    # Methods: Skaggs information over head-direction bins, "calculated only for cell activity when
+    # the animal was within the place field of the recorded cell". It is therefore a CONJUNCTIVE
+    # quantity (is this cell's field active only for some headings?), not marginal HD tuning. Their
+    # place field is "the largest contiguous group of pixels possessing a firing rate >= 10% of the
+    # average firing rate of the three highest firing rate pixels", 4-connectivity.
+    from scipy.ndimage import label
+    xi_all, yi_all = pos[:, 0] - 1, pos[:, 1] - 1
+    dir_info_field = np.zeros(U)
+    for u in range(U):
+        m = r[u]
+        flat = np.sort(m[vis])[::-1]
+        if flat.size < 3 or flat[0] <= 0:
+            continue
+        thr = 0.10 * flat[:3].mean()
+        binm = (m >= thr) & vis
+        lab, n = label(binm)                          # 4-connectivity, as they specify
+        if n == 0:
+            continue
+        sizes = [(lab == i).sum() for i in range(1, n + 1)]
+        field = lab == (1 + int(np.argmax(sizes)))    # "the largest place field was used"
+        inf = field[xi_all, yi_all]
+        if inf.sum() < 4 * 10:
+            continue
+        hu, du = H[inf, u], hd[inf]
+        tune = np.array([hu[du == d].mean() if (du == d).any() else 0.0 for d in range(N_HD)])
+        pin = np.array([(du == d).mean() for d in range(N_HD)])
+        dir_info_field[u] = _skaggs(tune[None, :], pin)[0]
+
+    # --- stability. Harland et al. report session-to-session stability falling from 0.620 to
+    # 0.347 after the lesion. The model's analogue is a split-half correlation of the rate map:
+    # build the map from the first and the second half of the states and correlate them.
+    half = len(H) // 2
+    r1, _, v1 = _maps(H[:half], pos[:half])
+    r2, _, v2 = _maps(H[half:], pos[half:])
+    both = v1 & v2
+    a1, a2 = r1[:, both], r2[:, both]
+    a1 = a1 - a1.mean(1, keepdims=True)
+    a2 = a2 - a2.mean(1, keepdims=True)
+    den = np.linalg.norm(a1, axis=1) * np.linalg.norm(a2, axis=1)
+    stability = np.divide((a1 * a2).sum(1), den, out=np.zeros(U), where=den > 1e-9)
+
     mask = ~vis
     nf, fa, coh = np.zeros(U), np.zeros(U), np.zeros(U)
     for u in range(U):
@@ -153,14 +221,22 @@ def properties(H, pos, hd):
         coh[u] = _coherence(r[u], vis)
 
     place = (si >= 0.3) & (nf >= 1)
+
+    def pm(v):
+        return float(np.mean(v[place])) if place.any() else float('nan')
+
     return dict(
         n_units=U, frac_place=float(place.mean()),
-        spatial_info=float(np.mean(si[place])) if place.any() else np.nan,
-        sparsity=float(np.mean(sparsity[place])) if place.any() else np.nan,
-        selectivity=float(np.mean(selectivity[place])) if place.any() else np.nan,
-        coherence=float(np.mean(coh[place])) if place.any() else np.nan,
-        n_fields=float(np.mean(nf[place])) if place.any() else np.nan,
+        spatial_info=pm(si), sparsity=pm(sparsity), selectivity=pm(selectivity),
+        coherence=pm(coh), n_fields=pm(nf),
         field_area=float(np.mean(fa[place][nf[place] > 0])) if (place & (nf > 0)).any() else np.nan,
+        # rates: both lesion studies report these unchanged
+        mean_rate=pm(mean_rate), peak_rate=pm(peak_rate),
+        # directional information, both ways (see note above). `dir_info_field` is the one that is
+        # comparable to Calton et al. (2003): Skaggs over heading, computed on IN-FIELD samples only.
+        dir_info_marginal=pm(dir_info_marginal), dir_info_field=pm(dir_info_field),
+        # Harland's session-to-session stability; ours is a split-half of the rate map
+        stability=pm(stability),
         ev_pos=float(np.mean(ev_pos)), ev_hd=float(np.mean(ev_hd)),
         ev_add=float(np.mean(ev_add)), ev_conj=float(np.mean(ev_conj)),
         mixed=float(np.mean(mixed)), hd_rayleigh=float(np.mean(rayl)),
