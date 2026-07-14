@@ -904,16 +904,45 @@ direction cannot disambiguate compartments unless the objective forces the netwo
 it. Whether a purely reconstructive circuit would show repetition even in the radial arrangement
 is, to our knowledge, untested in animals.
 
-The account also yields a lesion prediction, with a dose attached. Lesions of the anterodorsal
-thalamus degrade the head-direction signal and destabilise hippocampal place fields
-\citep{calton2003}. We predict that degrading the compass should bring field \emph{repetition}
-into the \emph{radial} arrangement, where intact animals show little, because without direction
-rotation joins translation as a symmetry the animal cannot resolve. The robustness control sets
-the threshold high, though: in the model a compass corrupted on $30\%$ of steps still resolves
-the fold, and full repetition appears only in the \textit{const} limit of near-total directional
-loss (which folds the $C_2$ arena to near chance, Table~\ref{tab:phase}). A partial ADN lesion
-should therefore produce partial repetition, graded by how much of the head-direction signal
-survives.
+\subsection*{The causal test has already been run}
+
+The account yields a lesion prediction, and it is a \emph{signed and selective} one rather than a
+main effect. A compass is invariant under translation by construction: moving a room sideways does
+not change which way the animal faces. It is equivariant under rotation: turning a room turns the
+heading with it. Destroying the head-direction system should therefore do two different things in
+the two arrangements. In the \emph{parallel} arrangement the compass was never breaking the
+symmetry, so removing it should change nothing. In the \emph{radial} arrangement the compass is the
+only thing breaking the symmetry, so removing it should make rotation join translation as a
+symmetry the animal cannot resolve, and the fold should appear where intact animals show almost
+none.
+
+That experiment exists. \citet{harland2017} made bilateral lesions of the lateral mammillary
+nuclei, which abolish the head-direction signal rather than merely degrading it: the anterodorsal
+tuning curves go flat and are never recovered \citep{blair1999}, and no cell in a lesioned animal
+retains direction-modulated firing \citep{bassett2007}. They then recorded CA1 place cells in the
+same parallel and radial compartments. In the parallel compartments the lesion did nothing: $65\%$
+of compartment pairs correlated at $r \ge 0.5$ in shams against $63\%$ in lesioned animals
+($t(10) = 1.06$, $p = 0.31$). In the radial compartments the lesion restored the fold: $82\%$ of
+sham correlations were low ($r \le 0.5$), whereas $44\%$ of lesioned cells correlated at $r \ge
+0.5$ ($t(5.2) = 3.30$, $p = 0.021$). The maze-by-group interaction is large ($F(1,10) = 13.60$, $p
+< 0.005$, $\eta^2 = 0.58$), and the effect sizes against the shuffle move exactly as the account
+requires: parallel repetition is unchanged by the lesion ($d = 1.08$ sham, $1.02$ lesioned) while
+radial repetition rises from nothing to intermediate ($d = 0.07$ sham, $0.53$ lesioned).
+
+Two features of that study make it a test of invariance rather than of similarity. The radial rate
+maps were rotated into alignment before being correlated, so the measure asks directly whether the
+code is invariant under the group element relating the compartments. And the apparatus stood inside
+a curtained enclosure with no directionally polarising cues, so no landmark was available to break
+the symmetry in the animal's place. The prediction, the null half of it included, is what the data
+show, with no parameter fitted to them.
+
+We report the discrepancy this leaves open rather than resolve it. Lesioned place cells in that
+study carried less spatial information ($1.29$ to $1.05$ bits) and were less sparse ($0.32$ to
+$0.37$) and less stable across sessions, though their firing rates were unchanged and field size
+was not compared. Yet anterodorsal and postsubicular lesions leave place-cell field number, field
+size, rate and sparsity statistically unchanged \citep{calton2003}. Whether the difference lies in
+the lesion site, its completeness, or the symmetry of the environment the animal was recorded in,
+these two studies do not say, and neither do we.
 
 The account also predicts an experience-dependent \emph{unfolding}. \citet{carpenter2015} found
 that the grid code across two connected compartments begins repeated and becomes a single global
@@ -1089,17 +1118,38 @@ representation of $X/G$, sitting close to the quotient ceiling rather than the u
 one are observationally similar only in being imperfect, and the input-level bound is what tells them
 apart.
 
-Two learned-map models place sharply against the same test. The clone-structured cognitive graph
-\citep{george2021} disambiguates aliased observations by \emph{transition context}, cloning a
-latent state whenever the routes through it differ; in the parallel compartments the two rooms are
-entered by distinct paths, so a clone graph should \emph{split} them and predict no repetition ---
-the opposite of what \citet{spiers2015} recorded. It is thus a falsified competitor here, not an
-open alternative. The Tolman--Eichenbaum machine \citep{whittington2020tolman}, by contrast,
+Two learned-map models place sharply against the same test, and the first of them has already run
+the experiment we would have asked it to. The clone-structured cognitive graph
+\citep{george2021,raju2024} disambiguates aliased observations by \emph{transition context},
+cloning a latent state whenever the routes through it differ. It reproduces repetition in identical
+rooms, so it is not falsified by the phenomenon. What it does not reproduce, on its own, is the
+\emph{dissociation}. Run without a compass, \citet{raju2024} report that ``in the absence of an
+external `compass,' we observe that place field repetition persists in the modified layout'', that
+is, the code keeps folding even when the rooms are rotated with respect to one another and the
+animal data say it should not \citep{fuhs2005}. The authors then supply the missing ingredient
+themselves: ``if the sensory input to CSCG is augmented with an external head direction input, then
+the different orientation setting results in unique place fields''. That is our claim, reached
+independently, in a model with no boundaries, no geometry and no metric: what breaks the rotational
+symmetry is the compass, and nothing else in the model can do it. The clone graph shows that
+aliasing is enough to \emph{produce} the fold; it also shows that a head-direction input is what
+decides \emph{which} symmetries survive it. The Tolman--Eichenbaum machine \citep{whittington2020tolman}, by contrast,
 factorises a structural code that is a function of the action sequence; an action (self-motion)
 code invariant under the arena's symmetry folds that structural code just as ours folds, so the two
 accounts agree on the direction of the effect and differ only in mechanism.
 
-What predictive learning adds is a derivation. Trained only to predict its next view from
+The symmetry itself has been noticed before, and we should be clear about what is and is not new
+here. \citet{jeffery2023} observes that ``the repeating of place fields between one environmental
+sub-compartment and the next, in situations where the boxes have the same orientation in the room,
+is a translational symmetry, which echoes the translational symmetry of the environment itself'',
+and that ``by contrast with this translational symmetry, the head direction signal has a rotational
+asymmetry''. That is the intuition this paper formalises. What is new is not the observation that
+translation and rotation stand differently with respect to the compass, but that this can be
+derived rather than described: that the relevant object is the subgroup the self-motion signal
+fails to break, that a learned predictive code must collapse onto its quotient, that the collapse
+is bounded at $1/|G|$, and that what governs it is equivariance rather than information, so two
+encodings carrying the same single bit come apart completely.
+
+What predictive learning adds is therefore a derivation. Trained only to predict its next view from
 self-motion, the network folds or lifts the identical compartments according to whether the
 compass is invariant under the arrangement's symmetry, reproducing the animal dissociation from a
 single group-theoretic principle rather than fitting it. The contribution is therefore not that
