@@ -50,12 +50,38 @@ from project5_symmetry.experiments.run_ensemble_sweep import ensure_data  # noqa
 from project5_symmetry.training.dataset import TrajectoryDataset  # noqa: E402
 
 
-def collect_lesioned(model, dataset, p_lesion, n_states, device, seed=0):
-    """Hidden states with the heading corrupted on a fraction p of steps.
+def collect_lesioned(model, dataset, p_lesion, n_states, device, seed=0, mode='silence'):
+    """Hidden states with the compass lesioned on a fraction p of steps.
 
-    act = [speed, onehot(heading)]. A lesioned step keeps the speed and replaces the heading with a
-    uniformly random one, so the compass still fires but says nothing. This is a compass that has
-    lost its bearing, not a compass that has been deleted.
+    THE TWO LESIONS ARE NOT THE SAME, and which one we use decides whether this models an animal.
+
+    `randomize` replaces the heading one-hot with a uniformly random one. In the mutual-information
+        sense the compass then says nothing -- but it does not say nothing, it says something FALSE,
+        and it says it loudly. The network still receives a valid egocentric view (the observation is
+        first-person: get_frame(agent_pov=True), and the same place seen from four headings gives
+        four different images), so a randomized compass puts the two channels in direct conflict, a
+        state the network never met in training. It is driven off its training manifold, and the map
+        does not fold so much as die: within-room R^2 goes NEGATIVE at high dose.
+
+    `silence` zeroes the heading block instead. The compass is then absent, not lying, which is what
+        a lesion actually produces -- Bassett et al. (2007) find 0 of 41 ADN cells still directional
+        after LMN lesion, i.e. the signal carries no information; it does not carry wrong
+        information. The network must now fall back on the egocentric view.
+
+    That fallback is the whole point, because it is Calton et al.'s (2003) own proposed mechanism,
+    verbatim: "the HD system serves to catalog the different 'local views' of a given place into a
+    cohesive nondirectional spatial representation. Without an intact HD system, the convergence of
+    directionally dependent sensory information onto the place cell system could result in
+    'directional fragmentation' of the place field, giving the appearance of a place field modulated
+    by the directional heading of the animal." Our architecture IS that: a compass that binds
+    egocentric views into an allocentric code. Silence it and the views should fragment.
+
+    PREDICTION for `silence`, stated before the run:
+        within_r2 stays POSITIVE (the view still localises; the map survives) -- the control passes;
+        the fold still appears wherever a symmetry exists, because the egocentric view is IDENTICAL
+            at x and g.x and so cannot break the symmetry either;
+        in-field directional information RISES, where under `randomize` it fell to zero.
+            [Calton: 0.25 -> 0.48, F(2,91) = 5.96, p < 0.01]
     """
     rng = np.random.default_rng(seed)
     hs, ps, hd, total = [], [], [], 0
@@ -67,10 +93,15 @@ def collect_lesioned(model, dataset, p_lesion, n_states, device, seed=0):
             T = act.shape[0]
             hit = torch.from_numpy(rng.random(T) < p_lesion)
             if hit.any():
-                rand_h = torch.from_numpy(rng.integers(0, 4, int(hit.sum())))
-                block = torch.zeros((int(hit.sum()), 4), dtype=act.dtype)
-                block[torch.arange(len(rand_h)), rand_h] = 1.0
-                act[hit, 1:] = block
+                if mode == 'silence':
+                    act[hit, 1:] = 0.0
+                elif mode == 'randomize':
+                    rand_h = torch.from_numpy(rng.integers(0, 4, int(hit.sum())))
+                    block = torch.zeros((int(hit.sum()), 4), dtype=act.dtype)
+                    block[torch.arange(len(rand_h)), rand_h] = 1.0
+                    act[hit, 1:] = block
+                else:
+                    raise ValueError(f'unknown lesion mode {mode!r}')
         act = apply_hd(act, 'full')
         with torch.no_grad():
             _, h, _ = model(obs.unsqueeze(0).to(device), act.unsqueeze(0).to(device))
@@ -109,6 +140,8 @@ def main():
     ap.add_argument('--doses', type=float, nargs='+',
                     default=[0.0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1.0])
     ap.add_argument('--seeds', type=int, nargs='+', default=list(range(6)))
+    ap.add_argument('--lesion-modes', nargs='+', default=['silence', 'randomize'],
+                    choices=['silence', 'randomize'])
     ap.add_argument('--n-traj', type=int, default=800)
     ap.add_argument('--n-states', type=int, default=30_000)
     ap.add_argument('--threads', type=int, default=6)
@@ -130,16 +163,19 @@ def main():
                 continue
             model = model_from_checkpoint(
                 torch.load(p, map_location='cpu', weights_only=False), dev)
-            for dose in a.doses:
-                H, pos, hd = collect_lesioned(model, ds[cond], dose, a.n_states, dev, seed=s)
-                r = {'condition': cond, 'seed': s, 'dose': dose}
-                r.update({k: (round(v, 4) if isinstance(v, float) else v)
-                          for k, v in properties(H, pos, hd).items()})
-                r['phase_acc'] = round(phase_acc(H, pos, 'c2', seed=s), 4)
-                rows.append(r)
-                print(f"  {cond}/s{s:02d} dose={dose:.2f}  phase={r['phase_acc']:.3f} "
-                      f"SI={r['spatial_info']:.3f} sparsity={r['sparsity']:.3f} "
-                      f"fields={r['n_fields']:.2f}", flush=True)
+            for lmode in a.lesion_modes:
+                for dose in a.doses:
+                    H, pos, hd = collect_lesioned(model, ds[cond], dose, a.n_states, dev,
+                                                  seed=s, mode=lmode)
+                    r = {'condition': cond, 'seed': s, 'lesion_mode': lmode, 'dose': dose}
+                    r.update({k: (round(v, 4) if isinstance(v, float) else v)
+                              for k, v in properties(H, pos, hd).items()})
+                    r['phase_acc'] = round(phase_acc(H, pos, 'c2', seed=s), 4)
+                    rows.append(r)
+                    print(f"  {cond}/s{s:02d} {lmode:<9s} dose={dose:.2f}  "
+                          f"phase={r['phase_acc']:.3f} SI={r['spatial_info']:.3f} "
+                          f"dirF={r['dir_info_field']:.3f} fields={r['n_fields']:.2f}",
+                          flush=True)
 
     with open(a.out, 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))

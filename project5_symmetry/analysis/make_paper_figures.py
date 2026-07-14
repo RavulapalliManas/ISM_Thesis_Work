@@ -1519,6 +1519,151 @@ def fig_cellprops(data: Path, figs: Path):
     print(f'  {out}')
 
 
+def fig_lesion(data: Path, figs: Path):
+    """The in-silico head-direction lesion: Harland et al. (2017), with a dose.
+
+    This is the paper's causal figure, and the only one whose prediction was tested in an animal
+    before we made it. Panels a-b take the compass away from an ADULT network (trained with one, as
+    Harland's rats developed with one) and show that the damage has two separable parts: a
+    DEGRADATION that happens everywhere, and a FOLD that happens only where a symmetry exists for the
+    map to fold onto. Panel c is Harland's own 2x2, in silico. Panel d is the quantitative match.
+
+    Panel c carries the reachable null, and it is the whole reason the figure is not circular. If our
+    lesion were merely a generalised insult to the code, repetition would rise in the TRANSLATION arm
+    too. It must not: a compass is translation-invariant by construction, so it was never the thing
+    holding the parallel compartments apart, and destroying it cannot change them. Harland measured
+    exactly this and found exactly nothing (65% -> 63%, p = 0.31), while the radial arm folded
+    (p = 0.021), interaction F(1,10) = 13.60. A flat translation line is the prediction; a rising one
+    would falsify us.
+    """
+    dose = _read(data / 'lesion_dose.csv')
+    comp_p = data / 'lesion_compartments.csv'
+    comp = _read(comp_p) if comp_p.exists() else []
+
+    fig, axes = plt.subplots(2, 2, figsize=(ONEHALF, 4.3))
+    (a, b), (c, d) = axes
+
+    def curve(ax, rows, group_key, group, ykey, color, label, norm=False):
+        xs = sorted({_f(r, 'dose') for r in rows})
+        m, lo, hi = [], [], []
+        base = None
+        for x in xs:
+            v = [_f(r, ykey) for r in rows if r[group_key] == group and _f(r, 'dose') == x]
+            mm, ll, hh = _boot_ci(v)
+            if norm:
+                if base is None:
+                    base = mm
+                mm, ll, hh = 100 * (mm / base - 1), 100 * (ll / base - 1), 100 * (hh / base - 1)
+            m.append(mm); lo.append(ll); hi.append(hh)
+        ax.fill_between(xs, lo, hi, color=color, alpha=0.16, lw=0)
+        ax.plot(xs, m, '-o', color=color, ms=2.6, mec='k', mew=0.25, lw=1.2, label=label)
+        return xs, m
+
+    # (a) the fold: orbit-phase decoding collapses to chance ONLY where a symmetry exists
+    for cond in ['s1', 's2', 's4']:
+        curve(a, dose, 'condition', cond, 'phase_acc', COND_SHADE[cond], COND_CN.get(cond, cond))
+    a.axhline(0.5, ls=':', lw=0.8, color='#B03A2E')
+    a.text(0.99, 0.462, 'chance', fontsize=5.5, color='#B03A2E', ha='right')
+    a.axhline(1.0, ls=':', lw=0.8, color='#7A7A7A')
+    a.text(0.99, 1.012, 'ceiling', fontsize=5.5, color='#7A7A7A', ha='right')
+    a.set_ylim(0.44, 1.08); a.set_ylabel('orbit-phase decoding')
+    a.set_xlabel('lesion dose (fraction of steps)')
+    a.legend(loc='lower left', fontsize=5.8, handlelength=1.0, bbox_to_anchor=(0.0, 0.06))
+    _panel(a, 'a')
+
+    # (b) fields multiply only where there is a symmetry to fold onto.
+    # NOTE the non-monotonicity, which is real and which we do not hide: at moderate dose the field
+    # count FALLS in every arena (the map degrades, fields merge, field area rises), and only above
+    # dose ~0.8 does the fold overtake the degradation and multiply fields -- and then only where a
+    # symmetry exists. The two processes run in opposite directions and the fold wins late.
+    for cond in ['s1', 's2', 's4']:
+        curve(b, dose, 'condition', cond, 'n_fields', COND_SHADE[cond], COND_CN.get(cond, cond),
+              norm=True)
+    b.axhline(0, lw=0.6, color='k')
+    b.set_ylim(-16, 44)
+    b.set_ylabel('fields per cell (% vs sham)')
+    b.set_xlabel('lesion dose (fraction of steps)')
+    b.annotate('a symmetry\nto fold onto', xy=(0.97, 34), xytext=(0.60, 26), fontsize=5.5,
+               color='#333333', ha='center',
+               arrowprops=dict(arrowstyle='-', lw=0.5, color='#888888'))
+    b.annotate('none', xy=(0.99, 4), xytext=(0.86, 13), fontsize=5.5, color='#8A8A8A',
+               ha='center', arrowprops=dict(arrowstyle='-', lw=0.5, color='#B5B5B5'))
+    b.text(0.03, -13.5, 'fields first MERGE as the map degrades,\nthen split as it folds',
+           fontsize=5.0, color='#777777')
+    _panel(b, 'b')
+
+    # (c) Harland's 2x2 in silico. The translation arm is the reachable null.
+    if comp:
+        COMP_COL = {'translation': '#9A9A9A', 'rotation': '#B03A2E'}
+        for mode in ['translation', 'rotation']:
+            curve(c, comp, 'mode', mode, 'repetition', COMP_COL[mode],
+                  {'translation': 'parallel (translation)',
+                   'rotation': 'radial (rotation)'}[mode])
+        # the control: a folded code still knows where in the room it is
+        xs, r2 = curve(c, comp, 'mode', 'rotation', 'within_r2', '#5B84B1', 'within-room $R^2$')
+        c.set_ylim(-0.15, 1.05); c.set_ylabel('field repetition, A vs B')
+        c.set_xlabel('lesion dose (fraction of steps)')
+        c.legend(loc='center left', fontsize=5.5, handlelength=1.0)
+        c.text(0.5, -0.10, 'Harland: parallel 65%$\\to$63% n.s.; radial folds, p = 0.021',
+               fontsize=5.0, color='#777777', ha='center')
+    else:
+        c.text(0.5, 0.5, 'lesion_compartments.csv\nnot yet generated', ha='center', va='center',
+               fontsize=6, color='#999999'); c.set_axis_off()
+    _panel(c, 'c')
+
+    # (d) Two head-direction lesion studies that appear to contradict each other, reconciled.
+    #
+    # Calton et al. (2003) lesioned ADN/postsubiculum and found NO field multiplication (1.29 ->
+    # 1.53, n.s.) and no significant spatial-information loss. Harland et al. (2017) lesioned the
+    # LMN and found repetition RETURNING (p = 0.021) and information falling (p < 0.002). Read as
+    # claims about "what an HD lesion does", these disagree.
+    #
+    # They do not disagree. Calton's cylinder carried a white cue card over ~100 deg of arc -- a
+    # polarising landmark that BREAKS the rotational symmetry. Harland's compartments were identical,
+    # behind a black curtain, with no polarising cue -- the symmetry STANDS. The quotient law says a
+    # compass lesion can only fold a map onto a symmetry that exists, so it must multiply fields in
+    # Harland's world and leave Calton's alone. Same lesion, two different worlds.
+    #
+    # We show the model's own interaction, one dot per network, and leave the rat numbers to the
+    # text. A bar chart here would be dishonest twice over: Harland reports a between-compartment
+    # CORRELATION, not a field count, so his cell has no number to plot, and Calton's field count
+    # (+18.6%, n.s., n = 17 cells) is a point estimate whose interval spans zero -- drawing it as a
+    # bar beside ours would invite a comparison of point estimates that neither study supports.
+    # The claim is the INTERACTION, so the interaction is what we draw.
+    rng2 = np.random.default_rng(1)
+    for i, cond in enumerate(['s1', 's2', 's4']):
+        rows_c = [r for r in dose if r['condition'] == cond]
+        base = {int(r['seed']): _f(r, 'n_fields') for r in rows_c if _f(r, 'dose') == 0.0}
+        v = [100 * (_f(r, 'n_fields') / base[int(r['seed'])] - 1)
+             for r in rows_c if _f(r, 'dose') == 1.0 and int(r['seed']) in base]
+        col = COND_SHADE[cond]
+        jit = (rng2.random(len(v)) - 0.5) * 0.28
+        d.scatter(i + jit, v, s=9, color=col, edgecolor='k', linewidths=0.3, zorder=3)
+        m, lo, hi = _boot_ci(v)
+        d.plot([i - 0.22, i + 0.22], [m, m], color='k', lw=1.1, zorder=4)
+        d.plot([i, i], [lo, hi], color='k', lw=0.8, zorder=4)
+    d.axhline(0, lw=0.7, color='k')
+    d.set_xticks([0, 1, 2])
+    d.set_xticklabels(['C$_1$\nnone', 'C$_2$\n180$\\degree$', 'C$_4$\n90$\\degree$'], fontsize=6)
+    d.set_xlabel('symmetry available to fold onto')
+    d.set_ylabel('fields per cell after\nfull lesion (% vs sham)')
+    d.set_ylim(-8, 46)
+    d.set_xlim(-0.55, 2.55)
+    d.text(0.02, 0.94, "Calton's world", fontsize=5.4, color='#8A8A8A', transform=d.transAxes)
+    d.text(0.02, 0.87, '(cue card breaks it)', fontsize=5.0, color='#A5A5A5',
+           transform=d.transAxes)
+    d.text(0.98, 0.94, "Harland's world", fontsize=5.4, color='#333333', ha='right',
+           transform=d.transAxes)
+    d.text(0.98, 0.87, '(identical rooms)', fontsize=5.0, color='#777777', ha='right',
+           transform=d.transAxes)
+    _panel(d, 'd')
+
+    fig.tight_layout()
+    out = figs / 'fig_lesion.pdf'
+    fig.savefig(out); plt.close(fig)
+    print(f'  {out}')
+
+
 def fig_manifold(data: Path, figs: Path):
     """The fold, seen geometrically. Replaces manifold_s2.png, which was an orphan raster: it
     backed a main-text figure and no script produced it, and a raster in an otherwise-vector paper
@@ -1603,7 +1748,7 @@ def main():
                'ceiling': fig_ceiling,
                'population': fig_population, 'fig2': fig2_fold, 'fig3': fig3_function,
                'isometry': fig_isometry, 'bvc': fig_bvc, 'cellprops': fig_cellprops,
-               'manifold': fig_manifold,
+               'manifold': fig_manifold, 'lesion': fig_lesion,
                'fig4': fig4_geometry, 'fig5': fig5_generality, 'fig6': fig6_brain,
                'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes,
                'robustness': figS_robustness, 'prospective': figS_prospective, 'ca1': figS_ca1,

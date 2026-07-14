@@ -178,9 +178,17 @@ def properties(H, pos, hd):
     # quantity (is this cell's field active only for some headings?), not marginal HD tuning. Their
     # place field is "the largest contiguous group of pixels possessing a firing rate >= 10% of the
     # average firing rate of the three highest firing rate pixels", 4-connectivity.
+    # The same field mask also gives Calton's IN-FIELD and OUT-OF-FIELD rates. Their out-of-field
+    # rate is one of only three effects that reached significance in their Table 2 (0.57 -> 0.98
+    # spikes/s, +72%, F(2,91) = 5.52, p < 0.01), while in-field rate did not move (7.08 -> 7.80,
+    # n.s.). Absolute rates are meaningless for us -- a hidden activation has no spikes and no
+    # seconds, and its scale is arbitrary -- but the RATIO in/out is dimensionless and therefore
+    # directly comparable, exactly as bits/spike is. Calton's controls sit at 7.08/0.57 = 12.4 and
+    # his lesioned rats at 7.80/0.98 = 8.0: the field loses contrast against its background.
     from scipy.ndimage import label
     xi_all, yi_all = pos[:, 0] - 1, pos[:, 1] - 1
     dir_info_field = np.zeros(U)
+    infield_rate, outfield_rate = np.full(U, np.nan), np.full(U, np.nan)
     for u in range(U):
         m = r[u]
         flat = np.sort(m[vis])[::-1]
@@ -196,10 +204,15 @@ def properties(H, pos, hd):
         inf = field[xi_all, yi_all]
         if inf.sum() < 4 * 10:
             continue
+        infield_rate[u] = H[inf, u].mean()
+        if (~inf).any():
+            outfield_rate[u] = H[~inf, u].mean()
         hu, du = H[inf, u], hd[inf]
         tune = np.array([hu[du == d].mean() if (du == d).any() else 0.0 for d in range(N_HD)])
         pin = np.array([(du == d).mean() for d in range(N_HD)])
         dir_info_field[u] = _skaggs(tune[None, :], pin)[0]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        field_contrast = infield_rate / outfield_rate     # dimensionless; Calton 12.4 -> 8.0
 
     # --- stability. Harland et al. report session-to-session stability falling from 0.620 to
     # 0.347 after the lesion. The model's analogue is a split-half correlation of the rate map:
@@ -225,13 +238,24 @@ def properties(H, pos, hd):
     def pm(v):
         return float(np.mean(v[place])) if place.any() else float('nan')
 
+    def pmn(v):
+        """Same, but NaN-safe: the in/out-field rates are undefined for units with no field."""
+        w = v[place]
+        w = w[np.isfinite(w)]
+        return float(w.mean()) if w.size else float('nan')
+
     return dict(
         n_units=U, frac_place=float(place.mean()),
         spatial_info=pm(si), sparsity=pm(sparsity), selectivity=pm(selectivity),
         coherence=pm(coh), n_fields=pm(nf),
         field_area=float(np.mean(fa[place][nf[place] > 0])) if (place & (nf > 0)).any() else np.nan,
-        # rates: both lesion studies report these unchanged
+        # rates: both lesion studies report the OVERALL rate unchanged. Calton additionally reports
+        # the OUT-of-field rate rising significantly while the in-field rate does not move, so
+        # `field_contrast` (in/out, dimensionless and therefore comparable across spikes and
+        # activations alike) is a real prediction: it should FALL. Calton: 12.4 -> 8.0.
         mean_rate=pm(mean_rate), peak_rate=pm(peak_rate),
+        infield_rate=pmn(infield_rate), outfield_rate=pmn(outfield_rate),
+        field_contrast=pmn(field_contrast),
         # directional information, both ways (see note above). `dir_info_field` is the one that is
         # comparable to Calton et al. (2003): Skaggs over heading, computed on IN-FIELD samples only.
         dir_info_marginal=pm(dir_info_marginal), dir_info_field=pm(dir_info_field),
