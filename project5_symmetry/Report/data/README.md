@@ -211,3 +211,13 @@ figure-derived (manifold fold ratios, gridness); all are reproducible from the a
   0.449), yet only `axis` folds (orbit phase 0.552 vs 0.955). Same boundary code, opposite maps.
   No BVC model can produce that, because it has no representation of WHICH bit the compass carries.
   Boundary cells are downstream of the compass, not upstream of the fold.
+
+- `manifold_fold_ratio.csv`, `manifold_coords.csv` -- the geometry figure, which was an ORPHAN.
+  `manifold_s2.png` backed a MAIN-TEXT figure and no script in the repo produced it, and it was a
+  raster PNG in an otherwise-vector paper. `analysis/export_manifold.py` regenerates it from the
+  checkpoints. Fold ratio = d(x, R^2 x) / d(x, neighbour) in the FULL hidden space, so it is not a
+  projection artefact; below 1 means orbit partners sit closer than spatial neighbours, i.e. the
+  code folded. n = 10 networks per condition (the old figure was a single representative network):
+  axis/C2 = 0.457 +/- 0.004 (FOLDED), axis/C1 = 1.872, parity/C2 = 2.083, full/C2 = 2.675.
+  The ordering and the sub-1 result for axis/C2 reproduce; the exact values differ from the old
+  n=1 figure, whose numbers cannot be checked because it had no generating script.

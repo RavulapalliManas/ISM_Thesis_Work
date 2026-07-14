@@ -61,7 +61,10 @@ plt.rcParams.update({
     'axes.titlesize': 7.5, 'axes.titleweight': 'normal', 'axes.titlepad': 4,
     'axes.labelsize': 7, 'xtick.labelsize': 6.5, 'ytick.labelsize': 6.5,
     'axes.labelpad': 2.5, 'legend.fontsize': 6.5, 'legend.frameon': False,
-    'figure.dpi': 150, 'savefig.dpi': 400, 'savefig.bbox': 'tight',
+    # No savefig.bbox='tight': it CROPS the output and silently changes the figure width,
+    # which defeats the exact column sizing below. fig.tight_layout() already packs the
+    # axes inside the declared figsize, so the exported width is the width we asked for.
+    'figure.dpi': 150, 'savefig.dpi': 400,
     'savefig.pad_inches': 0.02, 'xtick.direction': 'out', 'ytick.direction': 'out',
     'xtick.major.size': 2.5, 'ytick.major.size': 2.5, 'xtick.major.width': 0.6,
     'ytick.major.width': 0.6, 'lines.linewidth': 1.0, 'lines.solid_capstyle': 'round',
@@ -1516,6 +1519,78 @@ def fig_cellprops(data: Path, figs: Path):
     print(f'  {out}')
 
 
+def fig_manifold(data: Path, figs: Path):
+    """The fold, seen geometrically. Replaces manifold_s2.png, which was an orphan raster: it
+    backed a main-text figure and no script produced it, and a raster in an otherwise-vector paper
+    is an automatic reject at several journals. Emitted as vector, with only the dense 3-D scatter
+    rasterized, so axes and text stay editable and the file stays small."""
+    ratio = _read(data / 'manifold_fold_ratio.csv')
+    coords = _read(data / 'manifold_coords.csv')
+    PANELS = [('s2', 'axis'), ('s1', 'axis'), ('s2', 'parity'), ('s2', 'full')]
+    lab = {('s2', 'axis'): 'axis / $C_2$', ('s1', 'axis'): 'axis / $C_1$',
+           ('s2', 'parity'): 'parity / $C_2$', ('s2', 'full'): 'full / $C_2$'}
+
+    fig = plt.figure(figsize=(WIDE, 2.5))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.15, 1, 1], wspace=0.34)
+    aA = fig.add_subplot(gs[0, 0])
+
+    # (a) the fold ratio, one dot per network, with the meaningful reference at 1.0
+    rng = np.random.default_rng(0)
+    for i, key in enumerate(PANELS):
+        v = [_f(r, 'fold_ratio') for r in ratio
+             if (r['condition'], r['hd_mode']) == key]
+        v = [t for t in v if np.isfinite(t)]
+        col = HD_COLOR[key[1]]
+        aA.scatter(i + (rng.random(len(v)) - 0.5) * 0.30, v, s=5, color=col,
+                   edgecolor='k', linewidths=0.2, zorder=3)
+        m, lo, hi = _boot_ci(v)
+        aA.plot([i - 0.22, i + 0.22], [m, m], color='k', lw=1.0, zorder=4)
+        aA.plot([i, i], [lo, hi], color='k', lw=0.7, zorder=4)
+    aA.axhline(1.0, color=INK, lw=0.8, zorder=2)
+    aA.text(3.42, 1.06, 'orbit partners as far apart\nas spatial neighbours',
+            fontsize=4.6, color='#666666', ha='right')
+    aA.text(0.0, 0.80, 'FOLDED', fontsize=5.4, color=HD_COLOR['axis'], fontweight='bold',
+            ha='center')
+    aA.set_xticks(range(len(PANELS)))
+    aA.set_xticklabels([lab[k] for k in PANELS], rotation=20, ha='right')
+    aA.set_ylabel(r'fold ratio  $d(x,\,R^2x)\ /\ d(x,\,\mathrm{neighbour})$')
+    aA.set_ylim(0, 3.1)
+    _panel(aA, 'a')
+
+    # (b, c) the manifold itself, for the most- and the least-folded condition
+    for pi, key in enumerate([('s2', 'axis'), ('s2', 'full')]):
+        ax = fig.add_subplot(gs[0, pi + 1], projection='3d')
+        rs = [r for r in coords if (r['condition'], r['hd_mode']) == key]
+        P = np.array([[_f(r, 'pc1'), _f(r, 'pc2'), _f(r, 'pc3')] for r in rs])
+        ph = np.array([int(r['phase']) for r in rs])
+        for p, c in ((0, '#1F3B5C'), (1, '#9C4A2F')):
+            s = ph == p
+            # rasterize ONLY the scatter: the panel stays a vector PDF
+            ax.scatter(P[s, 0], P[s, 1], P[s, 2], s=5, color=c, alpha=0.85,
+                       edgecolor='none', rasterized=True,
+                       label=f'phase {p}' if pi == 0 else None)
+        fr = float(np.mean([_f(r, 'fold_ratio') for r in rs]))
+        # never a manifold without its scalar printed under it
+        ax.set_title(f'{lab[key]}\nfold ratio {fr:.2f}', fontsize=6, pad=-2)
+        ax.set_xticklabels([]); ax.set_yticklabels([]); ax.set_zticklabels([])
+        ax.set_xlabel('PC1', fontsize=5, labelpad=-12)
+        ax.set_ylabel('PC2', fontsize=5, labelpad=-12)
+        ax.set_zlabel('PC3', fontsize=5, labelpad=-12)
+        ax.tick_params(length=0)
+        ax.view_init(elev=20, azim=-58)
+        # Axes3D.text takes (x, y, z, s); the panel letter needs the 2-D overlay.
+        ax.text2D(0.02, 0.94, 'bc'[pi], transform=ax.transAxes, fontsize=8,
+                  fontweight='bold', va='bottom', ha='right', color=INK, family=_family)
+        if pi == 0:
+            ax.legend(fontsize=5, frameon=False, loc='upper left',
+                      bbox_to_anchor=(-0.06, 0.98), handletextpad=0.1)
+
+    out = figs / 'fig_manifold.pdf'
+    fig.savefig(out, dpi=450)
+    plt.close(fig)
+    print(f'  {out}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--data', required=True)
@@ -1528,6 +1603,7 @@ def main():
                'ceiling': fig_ceiling,
                'population': fig_population, 'fig2': fig2_fold, 'fig3': fig3_function,
                'isometry': fig_isometry, 'bvc': fig_bvc, 'cellprops': fig_cellprops,
+               'manifold': fig_manifold,
                'fig4': fig4_geometry, 'fig5': fig5_generality, 'fig6': fig6_brain,
                'init': figS_init, 'units': figS_units, 'celltypes': figS_celltypes,
                'robustness': figS_robustness, 'prospective': figS_prospective, 'ca1': figS_ca1,
