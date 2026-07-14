@@ -245,4 +245,132 @@ of it.
 \large A cognitive map represents space only up to the symmetries its own motion cannot break.
 \end{frame}
 
+% ==================================================================
+% APPENDIX --- for Hasselmo. Not part of the talk; pull up if asked.
+% ==================================================================
+\appendix
+
+\begin{frame}{You already built the compass this theory needs}
+\vspace{6pt}
+LaChance \& Hasselmo, \textit{Nat Commun} \textbf{15}:8025 (2024). Two identical cue cards, on
+opposite walls of a square --- a symmetry the visual scene cannot break.
+
+\vspace{10pt}
+\centering
+\begin{tabular}{lcc}
+\toprule
+head-direction cells & become bidirectional? & \\
+\midrule
+postrhinal (POR)     & \textbf{yes} & $p = 2\times10^{-10}$ \\
+retrosplenial (RSC)  & \textbf{yes} & $p = 1.4\times10^{-4}$ \\
+entorhinal (MEC/PaS) & no           & $p = 0.62$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{14pt}
+\raggedright
+A bidirectional head-direction cell \emph{is} a $C_2$-invariant compass: it reports the same heading
+at $x$ and at $R_{180}x$.
+
+\vspace{6pt}
+Zhang, Grieves \& Jeffery (2022) get the same object by varying the environment: RSC tuning is
+unidirectional in a circle, \textbf{bi}directional in a $C_2$ box, \textbf{tetra}directional in a
+$C_4$ box.
+
+\vspace{10pt}
+\centering
+\alert{Neither paper recorded a single place cell.}
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{We have that compass, and it is the \emph{only} thing that matters}
+\vspace{4pt}
+Orbit-phase decoding: can a decoder say \emph{which} of two $180^\circ$-related positions the animal
+occupies? Chance $=0.500$. One dot per network, $n \approx 10$.
+
+\vspace{8pt}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+arena & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} \\
+\midrule
+$C_1$ (no symmetry) & 0.981 & 0.972 & 0.971 & 0.966 \\
+$C_2$               & 0.978 & 0.955 & \textbf{0.552} & \textbf{0.552} \\
+$C_4$               & 0.984 & 0.933 & \textbf{0.544} & \textbf{0.521} \\
+\bottomrule
+\end{tabular}
+
+\vspace{12pt}
+\raggedright
+\textit{axis} $=\{E,W\}$ vs $\{N,S\}$ --- \textbf{invariant} under $180^\circ$.\\
+\textit{parity} $=\{E,S\}$ vs $\{W,N\}$ --- \textbf{breaks} $180^\circ$.
+
+\vspace{6pt}
+\alert{Both carry exactly one bit of heading.} Same information, same architecture, same walls, same
+corners, same boundary cells. Opposite folds.
+
+\vspace{6pt}
+No boundary-vector model can state this: it has no representation of \emph{which} bit the compass
+carries. Nor can any animal experiment run it.
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{It is the objective, not the assumptions}
+\vspace{4pt}
+Same network, same compass, same inputs. Only the rollout horizon $k$ changes. At $k=0$ the target is
+the network's own current observation --- a pure autoencoder.
+
+\vspace{8pt}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+$k$ & \textit{full} & \textit{parity} & \textit{axis} & \textit{const} & \textit{axis} vs \textit{parity} \\
+\midrule
+0 (autoencoder) & 0.536 & 0.541 & 0.539 & 0.539 & $p = 0.59$ \\
+1               & \textbf{0.975} & \textbf{0.941} & 0.545 & 0.546 & $p = 0.002$ \\
+5               & 0.978 & 0.953 & 0.553 & 0.551 & $p = 0.002$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{12pt}
+\raggedright
+At $k=0$ the compass is \emph{right there} --- the input alone separates 1228 of 1296 states --- and
+the network \alert{discards it}. All four encodings sit at chance. \textit{axis} and \textit{parity}
+are indistinguishable.
+
+\vspace{6pt}
+\textbf{One step of prediction} makes heading load-bearing.
+
+\vspace{6pt}
+Reconstructing what you see never requires knowing which of two identical rooms you are in.
+Predicting what you will see next does.
+\end{frame}
+
+% ------------------------------------------------------------------
+\begin{frame}{The experiment, and it is yours to run}
+\vspace{10pt}
+\centering
+\Large
+Record place cells in the square, with \textbf{two identical opposing cue cards}.
+
+\vspace{16pt}
+\normalsize
+\raggedright
+\textbf{Prediction, no free parameters:}
+\begin{itemize}
+\item $C_2$ place-field repetition --- fields recur at $180^\circ$-related locations.
+\item A decoder for \emph{which half} of the arena the animal occupies is bounded at
+$\tfrac{1}{2}$.
+\end{itemize}
+
+\vspace{10pt}
+\textbf{Why it is a real test:} your MEC head-direction cells did \emph{not} go bidirectional
+($p=0.62$) and your grid cells did not change. If the hippocampus reads only that channel, nothing
+happens --- and we are wrong. But POR's densest hippocampal projection is to \emph{subiculum}, and
+the LMN lesion (Harland 2017) \emph{does} fold hippocampal fields.
+
+\vspace{10pt}
+\alert{The apparatus already exists. A null falsifies us.}
+\end{frame}
+
 \end{document}
