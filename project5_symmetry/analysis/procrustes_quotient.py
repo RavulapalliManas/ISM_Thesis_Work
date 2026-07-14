@@ -35,13 +35,17 @@ def mean_by_position(H, pos):
 
 
 def domain_matrix(mbp, arena):
-    """Matrix of mean-H over the C2 fundamental domain (one rep per orbit), in a fixed order."""
-    reps = {}
-    for (x, y) in mbp:
-        can = tuple(canonical(np.array([[x, y]]), 'c2', arena)[0].astype(int))
-        reps.setdefault(can, (x, y))
-    order = sorted(reps)
-    M = np.array([mbp[reps[c]] for c in order])
+    """Matrix of mean-H over the C2 fundamental domain (one rep per orbit), in a fixed order.
+
+    The representative of each orbit is the CANONICAL position itself, not whichever member the
+    trajectory happened to visit first. Using the first-visited member makes the choice depend on
+    trajectory order, and since s1 and s2 use different datasets they can pick different members of
+    the same orbit; for the unfolded C1 baseline the two members have genuinely different hidden
+    states, so the "domain manifold" would become an arbitrary patchwork of the two arena halves.
+    """
+    order = sorted({tuple(canonical(np.array([[x, y]]), 'c2', arena)[0].astype(int))
+                    for (x, y) in mbp} & set(mbp))
+    M = np.array([mbp[c] for c in order])
     return M, order
 
 

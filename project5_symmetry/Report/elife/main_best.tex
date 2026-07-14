@@ -673,9 +673,16 @@ broadly. Two measures argue that the map is intact (Fig.~\ref{fig:fold}c,d). Spa
 representational similarity, the Spearman correlation between neural distance and Euclidean
 distance across pairs of positions, fell as the compass was ablated, from $0.70$ under
 \textit{full} to $0.32$ under \textit{const} in the $C_1$ arena, and lower still in the
-symmetric arenas. This is the expected consequence of folding: a position and its group image
-sit on top of one another in the neural space while lying far apart in the arena, weakening the
-correlation between the two distances. The correlation between the position-conditioned codes of
+symmetric arenas. Folding contributes to this fall, since a position and its group image sit on
+top of one another in the neural space while lying far apart in the arena. It is not, however,
+the main cause, and the measure is not a readout of the fold: the same fall occurs in the $C_1$
+arena, where there is no symmetry to collapse onto, and the drop there between \textit{full} and
+\textit{axis} ($0.33$) is more than twice the drop that the fold itself contributes (the $0.14$
+between the $C_1$ and the $C_2$ arena under \textit{axis}). Removing head direction degrades the
+metric map wherever it is removed, symmetric arena or not. We therefore report this measure only
+as evidence that the code remains spatial, and read the fold from measures that are zero in the
+$C_1$ arena by construction: the rate-map symmetry index (Fig.~\ref{fig:fold}a) and the isometry
+test of the next section. The correlation between the position-conditioned codes of
 independently trained networks behaved oppositely and stayed above $0.96$ under every encoding
 in every arena, and $448$ of the $500$ units retain a place field under \textit{const} in the
 $C_1$ arena, falling to about $318$ in the $C_4$ arena. A folded code is therefore reproducible rather than degenerate, and the compass
@@ -705,8 +712,10 @@ of a unit's map with its $180^\circ$ rotation), the fold-specific readout; it sa
 $0.97$ only when the encoding is invariant to the arena's symmetry, up to the perfect-symmetry
 line at $1$. (\textbf{b}) Mean place fields per unit; rises with both arena symmetry and
 encoding invariance, but also in the $C_1$ arena where nothing folds, so field count alone is
-confounded. (\textbf{c}) Spatial representational similarity falls as the encoding is ablated
-and as arena symmetry increases, the signature of collapse onto the quotient. (\textbf{d})
+confounded. (\textbf{c}) Spatial representational similarity falls as the encoding is ablated and
+as arena symmetry increases. Like field count, it is confounded: most of the fall is present in
+the $C_1$ arena, where nothing folds, so it evidences that the code stays spatial rather than
+that it folds. (\textbf{d})
 Cross-seed correlation between independently trained networks stays above $0.96$ throughout
 ($y$ zoomed to $0.9$--$1.0$): the fold is reproducible, not degenerate. Arenas
 $C_1/C_2/C_4$; bars are mean $\pm$ s.e.m.\ over networks ($n = 10$ per encoding for $C_1$ and

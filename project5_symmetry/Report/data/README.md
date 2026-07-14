@@ -135,3 +135,21 @@ survive loss of the compute pod.
 Numbers not backed by a CSV here are deterministic arena enumerations (the Eq. bound's
 distinguishable/predicted columns, the 6.6% and 1228/1296 counts, the ODI values) or are
 figure-derived (manifold fold ratios, gridness); all are reproducible from the analysis scripts.
+
+- `isometry_quotient.csv` -- IS THE NEURAL MANIFOLD A MAP OF X, OR OF X/G? Kruskal stress-1 (optimal
+  scale) of neural geodesic distances (Isomap on position-conditioned means) against three candidate
+  metrics: the arena metric d_X, and the quotient metrics d_{X/G}(x,y) = min_g ||x - g.y|| for G = C2
+  and C4. 112 networks (3 arenas x 4 encodings x 10 seeds; 8 for s4).
+  Headline: the HD encoding determines WHICH SPACE the manifold is a metric map of. By argmin stress,
+  110/112 networks: `full` and `parity` -> X; `axis` -> X/C2; `const` -> X/C4. In the C2 arena the
+  folded (`axis`) code fits X/C2 at stress 0.190 against 0.468 for the arena itself, the mirror image
+  of `full`, which fits X at 0.097 against 0.485 for the quotient.
+  Controls: `stress_sham` uses a SHAM order-2 group (translation by half the arena) with the same
+  "min over images" compression as C2 but which is not a symmetry of any arena. This is essential,
+  because d_{X/G} <= d_X pointwise, so ANY group shrinks long distances and a compressed code would
+  prefer a quotient metric for trivial reasons. It does not: s2/axis prefers the true C2 over the
+  sham by 0.343. `stress_shuffled` is a position-shuffled ceiling (~0.56).
+  `fold_cos_c2/c4` is a metric-free check: median cosine between H(x) and H(g.x). s2/axis = 0.990
+  (the orbit is one point) vs s2/parity = 0.741 (same one bit, opposite invariance; U=100, p=9.1e-5).
+  NOTE the s4/`axis` row is marginal (X/C2 0.364 vs X/C4 0.347) -- C4 compresses more than C2 and has
+  no sham control, so that row should not be over-read.

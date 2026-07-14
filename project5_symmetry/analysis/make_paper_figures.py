@@ -102,53 +102,70 @@ def _hd_legend(fig, ncol=4, y=0.0):
 
 
 # ============================================================ panel drawers (one axis each)
-def _draw_srsa(ax, rows, conds):
-    x = np.arange(len(HD_ORDER)); w = 0.8 / len(conds)
+def _boot_ci(v, n_boot=2000, seed=0):
+    """Mean and 95% bootstrap CI over networks. The unit of observation is the network, so the
+    interval must be computed over networks, not over pooled units."""
+    v = np.asarray([t for t in v if np.isfinite(t)], dtype=float)
+    if v.size == 0:
+        return np.nan, np.nan, np.nan
+    if v.size == 1:
+        return float(v[0]), float(v[0]), float(v[0])
+    rng = np.random.default_rng(seed)
+    means = rng.choice(v, size=(n_boot, v.size), replace=True).mean(axis=1)
+    return float(v.mean()), float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def _draw_dots(ax, rows, conds, key, ylabel, ylim=None, zero_line=False):
+    """One dot per network, with the mean and a 95% bootstrap CI.
+
+    Replaces the bar+SEM design these panels used to have. Bars summarising ~10 networks hide the
+    distribution, SEM understates uncertainty at that n, and a bar drawn on a non-zero baseline
+    (cross-seed correlation was zoomed to 0.9-1.0) misstates the effect size outright. Dots carry
+    no baseline claim, so the zoom is legitimate once the bar is gone.
+    """
+    x = np.arange(len(HD_ORDER))
+    w = 0.8 / len(conds)
+    rng = np.random.default_rng(0)
     for i, c in enumerate(conds):
-        m, e = zip(*[_mean_sem([_f(r, 'srsa_e') for r in rows
-                    if r['condition'] == c and r['hd_mode'] == hd]) for hd in HD_ORDER])
-        ax.bar(x + (i - (len(conds) - 1) / 2) * w, m, w, yerr=e, capsize=1.5,
-               color=COND_SHADE.get(c, '#888'), edgecolor='k', lw=0.4,
-               error_kw={'lw': 0.6}, label=COND_CN.get(c, c))
-    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER); ax.set_ylabel('spatial RSA')
-    ax.set_ylim(0, 0.85)
+        off = (i - (len(conds) - 1) / 2) * w
+        for j, hd in enumerate(HD_ORDER):
+            v = [_f(r, key) for r in rows
+                 if r['condition'] == c and r['hd_mode'] == hd]
+            v = [t for t in v if np.isfinite(t)]
+            if not v:
+                continue
+            xx = x[j] + off
+            jit = (rng.random(len(v)) - 0.5) * w * 0.5
+            ax.scatter(xx + jit, v, s=3.0, color=COND_SHADE.get(c, '#888'),
+                       edgecolor='k', linewidths=0.2, zorder=3, alpha=0.95,
+                       label=COND_CN.get(c, c) if j == 0 else None)
+            m, lo, hi = _boot_ci(v)
+            ax.plot([xx - w * 0.32, xx + w * 0.32], [m, m], color='k', lw=1.0, zorder=4)
+            ax.plot([xx, xx], [lo, hi], color='k', lw=0.7, zorder=4)
+    if zero_line:
+        ax.axhline(0, lw=0.5, color='k', alpha=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(HD_ORDER)
+    ax.set_ylabel(ylabel)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+
+
+def _draw_srsa(ax, rows, conds):
+    _draw_dots(ax, rows, conds, 'srsa_e', 'spatial RSA', (0, 0.85))
 
 
 def _draw_crossseed(ax, rows, conds):
-    x = np.arange(len(HD_ORDER)); w = 0.8 / len(conds)
-    for i, c in enumerate(conds):
-        m, e = zip(*[_mean_sem([_f(r, 'cross_seed_rho') for r in rows
-                    if r['condition'] == c and r['hd_mode'] == hd]) for hd in HD_ORDER])
-        ax.bar(x + (i - (len(conds) - 1) / 2) * w, m, w, yerr=e, capsize=1.5,
-               color=COND_SHADE.get(c, '#888'), edgecolor='k', lw=0.4,
-               error_kw={'lw': 0.6}, label=COND_CN.get(c, c))
-    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER); ax.set_ylabel('cross-seed correlation')
-    ax.set_ylim(0.9, 1.0)          # zoom: the reproducibility is otherwise invisible
+    _draw_dots(ax, rows, conds, 'cross_seed_rho', 'cross-seed correlation', (0.9, 1.0))
 
 
 def _draw_fieldcount(ax, rows, conds):
-    x = np.arange(len(HD_ORDER)); w = 0.8 / len(conds)
-    for i, c in enumerate(conds):
-        m, e = zip(*[_mean_sem([_f(r, 'mean_fields') for r in rows
-                    if r['condition'] == c and r['hd_mode'] == hd]) for hd in HD_ORDER])
-        ax.bar(x + (i - (len(conds) - 1) / 2) * w, m, w, yerr=e, capsize=1.5,
-               color=COND_SHADE.get(c, '#888'), edgecolor='k', lw=0.4,
-               error_kw={'lw': 0.6}, label=COND_CN.get(c, c))
-    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER); ax.set_ylabel('place fields per unit')
-    ax.set_ylim(0, 3.8)
+    _draw_dots(ax, rows, conds, 'mean_fields', 'place fields per unit', (0, 3.8))
 
 
 def _draw_symidx(ax, rows, conds):
-    x = np.arange(len(HD_ORDER)); w = 0.8 / len(conds)
-    for i, c in enumerate(conds):
-        m, e = zip(*[_mean_sem([_f(r, 'sym_c2') for r in rows
-                    if r['condition'] == c and r['hd_mode'] == hd]) for hd in HD_ORDER])
-        ax.bar(x + (i - (len(conds) - 1) / 2) * w, m, w, yerr=e, capsize=1.5,
-               color=COND_SHADE.get(c, '#888'), edgecolor='k', lw=0.4,
-               error_kw={'lw': 0.6}, label=COND_CN.get(c, c))
-    ax.axhline(0, lw=0.5, color='k', alpha=0.5)
-    ax.set_xticks(x); ax.set_xticklabels(HD_ORDER)
-    ax.set_ylabel('rate-map $C_2$ symmetry'); ax.set_ylim(-0.1, 1.05)
+    _draw_dots(ax, rows, conds, 'sym_c2', 'rate-map $C_2$ symmetry', (-0.1, 1.05),
+               zero_line=True)
 
 
 def _draw_phase_horizon(ax, phase, ks):

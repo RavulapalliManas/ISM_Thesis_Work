@@ -49,6 +49,7 @@ def main():
     ap.add_argument('--n-traj', type=int, default=1500)
     ap.add_argument('--n-states', type=int, default=12000)
     ap.add_argument('--threads', type=int, default=6)
+    ap.add_argument('--seeds', type=int, nargs='+', default=list(range(10)))
     ap.add_argument('--quick', action='store_true')
     a = ap.parse_args()
     torch.set_num_threads(a.threads)
@@ -60,8 +61,12 @@ def main():
     targets = [('s2', 'axis', 'c2'), ('s2', 'const', 'c2'), ('s2', 'parity', 'c2'),
                ('s4', 'const', 'c4'), ('s4', 'axis', 'c4')]
     if a.quick:
+        # Smoke test only. The published perm_null_validation.csv came from this path, which is why
+        # its p-value is pinned at the 1/41 resolution floor and covers 2 of the 5 folded cells at
+        # n = 1 network. Do not use it for a reported number.
         targets = [('s2', 'axis', 'c2'), ('s2', 'parity', 'c2')]
         a.n_perm = 40
+        a.seeds = [0]
 
     conds = sorted({c for c, _, _ in targets})
     ds = {}
@@ -71,21 +76,27 @@ def main():
 
     rows = []
     for cond, hd, grp in targets:
-        p = ck / 'hd_invariance' / cond / hd / 'seed_00' / 'ckpt_final.pt'
-        if not p.exists():
-            print(f'  MISSING {p}'); continue
-        model = model_from_checkpoint(torch.load(p, map_location='cpu', weights_only=False), dev)
-        H, pos = collect(model, ds[cond], hd, a.n_states, dev)
-        obs, nmean, nsd, p_above = perm_null(H, pos, grp, a.n_perm)
-        rows.append({'cond': cond, 'hd': hd, 'group': grp, 'observed': round(obs, 4),
-                     'null_mean': round(nmean, 4), 'null_sd': round(nsd, 4),
-                     'chance': round(1 / (2 if grp == 'c2' else 4), 3), 'p_above_null': round(p_above, 4)})
-        print(f'  {cond}/{hd} ({grp}): obs={obs:.4f} null={nmean:.4f}+/-{nsd:.4f} '
-              f'p_above={p_above:.4f}', flush=True)
+        for s in a.seeds:
+            p = ck / 'hd_invariance' / cond / hd / f'seed_{s:02d}' / 'ckpt_final.pt'
+            if not p.exists():
+                print(f'  MISSING {p}'); continue
+            model = model_from_checkpoint(
+                torch.load(p, map_location='cpu', weights_only=False), dev)
+            H, pos = collect(model, ds[cond], hd, a.n_states, dev)
+            obs, nmean, nsd, p_above = perm_null(H, pos, grp, a.n_perm, seed=s)
+            rows.append({'cond': cond, 'hd': hd, 'group': grp, 'seed': s,
+                         'observed': round(obs, 4), 'null_mean': round(nmean, 4),
+                         'null_sd': round(nsd, 4),
+                         'chance': round(1 / (2 if grp == 'c2' else 4), 3),
+                         'p_above_null': round(p_above, 4)})
+            print(f'  {cond}/{hd}/s{s:02d} ({grp}): obs={obs:.4f} '
+                  f'null={nmean:.4f}+/-{nsd:.4f} p_above={p_above:.4f}', flush=True)
 
+    if not rows:
+        raise SystemExit('no checkpoints found')
     with open(out / 'perm_null.csv', 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
-    print(f'wrote {out / "perm_null.csv"}')
+    print(f'wrote {out / "perm_null.csv"}  ({len(rows)} networks)')
 
 
 if __name__ == '__main__':
