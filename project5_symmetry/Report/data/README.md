@@ -9,7 +9,17 @@ survive loss of the compute pod.
 - `compartments.csv` -- in-silico Grieves (2-room), n=8 per arrangement.
 - `compartments4.csv` -- full Spiers four-in-a-row: 4 translation-related identical rooms fold
   completely (room decode 0.26 vs chance 0.25, repetition 0.99, within-room R2=0.96, n=8).
-- `field_stats.csv` -- place-field counts + rate-map symmetry index.
+- `field_stats.csv` -- place-field counts + rate-map symmetry index. AUTHORITATIVE for field
+  COUNTS (s1/full mean 1.78, the value the paper cites); `cell_properties.csv` computes n_fields
+  by a different method (1.75) and is not the source for the reported count.
+- `field_area_horizon.csv` -- mean place-field AREA vs prediction horizon k (`analysis/field_area_horizon.py`,
+  full encoding, C2): 33.8/40.7/42.1/39.7 at k=0/1/3/5 (step at k=1, then plateau). Regenerated
+  2026-07-15; the "switch not dial" claim. Same field-area method as field_stats.py.
+- `corridor_dwell.csv` -- room decode conditioned on steps-since-room-entry, BOTH arrangements
+  (`analysis/corridor_dwell.py`): translation decays 0.56->0.51, rotation rises 0.71->0.99 --
+  opposite dwell signatures, the confound control showing corridor memory does not explain the
+  rotation result. Regenerated 2026-07-15 from fresh trajectories (compartment data absent from the
+  backup drive; statistically equivalent, not bit-identical).
 - `map_quality_group{A,B}.csv` -- sRSA and cross-seed correlation.
 - `replay_k{0,1,3,5}.csv` -- offline replay coverage vs wake/shuffle.
 - `sequenceness.csv` -- replay sequenceness with time-shift and cell-shuffle nulls.

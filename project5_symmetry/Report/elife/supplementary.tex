@@ -322,6 +322,56 @@ visibly more separated regions of the embedding.}
 \label{figS:isomap}
 \end{figure}
 
+\clearpage
+\section{Nonlinear decoders confirm the chance-level fold}
+
+The main text reports orbit phase from a linear (logistic) decoder, so a natural worry is that the
+folded encodings carry orbit-phase information a linear readout cannot reach. They do not. On the same
+$C_2$ population states, a $k$-nearest-neighbour decoder and a multi-layer perceptron also sit at chance
+for the invariant encodings (\textit{axis}: $0.537$ and $0.535$; \textit{const}: $0.531$ and $0.531$;
+$n=6$), and both recover orbit phase for the non-invariant encodings (\textit{full} and \textit{parity},
+every network $\ge 0.90$). The orbit-phase information is absent from the folded code, not merely hidden
+from a linear readout.
+
+\section{Three single-cell readouts fail in the same way}
+
+An invariant compass makes the code look symmetric whether or not the arena is, so single-cell measures
+of symmetry report a fold even in the $C_1$ arena, where none can exist. Three readouts we tried early
+have exactly this defect, which is why the main text reports orbit-phase decoding --- whose null
+survives the $C_1$ arena --- as primary throughout.
+
+\emph{Rotational autocorrelation} is $\mathrm{RA} = P_0 - P_2$ in the isotypic power spectrum
+(Fig.~\ref{figS:population}b, c), and is blind to $C_2$ structure by construction: invariance under
+$R^2$ annihilates the odd characters $P_1$ and $P_3$ while leaving $P_0$ and $P_2$ untouched, so a
+perfectly $C_2$-folded code and pure noise both read $\mathrm{RA}\approx0$. On a clean 17-network sweep,
+$\mathrm{RA}$ cannot separate the $C_2$ arena from the $C_1$ one ($p=0.056$), whereas odd power
+$P_1 + P_3$ separates them completely ($p=0.0079$, the exact floor at $n=5$ vs.\ $5$).
+
+\emph{Odd power} is itself confounded. Under \textit{axis} it falls in the $C_1$ arena too, where there
+is no symmetry: the drop $\mathrm{odd}(\textit{parity}) - \mathrm{odd}(\textit{axis})$ is $0.095$ in
+$C_1$, $0.111$ in $C_2$ and $0.112$ in $C_4$, so $85\%$ of the $C_4$-sized effect is present where
+nothing can fold, and it separates completely in $C_1$ ($U=0$, $p=1.1\times10^{-5}$) --- a confident
+report of a fold that does not exist. It conflates genuine collapse onto the quotient with the encoding
+merely reshaping the rate-map spectrum.
+
+\emph{Spatial representational similarity} (the correlation between neural and Euclidean distance) falls
+as the compass is ablated, from $0.70$ under \textit{full} to $0.32$ under \textit{const} in the $C_1$
+arena. The fold contributes to this, but is not the main cause: the same fall occurs in $C_1$, where
+nothing folds, and the $C_1$ drop between \textit{full} and \textit{axis} ($0.33$) is more than twice
+the drop the fold itself contributes (the $0.14$ between the $C_1$ and $C_2$ arenas under \textit{axis}).
+The rate-map $C_2$ symmetry index likewise already reads $0.61$ in the $C_1$ arena under \textit{axis}
+(against the $0.97$ it reaches when the map genuinely folds), and the directional tuning curve is
+already $93\%$ bidirectional there. All three are facts about the compass, not the map; only orbit-phase
+decoding keeps a null that stays where it should ($0.971$ in $C_1$, $0.552$ in $C_2$ under \textit{axis}).
+
+\clearpage
+\section{The quotient in the population code}
+
+Cast in the metrics used to score remapping and directional structure in the hippocampus, the fold
+appears as a failure to remap between symmetry-related locations exactly where the compass is invariant,
+and as a suppression of the odd representation-theoretic characters the invariance forbids
+(Fig.~\ref{figS:population}).
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig_population.pdf}
